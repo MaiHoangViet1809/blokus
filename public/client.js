@@ -182,15 +182,15 @@ function buildAbsCells(pieceId, oriIdx, anchorX, anchorY) {
   return ori.map(([dx, dy]) => [anchorX + dx, anchorY + dy]);
 }
 
-// Compute center offset for a piece orientation so it appears centered under cursor
-function getCenterOffset(pieceId, oriIdx) {
-  const ori = ORIS[pieceId]?.[oriIdx] || [];
-  if (!ori.length) return { cx: 0, cy: 0 };
-  const xs = ori.map(c => c[0]);
-  const ys = ori.map(c => c[1]);
+function clampBoardCell(value) {
+  return Math.max(0, Math.min(BOARD_SIZE - 1, value));
+}
+
+function getBoardCellFromPointer(clientX, clientY) {
+  const rect = canvas.getBoundingClientRect();
   return {
-    cx: Math.floor((Math.min(...xs) + Math.max(...xs)) / 2),
-    cy: Math.floor((Math.min(...ys) + Math.max(...ys)) / 2)
+    x: clampBoardCell(Math.floor(((clientX - rect.left) / rect.width) * BOARD_SIZE)),
+    y: clampBoardCell(Math.floor(((clientY - rect.top) / rect.height) * BOARD_SIZE))
   };
 }
 
@@ -265,13 +265,7 @@ function draw() {
 
   if (isMyTurn() && localRemaining.has(selectedPieceId) && hoverCell.x >= 0 && hoverCell.y >= 0) {
     const ori = ORIS[selectedPieceId]?.[orientationIndex] || [];
-
-    // Use shared center offset helper
-    const { cx, cy } = getCenterOffset(selectedPieceId, orientationIndex);
-    const anchorX = hoverCell.x - cx;
-    const anchorY = hoverCell.y - cy;
-
-    ghostValid = checkLegalMoveLocal(selectedPieceId, orientationIndex, anchorX, anchorY);
+    ghostValid = checkLegalMoveLocal(selectedPieceId, orientationIndex, hoverCell.x, hoverCell.y);
 
     ctx.globalAlpha = 0.55;
     const colorVal = (myColorIndex ?? 0) + 1;
@@ -287,8 +281,8 @@ function draw() {
     }
 
     for (const [dx, dy] of ori) {
-      const ax = anchorX + dx;
-      const ay = anchorY + dy;
+      const ax = hoverCell.x + dx;
+      const ay = hoverCell.y + dy;
       if (ax >= 0 && ay >= 0 && ax < BOARD_SIZE && ay < BOARD_SIZE) {
         ctx.fillRect(ax * CELL, ay * CELL, CELL, CELL);
       }
@@ -675,10 +669,7 @@ if (localStorage.getItem("blokus-theme") === "dark") {
 
 // --- Board hover + DnD ---
 canvas.addEventListener("mousemove", (e) => {
-  const rect = canvas.getBoundingClientRect();
-  const x = Math.floor(((e.clientX - rect.left) / rect.width) * BOARD_SIZE);
-  const y = Math.floor(((e.clientY - rect.top) / rect.height) * BOARD_SIZE);
-  hoverCell = { x, y };
+  hoverCell = getBoardCellFromPointer(e.clientX, e.clientY);
   draw();
 });
 
@@ -692,14 +683,7 @@ canvas.addEventListener("click", (e) => {
   if (!state?.started || !isMyTurn()) return;
   if (!localRemaining.has(selectedPieceId)) return;
 
-  const rect = canvas.getBoundingClientRect();
-  const mx = Math.floor(((e.clientX - rect.left) / rect.width) * BOARD_SIZE);
-  const my = Math.floor(((e.clientY - rect.top) / rect.height) * BOARD_SIZE);
-
-  // Apply same center offset as the ghost preview
-  const { cx, cy } = getCenterOffset(selectedPieceId, orientationIndex);
-  const ax = mx - cx;
-  const ay = my - cy;
+  const { x: ax, y: ay } = getBoardCellFromPointer(e.clientX, e.clientY);
 
   if (checkLegalMoveLocal(selectedPieceId, orientationIndex, ax, ay)) {
     setError("");
@@ -755,14 +739,7 @@ canvas.addEventListener("drop", (e) => {
   if (!droppedPieceId) return setError("No piece selected.");
   if (!localRemaining.has(droppedPieceId)) return setError("Piece already used.");
 
-  const rect = canvas.getBoundingClientRect();
-  const mx = Math.floor(((e.clientX - rect.left) / rect.width) * BOARD_SIZE);
-  const my = Math.floor(((e.clientY - rect.top) / rect.height) * BOARD_SIZE);
-
-  // Apply same center offset as the ghost preview
-  const { cx, cy } = getCenterOffset(droppedPieceId, orientationIndex);
-  const ax = mx - cx;
-  const ay = my - cy;
+  const { x: ax, y: ay } = getBoardCellFromPointer(e.clientX, e.clientY);
 
   if (checkLegalMoveLocal(droppedPieceId, orientationIndex, ax, ay)) {
     selectedPieceId = droppedPieceId;
