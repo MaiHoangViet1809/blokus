@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Blokus Internal</title>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div>
+        <div class="title">Blokus (Internal)</div>
+        <div class="sub">4-player turn-based • realtime sync</div>
+      </div>
+      <div class="right">
+        <span id="netInfo" class="pill">Disconnected</span>
+        <button id="startBtn" class="btn">Start game</button>
+      </div>
+    </header>
+
+    <section class="panel">
+      <div class="card">
+        <div class="cardTitle">Identity</div>
+        <div class="row">
+          <input id="nameInput" placeholder="Enter your name…" maxlength="24" />
+          <button id="saveNameBtn" class="btn">Save</button>
+        </div>
+        <div id="idStatus" class="hint"></div>
+      </div>
+
+      <div class="card">
+        <div class="cardTitle">Lobby</div>
+        <div class="row">
+          <button id="joinBtn" class="btn">Join room</button>
+          <span id="roomStatus" class="hint"></span>
+        </div>
+        <div id="playersList" class="players"></div>
+      </div>
+
+      <div class="card">
+        <div class="cardTitle">Shortcuts</div>
+        <ul class="hint">
+          <li>Click piece to select → drag-drop to place</li>
+          <li><b>R</b>=Rotate • <b>F</b>=Flip • <b>Esc</b>=Reset</li>
+        </ul>
+        <div id="turnHint" class="hint"></div>
+        <div id="errBox" class="error"></div>
+      </div>
+    </section>
+
+    <main class="main">
+      <div class="boardWrap">
+        <canvas id="board" width="640" height="640"></canvas>
+        <div class="hint small">
+          Drop anchors at the cell you drop on.
+        </div>
+      </div>
+
+      <aside class="side">
+        <div class="card compact">
+          <div class="cardTitle">Your pieces</div>
+          <div id="pieceRack" class="rack"></div>
+          <div id="rackHint" class="hint small"></div>
+        </div>
+
+        <div class="card compact">
+          <div class="cardTitle">Rules</div>
+          <ul class="hint">
+            <li>First move covers your corner</li>
+            <li>Later moves corner-touch own color</li>
+            <li>No edge-touch own color</li>
+          </ul>
+        </div>
+      </aside>
+    </main>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="./client.js"></script>
+</body>
+</html>
