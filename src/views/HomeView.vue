@@ -10,6 +10,8 @@ const newProfileName = ref("");
 const newRoomTitle = ref("");
 const roomCode = ref("");
 const isPublic = ref(true);
+const activeTab = ref("lobby");
+const statsTab = ref("leaderboard");
 
 const canCreateRoom = computed(() => !!store.activeProfile);
 
@@ -50,119 +52,171 @@ async function watchRoom(code) {
 </script>
 
 <template>
-  <section class="hero-panel">
-    <div class="hero-copy">
-      <p class="eyebrow">Durable sessions. Explicit room phases. Server-authoritative game state.</p>
-      <h1>Run private Blokus matches without losing the room when the browser blinks.</h1>
-      <p class="lede">
-        Pick a saved profile on this device, browse active public rooms, or create a fresh room with a generated code.
-      </p>
-    </div>
-  </section>
-
-  <section class="grid-layout">
-    <article class="panel">
-      <h2>Profiles</h2>
-      <div class="stack">
-        <div class="inline-form">
-          <input v-model="newProfileName" maxlength="24" placeholder="Create profile name" />
-          <button @click="submitProfile">Create</button>
-        </div>
-        <div v-if="store.profiles.length" class="list">
-          <button
-            v-for="profile in store.profiles"
-            :key="profile.id"
-            class="list-row"
-            @click="useProfile(profile.id)"
-          >
-            <span>{{ profile.name }}</span>
-            <strong v-if="store.activeProfile?.id === profile.id">Active</strong>
-          </button>
-        </div>
-        <p v-else class="muted">No profiles on this device yet.</p>
+  <section class="route-shell home-view">
+    <section class="hero-panel hero-panel--compact">
+      <div class="hero-copy">
+        <p class="eyebrow">Durable sessions. Explicit room phases. Server-authoritative game state.</p>
+        <h1>Run private Blokus matches without losing the room when the browser blinks.</h1>
+        <p class="lede">
+          Pick a saved profile on this device, browse active public rooms, or create a fresh room with a generated code.
+        </p>
       </div>
-    </article>
+    </section>
 
-    <article class="panel">
-      <h2>Create Room</h2>
-      <div class="stack">
-        <input v-model="newRoomTitle" maxlength="32" placeholder="Room title" :disabled="!canCreateRoom" />
-        <label class="toggle-row">
-          <input v-model="isPublic" type="checkbox" :disabled="!canCreateRoom" />
-          <span>Visible in public lobby</span>
-        </label>
-        <button :disabled="!canCreateRoom" @click="createRoom">Create room</button>
-      </div>
-    </article>
+    <nav class="segmented-control" aria-label="Home views">
+      <button
+        class="segment-button"
+        :class="{ active: activeTab === 'lobby' }"
+        @click="activeTab = 'lobby'"
+      >
+        Lobby
+      </button>
+      <button
+        class="segment-button"
+        :class="{ active: activeTab === 'stats' }"
+        @click="activeTab = 'stats'"
+      >
+        Stats
+      </button>
+    </nav>
 
-    <article class="panel">
-      <h2>Join by Code</h2>
-      <div class="stack">
-        <div class="inline-form">
-          <input v-model="roomCode" maxlength="8" placeholder="Room code" />
-          <button :disabled="!canCreateRoom || !roomCode.trim()" @click="joinRoom(roomCode.trim().toUpperCase())">Join</button>
-        </div>
-      </div>
-    </article>
-  </section>
-
-  <section class="panel">
-    <div class="section-head">
-      <h2>Public Rooms</h2>
-      <button class="secondary" @click="store.fetchRooms">Refresh</button>
-    </div>
-    <div v-if="store.rooms.length" class="room-grid">
-      <article v-for="room in store.rooms" :key="room.code" class="room-card">
-        <div class="room-card-top">
+    <section v-if="activeTab === 'lobby'" class="home-workspace">
+      <article class="panel home-setup-panel">
+        <div class="section-head">
           <div>
-            <p class="eyebrow">{{ room.code }}</p>
-            <h3>{{ room.title }}</h3>
+            <h2>Lobby Setup</h2>
+            <p class="muted">Pick a device profile, then create or join a room.</p>
           </div>
-          <span class="phase-pill">{{ room.phase }}</span>
+          <span class="phase-pill">{{ store.activeProfile?.name || "No active profile" }}</span>
         </div>
-        <p class="muted">Host: {{ room.hostName || "Unknown" }}</p>
-        <p class="muted">{{ room.playerCount }} players · {{ room.spectatorCount }} spectators</p>
-        <div class="action-row">
-          <button :disabled="!canCreateRoom" @click="joinRoom(room.code)">Join seat</button>
-          <button class="secondary" :disabled="!canCreateRoom" @click="watchRoom(room.code)">Watch</button>
+
+        <div class="home-setup-grid">
+          <section class="stack home-subsection">
+            <h3>Profiles</h3>
+            <div class="inline-form">
+              <input v-model="newProfileName" maxlength="24" placeholder="Create profile name" />
+              <button @click="submitProfile">Create</button>
+            </div>
+            <div v-if="store.profiles.length" class="panel-scroll list">
+              <button
+                v-for="profile in store.profiles"
+                :key="profile.id"
+                class="list-row"
+                @click="useProfile(profile.id)"
+              >
+                <span>{{ profile.name }}</span>
+                <strong>{{ store.activeProfile?.id === profile.id ? "Active" : "Use" }}</strong>
+              </button>
+            </div>
+            <p v-else class="muted">No profiles on this device yet.</p>
+          </section>
+
+          <section class="stack home-subsection">
+            <h3>Create Room</h3>
+            <input v-model="newRoomTitle" maxlength="32" placeholder="Room title" :disabled="!canCreateRoom" />
+            <label class="toggle-row">
+              <input v-model="isPublic" type="checkbox" :disabled="!canCreateRoom" />
+              <span>Visible in public lobby</span>
+            </label>
+            <button :disabled="!canCreateRoom" @click="createRoom">Create room</button>
+          </section>
+
+          <section class="stack home-subsection">
+            <h3>Join by Code</h3>
+            <div class="inline-form">
+              <input v-model="roomCode" maxlength="8" placeholder="Room code" />
+              <button :disabled="!canCreateRoom || !roomCode.trim()" @click="joinRoom(roomCode.trim().toUpperCase())">Join</button>
+            </div>
+          </section>
         </div>
       </article>
-    </div>
-    <p v-else class="muted">No public rooms right now.</p>
-  </section>
 
-  <section class="grid-layout">
-    <article class="panel">
-      <div class="section-head">
-        <h2>Leaderboard</h2>
-        <button class="secondary" @click="store.fetchLeaderboard">Refresh</button>
-      </div>
-      <div v-if="store.leaderboard.length" class="list">
-        <div v-for="entry in store.leaderboard" :key="entry.profileId" class="list-row static">
-          <span>#{{ entry.rank }} · {{ entry.name }}</span>
-          <strong>{{ entry.wins }} wins / {{ entry.matchesPlayed }} matches</strong>
+      <article class="panel home-rooms-panel">
+        <div class="section-head">
+          <div>
+            <h2>Public Rooms</h2>
+            <p class="muted">{{ store.rooms.length }} rooms visible right now.</p>
+          </div>
+          <button class="secondary" @click="store.fetchRooms">Refresh</button>
         </div>
-      </div>
-      <p v-else class="muted">No finished matches yet.</p>
-    </article>
 
-    <article class="panel" style="grid-column: span 2;">
+        <div v-if="store.rooms.length" class="panel-scroll room-grid">
+          <article v-for="room in store.rooms" :key="room.code" class="room-card">
+            <div class="room-card-top">
+              <div>
+                <p class="eyebrow">{{ room.code }}</p>
+                <h3>{{ room.title }}</h3>
+              </div>
+              <span class="phase-pill">{{ room.phase }}</span>
+            </div>
+            <p class="muted">Host: {{ room.hostName || "Unknown" }}</p>
+            <p class="muted">{{ room.playerCount }} players · {{ room.spectatorCount }} spectators</p>
+            <div class="action-row">
+              <button :disabled="!canCreateRoom" @click="joinRoom(room.code)">Join seat</button>
+              <button class="secondary" :disabled="!canCreateRoom" @click="watchRoom(room.code)">Watch</button>
+            </div>
+          </article>
+        </div>
+        <p v-else class="muted">No public rooms right now.</p>
+      </article>
+    </section>
+
+    <section v-else class="panel stats-panel">
       <div class="section-head">
-        <h2>Recent Matches</h2>
-        <button class="secondary" @click="store.fetchRecentMatches">Refresh</button>
+        <div>
+          <h2>Stats Desk</h2>
+          <p class="muted">Review winners and reopen finished matches without leaving the fixed layout.</p>
+        </div>
+        <nav class="segmented-control segmented-control--inline" aria-label="Stats views">
+          <button
+            class="segment-button"
+            :class="{ active: statsTab === 'leaderboard' }"
+            @click="statsTab = 'leaderboard'"
+          >
+            Leaderboard
+          </button>
+          <button
+            class="segment-button"
+            :class="{ active: statsTab === 'recent' }"
+            @click="statsTab = 'recent'"
+          >
+            Recent
+          </button>
+        </nav>
       </div>
-      <div v-if="store.recentMatches.length" class="list">
-        <button
-          v-for="match in store.recentMatches"
-          :key="match.id"
-          class="list-row"
-          @click="openRecentMatch(match)"
-        >
-          <span>{{ match.roomTitle }} · {{ match.roomCode }} · {{ match.winnerName || "No winner" }}</span>
-          <strong>{{ match.moveCount }} moves</strong>
-        </button>
+
+      <div v-if="statsTab === 'leaderboard'" class="stack panel-fill">
+        <div class="section-head">
+          <h3>Leaderboard</h3>
+          <button class="secondary" @click="store.fetchLeaderboard">Refresh</button>
+        </div>
+        <div v-if="store.leaderboard.length" class="panel-scroll list">
+          <div v-for="entry in store.leaderboard" :key="entry.profileId" class="list-row static">
+            <span>#{{ entry.rank }} · {{ entry.name }}</span>
+            <strong>{{ entry.wins }} wins / {{ entry.matchesPlayed }} matches</strong>
+          </div>
+        </div>
+        <p v-else class="muted">No finished matches yet.</p>
       </div>
-      <p v-else class="muted">Replay history will appear here after matches finish.</p>
-    </article>
+
+      <div v-else class="stack panel-fill">
+        <div class="section-head">
+          <h3>Recent Matches</h3>
+          <button class="secondary" @click="store.fetchRecentMatches">Refresh</button>
+        </div>
+        <div v-if="store.recentMatches.length" class="panel-scroll list">
+          <button
+            v-for="match in store.recentMatches"
+            :key="match.id"
+            class="list-row"
+            @click="openRecentMatch(match)"
+          >
+            <span>{{ match.roomTitle }} · {{ match.roomCode }} · {{ match.winnerName || "No winner" }}</span>
+            <strong>{{ match.moveCount }} moves</strong>
+          </button>
+        </div>
+        <p v-else class="muted">Replay history will appear here after matches finish.</p>
+      </div>
+    </section>
   </section>
 </template>

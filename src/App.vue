@@ -29,7 +29,9 @@ onMounted(() => {
 
     <main class="page">
       <p v-if="store.error" class="app-error">{{ store.error }}</p>
-      <RouterView />
+      <section class="page-view">
+        <RouterView />
+      </section>
     </main>
   </div>
 </template>

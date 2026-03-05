@@ -63,3 +63,45 @@ Express server
   - This is a broad rewrite touching frontend architecture and backend state model at once.
   - Existing uncommitted edits in legacy static assets must not be destructively reverted outside the rewrite scope.
   - SQLite schema and realtime event shapes must stay aligned to avoid client/server drift.
+
+## Extension 2026-03-06: Viewport-Fit SPA Layout Regression
+
+- **Status**: APPROVED
+- **Approved-By**: Viet
+- **Task**: Refit the Vue SPA so the UI always stays inside the current viewport with no page-level vertical scroll, using route-level tabs plus bounded internal scroll regions.
+- **Location**:
+  - `/Users/maihoangviet/Projects/blokus/src/App.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/style.css`
+  - `/Users/maihoangviet/Projects/blokus/src/views/HomeView.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/views/RoomView.vue`
+- **Why**: The SOW_0003 rewrite currently stacks full-height sections in document flow, which causes the home route to overflow vertically and breaks the fixed-screen product requirement.
+- **As-Is Diagram (ASCII)**:
+```text
+Viewport
+  -> top bar
+  -> stacked route sections
+  -> document grows taller than screen
+  -> browser page scroll
+```
+- **To-Be Diagram (ASCII)**:
+```text
+Viewport
+  -> fixed app shell (no body/document scroll)
+  -> route dashboard fills remaining height
+  -> route tabs switch major sections
+  -> only bounded lists/panels scroll internally
+```
+- **Deliverables**:
+  - Fixed-height SPA shell in `App.vue`/`style.css`.
+  - Home dashboard with `Lobby` and `Stats` modes.
+  - Room dashboard with `Room`, `History`, and `Replay` side-panel modes.
+  - Internal scroll regions for public rooms, leaderboard, recent matches, history, and replay details.
+- **Done Criteria**:
+  - No body/document vertical scrollbar on desktop and narrow mobile viewport checks.
+  - Home route keeps profile and room actions inside a fixed dashboard.
+  - Room route keeps header, board, piece rack, player status, and footer guidance inside the viewport in room mode.
+  - `npm run build` passes.
+- **Out-of-Scope**:
+  - Backend/session changes.
+  - Gameplay rule changes.
+  - Legacy `public/` layout cleanup.
