@@ -377,6 +377,28 @@ function getActiveMatch(roomId) {
   `).get(roomId) || null;
 }
 
+function getMatchById(matchId) {
+  return db.prepare("select * from matches where id = ?").get(matchId) || null;
+}
+
+function getMovesForMatch(matchId) {
+  return db.prepare(`
+    select moves.*, profiles.name
+    from moves
+    left join profiles on profiles.id = moves.profile_id
+    where moves.match_id = ?
+    order by moves.move_index asc
+  `).all(matchId).map((row) => ({
+    id: row.id,
+    moveIndex: row.move_index,
+    profileId: row.profile_id,
+    playerName: row.name || null,
+    eventType: row.event_type,
+    payload: parseJson(row.payload_json, {}),
+    createdAt: row.created_at
+  }));
+}
+
 function getOrderedMatchPlayers(matchId) {
   return db.prepare(`
     select match_players.*, profiles.name
@@ -505,9 +527,11 @@ function buildRoomSummary(room) {
 function buildRoomSnapshot(roomCode) {
   const room = getRoomByCode(roomCode);
   if (!room) return null;
-  cleanupExpiredMembers(room.id);
+  if (room.phase !== ROOM_PHASES.ARCHIVED) {
+    cleanupExpiredMembers(room.id);
+  }
   const freshRoom = getRoomByCode(roomCode);
-  if (!freshRoom || freshRoom.phase === ROOM_PHASES.ARCHIVED) return null;
+  if (!freshRoom) return null;
   const members = getRoomMembers(freshRoom.id);
   const host = members.find((member) => member.profile_id === freshRoom.host_profile_id);
   return {
@@ -518,6 +542,7 @@ function buildRoomSnapshot(roomCode) {
     hostProfileId: freshRoom.host_profile_id,
     hostName: host?.name || null,
     currentMatchId: getLatestMatch(freshRoom.id)?.id || null,
+    history: buildRoomHistory(freshRoom.id),
     members: members.map((member) => ({
       id: member.id,
       profileId: member.profile_id,
@@ -537,6 +562,7 @@ function buildMatchSnapshot(roomCode) {
   const match = getLatestMatch(room.id);
   if (!match) return null;
   const players = getOrderedMatchPlayers(match.id);
+  const winner = players.find((player) => player.profile_id === match.winner_profile_id);
   return {
     id: match.id,
     roomCode,
@@ -544,6 +570,10 @@ function buildMatchSnapshot(roomCode) {
     turnIndex: match.turn_index,
     board: parseBoard(match.board_json),
     winnerProfileId: match.winner_profile_id,
+    winnerName: winner?.name || null,
+    createdAt: match.created_at,
+    finishedAt: match.finished_at,
+    moveCount: moveCount(match.id),
     players: players.map((player) => ({
       profileId: player.profile_id,
       name: player.name,
@@ -558,6 +588,152 @@ function buildMatchSnapshot(roomCode) {
       score: player.score
     }))
   };
+}
+
+function buildFinishedMatchSummary(match, room) {
+  const players = getOrderedMatchPlayers(match.id);
+  const winner = players.find((player) => player.profile_id === match.winner_profile_id);
+  return {
+    id: match.id,
+    roomCode: room.code,
+    roomTitle: room.title,
+    winnerProfileId: match.winner_profile_id,
+    winnerName: winner?.name || null,
+    createdAt: match.created_at,
+    finishedAt: match.finished_at,
+    moveCount: moveCount(match.id),
+    players: players.map((player) => ({
+      profileId: player.profile_id,
+      name: player.name,
+      score: player.score,
+      endState: player.endState
+    }))
+  };
+}
+
+function buildRoomHistory(roomId) {
+  const room = db.prepare("select * from rooms where id = ?").get(roomId);
+  if (!room) return [];
+  return db.prepare(`
+    select *
+    from matches
+    where room_id = ? and status = 'finished'
+    order by finished_at desc, created_at desc
+    limit 12
+  `).all(roomId).map((match) => buildFinishedMatchSummary(match, room));
+}
+
+function buildReplaySnapshot(matchId) {
+  const match = getMatchById(matchId);
+  if (!match) return null;
+  const room = db.prepare("select * from rooms where id = ?").get(match.room_id);
+  if (!room) return null;
+  const players = getOrderedMatchPlayers(match.id);
+  const winner = players.find((player) => player.profile_id === match.winner_profile_id);
+  const moves = getMovesForMatch(match.id);
+  const board = emptyBoard();
+  const frames = [{
+    step: 0,
+    eventType: "initial",
+    label: "Start of match",
+    actorName: null,
+    board: emptyBoard(),
+    payload: {}
+  }];
+  let step = 0;
+  for (const move of moves) {
+    if (move.eventType === "piece_placed") {
+      const cells = buildAbsCells(
+        move.payload.pieceId,
+        move.payload.orientationIndex,
+        move.payload.x,
+        move.payload.y
+      );
+      const player = players.find((entry) => entry.profile_id === move.profileId);
+      if (cells && player) {
+        placeCells(board, cells, player.colorIndex + 1);
+      }
+    }
+    step += 1;
+    frames.push({
+      step,
+      eventType: move.eventType,
+      label:
+        move.eventType === "match_started"
+          ? "Match started"
+          : move.eventType === "turn_passed"
+            ? `${move.playerName || "Player"} passed`
+            : move.eventType === "piece_placed"
+              ? `${move.playerName || "Player"} placed ${move.payload.pieceId}`
+              : move.eventType === "match_finished"
+                ? `Match finished${winner?.name ? `, winner: ${winner.name}` : ""}`
+                : move.eventType,
+      actorName: move.playerName,
+      board: board.map((row) => [...row]),
+      payload: move.payload
+    });
+  }
+  return {
+    id: match.id,
+    roomCode: room.code,
+    roomTitle: room.title,
+    status: match.status,
+    winnerProfileId: match.winner_profile_id,
+    winnerName: winner?.name || null,
+    createdAt: match.created_at,
+    finishedAt: match.finished_at,
+    moveCount: moveCount(match.id),
+    players: players.map((player) => ({
+      profileId: player.profile_id,
+      name: player.name,
+      colorIndex: player.colorIndex,
+      score: player.score,
+      endState: player.endState
+    })),
+    frames
+  };
+}
+
+function buildLeaderboard() {
+  const rows = db.prepare(`
+    select
+      profiles.id as profile_id,
+      profiles.name as name,
+      count(match_players.id) as matches_played,
+      sum(case when matches.winner_profile_id = profiles.id then 1 else 0 end) as wins,
+      sum(match_players.score) as total_score,
+      max(case when matches.winner_profile_id = profiles.id then matches.finished_at else null end) as last_win_at
+    from profiles
+    join match_players on match_players.profile_id = profiles.id
+    join matches on matches.id = match_players.match_id
+    where matches.status = 'finished'
+    group by profiles.id, profiles.name
+    order by wins desc, total_score desc, matches_played desc, last_win_at desc, profiles.name asc
+    limit 12
+  `).all();
+  return rows.map((row, index) => ({
+    rank: index + 1,
+    profileId: row.profile_id,
+    name: row.name,
+    wins: row.wins,
+    matchesPlayed: row.matches_played,
+    totalScore: row.total_score || 0,
+    lastWinAt: row.last_win_at || null
+  }));
+}
+
+function buildRecentFinishedMatches(limit = 12) {
+  return db.prepare(`
+    select matches.*, rooms.code as room_code, rooms.title as room_title
+    from matches
+    join rooms on rooms.id = matches.room_id
+    where matches.status = 'finished'
+    order by matches.finished_at desc, matches.created_at desc
+    limit ?
+  `).all(limit).map((match) => buildFinishedMatchSummary(match, {
+    code: match.room_code,
+    title: match.room_title
+  }));
 }
 
 function listPublicRooms() {
@@ -1001,6 +1177,8 @@ app.get("/api/bootstrap", (req, res) => {
     session: sessionPayload(activeSession),
     profiles: listProfilesForDevice(deviceToken),
     rooms: listPublicRooms(),
+    leaderboard: buildLeaderboard(),
+    recentMatches: buildRecentFinishedMatches(),
     room: activeSession?.room_code ? buildRoomSnapshot(activeSession.room_code) : null,
     match: activeSession?.room_code ? buildMatchSnapshot(activeSession.room_code) : null
   });
@@ -1008,6 +1186,32 @@ app.get("/api/bootstrap", (req, res) => {
 
 app.get("/api/rooms", (req, res) => {
   res.json({ deviceToken: getDeviceToken(req.header("x-device-token")), rooms: listPublicRooms() });
+});
+
+app.get("/api/leaderboard", (req, res) => {
+  res.json({
+    deviceToken: getDeviceToken(req.header("x-device-token")),
+    leaderboard: buildLeaderboard()
+  });
+});
+
+app.get("/api/matches/recent", (req, res) => {
+  res.json({
+    deviceToken: getDeviceToken(req.header("x-device-token")),
+    matches: buildRecentFinishedMatches()
+  });
+});
+
+app.get("/api/matches/:matchId", (req, res) => {
+  const replay = buildReplaySnapshot(String(req.params.matchId || ""));
+  if (!replay) {
+    res.status(404).json({ message: "Match not found." });
+    return;
+  }
+  res.json({
+    deviceToken: getDeviceToken(req.header("x-device-token")),
+    replay
+  });
 });
 
 app.get("/api/rooms/:roomCode", (req, res) => {

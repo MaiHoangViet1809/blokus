@@ -12,8 +12,11 @@ export const useAppStore = defineStore("app", {
     profiles: [],
     session: null,
     rooms: [],
+    leaderboard: [],
+    recentMatches: [],
     room: null,
     match: null,
+    replay: null,
     socket: null,
     connected: false,
     loading: false,
@@ -68,6 +71,8 @@ export const useAppStore = defineStore("app", {
       this.session = data.session || null;
       this.profiles = data.profiles || [];
       this.rooms = data.rooms || [];
+      this.leaderboard = data.leaderboard || [];
+      this.recentMatches = data.recentMatches || [];
       this.room = data.room || null;
       this.match = data.match || null;
       this.persistTokens();
@@ -109,6 +114,10 @@ export const useAppStore = defineStore("app", {
         if (this.room?.code === match.roomCode) {
           this.match = match;
         }
+        if (match?.status === "finished") {
+          this.fetchLeaderboard();
+          this.fetchRecentMatches();
+        }
       });
       this.socket.on("error", (payload) => {
         this.error = payload?.message || "Unexpected error";
@@ -119,11 +128,27 @@ export const useAppStore = defineStore("app", {
       const data = await this.api("/api/rooms", { method: "GET" });
       this.rooms = data.rooms || [];
     },
+    async fetchLeaderboard() {
+      const data = await this.api("/api/leaderboard", { method: "GET" });
+      this.leaderboard = data.leaderboard || [];
+      return data;
+    },
+    async fetchRecentMatches() {
+      const data = await this.api("/api/matches/recent", { method: "GET" });
+      this.recentMatches = data.matches || [];
+      return data;
+    },
     async fetchRoom(roomCode) {
       const data = await this.api(`/api/rooms/${roomCode}`, { method: "GET" });
       this.room = data.room;
       this.match = data.match;
+      this.replay = null;
       return data;
+    },
+    async fetchReplay(matchId) {
+      const data = await this.api(`/api/matches/${matchId}`, { method: "GET" });
+      this.replay = data.replay || null;
+      return data.replay;
     },
     async createProfile(name) {
       const data = await this.api("/api/profiles", {
@@ -162,6 +187,8 @@ export const useAppStore = defineStore("app", {
           if (response.room) this.room = response.room;
           if (response.match !== undefined) this.match = response.match;
           if (response.rooms) this.rooms = response.rooms;
+          if (response.leaderboard) this.leaderboard = response.leaderboard;
+          if (response.recentMatches) this.recentMatches = response.recentMatches;
           resolve(response);
         });
       });
@@ -181,6 +208,7 @@ export const useAppStore = defineStore("app", {
       const response = await this.emit("room:leave", { roomCode });
       this.room = null;
       this.match = null;
+      this.replay = null;
       return response;
     },
     async setReady(ready) {

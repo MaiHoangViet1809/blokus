@@ -13,6 +13,13 @@ const isPublic = ref(true);
 
 const canCreateRoom = computed(() => !!store.activeProfile);
 
+async function openRecentMatch(match) {
+  await router.push({
+    path: `/rooms/${match.roomCode}`,
+    query: { matchId: match.id }
+  });
+}
+
 async function submitProfile() {
   if (!newProfileName.value.trim()) return;
   const profile = await store.createProfile(newProfileName.value.trim());
@@ -122,5 +129,40 @@ async function watchRoom(code) {
       </article>
     </div>
     <p v-else class="muted">No public rooms right now.</p>
+  </section>
+
+  <section class="grid-layout">
+    <article class="panel">
+      <div class="section-head">
+        <h2>Leaderboard</h2>
+        <button class="secondary" @click="store.fetchLeaderboard">Refresh</button>
+      </div>
+      <div v-if="store.leaderboard.length" class="list">
+        <div v-for="entry in store.leaderboard" :key="entry.profileId" class="list-row static">
+          <span>#{{ entry.rank }} · {{ entry.name }}</span>
+          <strong>{{ entry.wins }} wins / {{ entry.matchesPlayed }} matches</strong>
+        </div>
+      </div>
+      <p v-else class="muted">No finished matches yet.</p>
+    </article>
+
+    <article class="panel" style="grid-column: span 2;">
+      <div class="section-head">
+        <h2>Recent Matches</h2>
+        <button class="secondary" @click="store.fetchRecentMatches">Refresh</button>
+      </div>
+      <div v-if="store.recentMatches.length" class="list">
+        <button
+          v-for="match in store.recentMatches"
+          :key="match.id"
+          class="list-row"
+          @click="openRecentMatch(match)"
+        >
+          <span>{{ match.roomTitle }} · {{ match.roomCode }} · {{ match.winnerName || "No winner" }}</span>
+          <strong>{{ match.moveCount }} moves</strong>
+        </button>
+      </div>
+      <p v-else class="muted">Replay history will appear here after matches finish.</p>
+    </article>
   </section>
 </template>
