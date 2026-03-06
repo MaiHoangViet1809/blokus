@@ -390,6 +390,21 @@ p {
   font-size: clamp(1.35rem, 2.4vw, 2.1rem);
 }
 
+.room-header-live {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.room-header-live-copy {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
 .room-workspace {
   display: grid;
   gap: 12px;
@@ -401,7 +416,7 @@ p {
 }
 
 .room-workspace--match {
-  grid-template-columns: minmax(0, min(60vw, calc(100dvh - 320px))) minmax(300px, 1fr);
+  grid-template-columns: 1fr;
 }
 
 .room-view[data-room-phase="IN_GAME"][data-side-panel-open="false"] .room-workspace--match {
@@ -441,24 +456,25 @@ p {
 
 .gameplay-panel {
   grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 10px;
 }
 
 .board-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(148px, 176px);
-  gap: 16px;
+  grid-template-columns: minmax(0, 1fr) 158px;
+  gap: 12px;
   align-items: stretch;
 }
 
 .board-panel {
   display: grid;
-  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-rows: minmax(0, 1fr);
   justify-items: center;
   overflow: hidden;
 }
 
 .board-canvas {
-  width: min(100%, clamp(360px, 62dvh, 760px));
+  width: min(100%, clamp(420px, 74dvh, 980px));
   aspect-ratio: 1;
   display: block;
   background: #040910;
@@ -467,8 +483,9 @@ p {
 
 .rack-panel {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
   overflow: hidden;
+  gap: 10px;
 }
 
 .board-rack-head {
@@ -479,15 +496,19 @@ p {
 }
 
 .piece-grid {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: 1fr;
   align-content: start;
   overflow: auto;
-  padding-right: 4px;
+  gap: 8px;
+  padding-right: 2px;
 }
 
 .piece-chip {
-  text-transform: uppercase;
-  font-size: 0.76rem;
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  padding: 10px 8px;
+  font-size: 0.72rem;
 }
 
 .piece-chip.active {
@@ -495,20 +516,69 @@ p {
 }
 
 .piece-chip.used {
-  opacity: 0.35;
+  opacity: 0.42;
 }
 
-.score-strip {
+.piece-label {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.piece-preview {
+  display: grid;
+  grid-template-columns: repeat(var(--piece-cols), 10px);
+  grid-template-rows: repeat(var(--piece-rows), 10px);
+  gap: 2px;
+  min-height: calc(var(--piece-rows) * 10px + (var(--piece-rows) - 1) * 2px);
+  align-content: center;
+  justify-content: center;
+}
+
+.piece-preview-cell {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  background: rgba(88, 178, 255, 0.92);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+.piece-chip.used .piece-preview-cell {
+  background: rgba(117, 131, 155, 0.55);
+}
+
+.rack-actions {
+  display: grid;
+  gap: 8px;
+}
+
+.player-strip {
   display: grid;
   grid-auto-flow: column;
-  grid-auto-columns: minmax(160px, 1fr);
+  grid-auto-columns: minmax(120px, 1fr);
+  gap: 8px;
   overflow: auto hidden;
-  padding-bottom: 4px;
 }
 
-.score-card {
-  display: grid;
-  gap: 6px;
+.player-strip-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 56px;
+  padding: 10px 12px;
+  border-radius: 16px;
+  background: rgba(14, 26, 42, 0.92);
+  border: 1px solid var(--line);
+  white-space: nowrap;
+}
+
+.player-strip-item.active {
+  border-color: var(--line-strong);
+}
+
+.player-strip-item--meta {
+  justify-content: center;
 }
 
 .room-side-panel {
@@ -591,11 +661,11 @@ p {
   }
 
   .board-layout {
-    grid-template-columns: minmax(0, 1fr) 140px;
+    grid-template-columns: minmax(0, 1fr) 136px;
   }
 
   .board-canvas {
-    width: min(100%, clamp(320px, 54dvh, 640px));
+    width: min(100%, clamp(320px, 60dvh, 760px));
   }
 }
 
@@ -639,7 +709,7 @@ p {
   }
 
   .board-layout {
-    grid-template-columns: minmax(0, 1fr) 116px;
+    grid-template-columns: minmax(0, 1fr) 108px;
     gap: 12px;
   }
 
@@ -647,8 +717,10 @@ p {
     width: 100%;
   }
 
-  .score-strip {
-    grid-auto-columns: minmax(140px, 1fr);
+  .player-strip {
+    grid-auto-flow: row;
+    grid-auto-columns: auto;
+    overflow: auto;
   }
 
   .segmented-control,
@@ -685,10 +757,16 @@ p {
   }
 
   .board-layout {
-    grid-template-columns: minmax(0, 1fr) 104px;
+    grid-template-columns: minmax(0, 1fr) 96px;
   }
 
-  .piece-grid {
-    grid-template-columns: 1fr;
+  .piece-preview {
+    grid-template-columns: repeat(var(--piece-cols), 8px);
+    grid-template-rows: repeat(var(--piece-rows), 8px);
+  }
+
+  .piece-preview-cell {
+    width: 8px;
+    height: 8px;
   }
 }

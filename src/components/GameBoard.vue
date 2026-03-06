@@ -26,6 +26,10 @@ const isMyTurn = computed(() => {
 });
 
 const availablePieces = computed(() => new Set(currentPlayer.value?.remainingPieces || []));
+const visiblePieces = computed(() => PIECES.map((piece) => ({
+  ...piece,
+  used: !availablePieces.value.has(piece.id)
+})));
 
 function clampCell(value) {
   return Math.max(0, Math.min(BOARD_SIZE - 1, value));
@@ -87,6 +91,13 @@ function place() {
 }
 
 watch(() => [props.match, selectedPieceId.value, orientationIndex.value, hoverCell.value.x, hoverCell.value.y], draw, { deep: true });
+watch(availablePieces, (pieces) => {
+  if (!pieces.has(selectedPieceId.value)) {
+    const nextPiece = PIECES.find((piece) => pieces.has(piece.id));
+    selectedPieceId.value = nextPiece?.id || PIECES[0].id;
+    orientationIndex.value = 0;
+  }
+});
 onMounted(draw);
 </script>
 
@@ -103,10 +114,6 @@ onMounted(draw);
         @click="place"
         @contextmenu.prevent="rotate"
       />
-      <div class="board-toolbar">
-        <button class="secondary" :disabled="!isMyTurn" @click="rotate">Rotate</button>
-        <button class="secondary" :disabled="!isMyTurn" @click="$emit('pass')">Pass</button>
-      </div>
     </div>
 
     <div class="rack-panel">
@@ -116,14 +123,31 @@ onMounted(draw);
       </div>
       <div class="piece-grid">
         <button
-          v-for="piece in PIECES"
+          v-for="piece in visiblePieces"
           :key="piece.id"
           class="piece-chip"
-          :class="{ active: piece.id === selectedPieceId, used: !availablePieces.has(piece.id) }"
+          :class="{ active: piece.id === selectedPieceId, used: piece.used }"
+          :disabled="piece.used"
           @click="selectedPieceId = piece.id; orientationIndex = 0"
         >
-          {{ piece.id }}
+          <span
+            class="piece-preview"
+            :style="{ '--piece-cols': piece.previewWidth, '--piece-rows': piece.previewHeight }"
+            aria-hidden="true"
+          >
+            <span
+              v-for="(cell, index) in piece.cells"
+              :key="`${piece.id}-${index}`"
+              class="piece-preview-cell"
+              :style="{ gridColumn: `${cell[0] + 1}`, gridRow: `${cell[1] + 1}` }"
+            />
+          </span>
+          <span class="piece-label">{{ piece.label }}</span>
         </button>
+      </div>
+      <div class="rack-actions">
+        <button class="secondary" :disabled="!isMyTurn" @click="rotate">Rotate</button>
+        <button class="secondary" :disabled="!isMyTurn" @click="$emit('pass')">Pass</button>
       </div>
     </div>
   </div>

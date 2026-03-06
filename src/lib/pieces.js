@@ -8,28 +8,28 @@ export const COLORS = {
   4: "#ffa502"
 };
 
-export const PIECES = [
-  { id: "mono", cells: [[0, 0]] },
-  { id: "domino", cells: [[0, 0], [1, 0]] },
-  { id: "tromino_I", cells: [[0, 0], [1, 0], [2, 0]] },
-  { id: "tromino_L", cells: [[0, 0], [0, 1], [1, 0]] },
-  { id: "tetromino_I", cells: [[0, 0], [1, 0], [2, 0], [3, 0]] },
-  { id: "tetromino_O", cells: [[0, 0], [1, 0], [0, 1], [1, 1]] },
-  { id: "tetromino_T", cells: [[0, 0], [1, 0], [2, 0], [1, 1]] },
-  { id: "tetromino_L", cells: [[0, 0], [0, 1], [0, 2], [1, 0]] },
-  { id: "tetromino_S", cells: [[0, 0], [1, 0], [1, 1], [2, 1]] },
-  { id: "pentomino_F", cells: [[0, 1], [1, 0], [1, 1], [1, 2], [2, 2]] },
-  { id: "pentomino_I", cells: [[0, 0], [1, 0], [2, 0], [3, 0], [4, 0]] },
-  { id: "pentomino_L", cells: [[0, 0], [0, 1], [0, 2], [0, 3], [1, 0]] },
-  { id: "pentomino_P", cells: [[0, 0], [1, 0], [0, 1], [1, 1], [0, 2]] },
-  { id: "pentomino_N", cells: [[0, 0], [1, 0], [1, 1], [2, 1], [3, 1]] },
-  { id: "pentomino_T", cells: [[0, 0], [1, 0], [2, 0], [1, 1], [1, 2]] },
-  { id: "pentomino_U", cells: [[0, 0], [0, 1], [1, 1], [2, 0], [2, 1]] },
-  { id: "pentomino_V", cells: [[0, 0], [0, 1], [0, 2], [1, 0], [2, 0]] },
-  { id: "pentomino_W", cells: [[0, 0], [1, 0], [1, 1], [2, 1], [2, 2]] },
-  { id: "pentomino_X", cells: [[1, 0], [0, 1], [1, 1], [2, 1], [1, 2]] },
-  { id: "pentomino_Y", cells: [[0, 0], [1, 0], [2, 0], [3, 0], [2, 1]] },
-  { id: "pentomino_Z", cells: [[0, 0], [1, 0], [1, 1], [2, 1], [2, 2]] }
+const BASE_PIECES = [
+  { id: "mono", label: "Mono", cells: [[0, 0]] },
+  { id: "domino", label: "Domino", cells: [[0, 0], [1, 0]] },
+  { id: "tromino_I", label: "I3", cells: [[0, 0], [1, 0], [2, 0]] },
+  { id: "tromino_L", label: "V3", cells: [[0, 0], [0, 1], [1, 0]] },
+  { id: "tetromino_I", label: "I4", cells: [[0, 0], [1, 0], [2, 0], [3, 0]] },
+  { id: "tetromino_O", label: "O4", cells: [[0, 0], [1, 0], [0, 1], [1, 1]] },
+  { id: "tetromino_T", label: "T4", cells: [[0, 0], [1, 0], [2, 0], [1, 1]] },
+  { id: "tetromino_L", label: "L4", cells: [[0, 0], [0, 1], [0, 2], [1, 0]] },
+  { id: "tetromino_S", label: "Z4", cells: [[0, 0], [1, 0], [1, 1], [2, 1]] },
+  { id: "pentomino_F", label: "F", cells: [[0, 1], [1, 0], [1, 1], [1, 2], [2, 2]] },
+  { id: "pentomino_I", label: "I", cells: [[0, 0], [1, 0], [2, 0], [3, 0], [4, 0]] },
+  { id: "pentomino_L", label: "L", cells: [[0, 0], [0, 1], [0, 2], [0, 3], [1, 0]] },
+  { id: "pentomino_P", label: "P", cells: [[0, 0], [1, 0], [0, 1], [1, 1], [0, 2]] },
+  { id: "pentomino_N", label: "N", cells: [[0, 0], [1, 0], [1, 1], [2, 1], [3, 1]] },
+  { id: "pentomino_T", label: "T", cells: [[0, 0], [1, 0], [2, 0], [1, 1], [1, 2]] },
+  { id: "pentomino_U", label: "U", cells: [[0, 0], [0, 1], [1, 1], [2, 0], [2, 1]] },
+  { id: "pentomino_V", label: "V", cells: [[0, 0], [0, 1], [0, 2], [1, 0], [2, 0]] },
+  { id: "pentomino_W", label: "W", cells: [[0, 0], [1, 0], [1, 1], [2, 1], [2, 2]] },
+  { id: "pentomino_X", label: "X", cells: [[1, 0], [0, 1], [1, 1], [2, 1], [1, 2]] },
+  { id: "pentomino_Y", label: "Y", cells: [[0, 0], [1, 0], [2, 0], [3, 0], [2, 1]] },
+  { id: "pentomino_Z", label: "Z", cells: [[0, 0], [1, 0], [1, 1], [1, 2], [2, 2]] }
 ];
 
 function normalizeCells(cells) {
@@ -37,7 +37,7 @@ function normalizeCells(cells) {
   const minY = Math.min(...cells.map(([, y]) => y));
   return cells
     .map(([x, y]) => [x - minX, y - minY])
-    .sort((a, b) => (a[0] - b[0]) || (a[1] - b[1]));
+    .sort((a, b) => (a[1] - b[1]) || (a[0] - b[0]));
 }
 
 function rotate90([x, y]) {
@@ -76,6 +76,43 @@ function uniqueOrientations(baseCells) {
   return variants;
 }
 
+function canonicalSignature(cells) {
+  return uniqueOrientations(cells)
+    .map((variant) => variant.map(([x, y]) => `${x}:${y}`).join("|"))
+    .sort()[0];
+}
+
+function buildPreview(cells) {
+  const normalized = normalizeCells(cells);
+  const width = Math.max(...normalized.map(([x]) => x)) + 1;
+  const height = Math.max(...normalized.map(([, y]) => y)) + 1;
+  return { cells: normalized, width, height };
+}
+
+const seenCatalogShapes = new Map();
+
+export const PIECES = BASE_PIECES.map((piece) => {
+  const preview = buildPreview(piece.cells);
+  const key = canonicalSignature(piece.cells);
+  if (seenCatalogShapes.has(key)) {
+    throw new Error(`Duplicate base Blokus shape detected: ${piece.id} duplicates ${seenCatalogShapes.get(key)}`);
+  }
+  seenCatalogShapes.set(key, piece.id);
+  return {
+    id: piece.id,
+    label: piece.label,
+    cells: preview.cells,
+    previewWidth: preview.width,
+    previewHeight: preview.height
+  };
+});
+
 export const ORIENTATIONS = Object.fromEntries(
   PIECES.map((piece) => [piece.id, uniqueOrientations(piece.cells)])
 );
+
+export const PIECE_CELL_COUNTS = Object.fromEntries(
+  PIECES.map((piece) => [piece.id, piece.cells.length])
+);
+
+export const ALL_PIECE_IDS = PIECES.map((piece) => piece.id);

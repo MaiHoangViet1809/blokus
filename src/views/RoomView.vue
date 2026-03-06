@@ -16,8 +16,12 @@ const selectedReplayId = computed(() => String(route.query.matchId || ""));
 const isPreparePhase = computed(() => store.room?.phase === "PREPARE");
 const isLiveMatchPhase = computed(() => ["STARTING", "IN_GAME", "SUSPENDED"].includes(store.room?.phase || ""));
 const interactiveProfileId = computed(() => ["STARTING", "IN_GAME"].includes(store.room?.phase || "") ? (store.session?.profileId || "") : "");
+const showReplayWorkspace = computed(() => !isLiveMatchPhase.value && ["history", "replay"].includes(activePane.value));
 const activePane = computed({
   get() {
+    if (isLiveMatchPhase.value) {
+      return "room";
+    }
     const queryPane = String(route.query.pane || "");
     if (["room", "history", "replay"].includes(queryPane)) {
       return queryPane;
@@ -39,8 +43,7 @@ const spectatorMembers = computed(() => store.room?.members.filter((member) => m
 const roomPaneLabel = computed(() => isLiveMatchPhase.value ? "Match" : "Room");
 const showSidePanel = computed(() => {
   if (!store.room) return false;
-  if (!isLiveMatchPhase.value) return true;
-  return activePane.value !== "room";
+  return showReplayWorkspace.value;
 });
 const currentTurnName = computed(() => {
   if (!store.match || ["FINISHED", "ABANDONED"].includes(store.room?.phase || "")) return "Finished";
@@ -98,6 +101,10 @@ onMounted(async () => {
   await store.fetchRoom(roomCode.value);
   store.ensureSocket();
   if (selectedReplayId.value) {
+    if (isLiveMatchPhase.value) {
+      await router.replace({ path: `/rooms/${roomCode.value}` });
+      return;
+    }
     activePane.value = "replay";
     await store.fetchReplay(selectedReplayId.value);
   } else if (["FINISHED", "ABANDONED"].includes(store.room?.phase || "") && store.room?.currentMatchId) {
@@ -115,19 +122,34 @@ onMounted(async () => {
     :data-side-panel-open="showSidePanel ? 'true' : 'false'"
   >
     <header class="room-header panel">
-      <div>
-        <p class="eyebrow">{{ store.room.code }}</p>
-        <h1>{{ store.room.title }}</h1>
-        <p class="muted">Phase: {{ store.room.phase }} · Host: {{ store.room.hostName }}</p>
-      </div>
-      <div class="action-row">
-        <span class="phase-pill">{{ currentMember?.role || "Spectator" }}</span>
-        <button class="secondary" @click="leaveRoom">Leave</button>
-        <button v-if="isHost && store.room.phase === 'FINISHED'" @click="store.rematch">Rematch lobby</button>
-      </div>
+      <template v-if="isLiveMatchPhase">
+        <div class="room-header-live">
+          <div class="room-header-live-copy">
+            <strong>Room: {{ store.room.code }} / {{ store.room.title }}</strong>
+            <span class="muted">Turn: {{ currentTurnName }}</span>
+            <span class="muted">Phase: {{ store.room.phase }}</span>
+          </div>
+          <div class="action-row">
+            <span class="phase-pill">{{ currentMember?.role || "Spectator" }}</span>
+            <button class="secondary" @click="leaveRoom">Leave</button>
+          </div>
+        </div>
+      </template>
+      <template v-else>
+        <div>
+          <p class="eyebrow">{{ store.room.code }}</p>
+          <h1>{{ store.room.title }}</h1>
+          <p class="muted">Phase: {{ store.room.phase }} · Host: {{ store.room.hostName }}</p>
+        </div>
+        <div class="action-row">
+          <span class="phase-pill">{{ currentMember?.role || "Spectator" }}</span>
+          <button class="secondary" @click="leaveRoom">Leave</button>
+          <button v-if="isHost && store.room.phase === 'FINISHED'" @click="store.rematch">Rematch lobby</button>
+        </div>
+      </template>
     </header>
 
-    <nav class="segmented-control" aria-label="Room panels">
+    <nav v-if="!isLiveMatchPhase" class="segmented-control" aria-label="Room panels">
       <button class="segment-button" :class="{ active: activePane === 'room' }" @click="activePane = 'room'">{{ roomPaneLabel }}</button>
       <button class="segment-button" :class="{ active: activePane === 'history' }" @click="activePane = 'history'">History</button>
       <button class="segment-button" :class="{ active: activePane === 'replay' }" @click="activePane = 'replay'">Replay</button>
@@ -198,9 +220,9 @@ onMounted(async () => {
           <div class="section-head">
             <div>
               <h2>{{ matchHeading }}</h2>
-              <p class="muted">Turn: {{ currentTurnName }}</p>
+              <p v-if="!isLiveMatchPhase" class="muted">Turn: {{ currentTurnName }}</p>
             </div>
-            <span class="phase-pill">{{ store.room.phase }}</span>
+            <span v-if="!isLiveMatchPhase" class="phase-pill">{{ store.room.phase }}</span>
           </div>
 
           <p v-if="phaseMessage" class="muted">{{ phaseMessage }}</p>
@@ -213,11 +235,19 @@ onMounted(async () => {
             @pass="store.passTurn"
           />
 
-          <div class="score-strip score-strip--compact">
-            <div v-for="player in store.match.players" :key="player.profileId" class="score-card">
-              <h3>{{ player.name }}</h3>
-              <p class="muted">Pieces left: {{ player.remainingCount }}</p>
-              <p class="muted">State: {{ player.endState }}</p>
+          <div class="player-strip" :class="{ 'player-strip--compact': isLiveMatchPhase }">
+            <div v-for="player in store.match.players" :key="player.profileId" class="player-strip-item" :class="{ active: player.profileId === store.match.players[store.match.turnIndex]?.profileId }">
+              <strong>{{ player.name }}</strong>
+              <span class="muted">{{ player.remainingCount }}</span>
+              <span class="muted">{{ player.endState }}</span>
+            </div>
+            <div class="player-strip-item player-strip-item--meta">
+              <strong>Host</strong>
+              <span class="muted">{{ store.room.hostName }}</span>
+            </div>
+            <div class="player-strip-item player-strip-item--meta">
+              <strong>Spectators</strong>
+              <span class="muted">{{ spectatorMembers.length }}</span>
             </div>
           </div>
         </article>
