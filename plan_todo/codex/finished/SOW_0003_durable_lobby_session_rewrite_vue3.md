@@ -194,3 +194,54 @@ IN_GAME route
   - Blokus rule changes.
   - Replay data/model changes.
   - Home route layout changes.
+
+## Extension 2026-03-06: Live Match Layout and Visual Piece Rack
+
+- **Status**: APPROVED
+- **Approved-By**: Viet
+- **Task**: Redesign the live `IN_GAME` view into a strict board-first screen and replace the text-only piece picker with visual Blokus piece previews, while auditing and enforcing a canonical non-duplicated piece catalog shared across client and server.
+- **Location**:
+  - `/Users/maihoangviet/Projects/blokus/src/views/RoomView.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/components/GameBoard.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/style.css`
+  - `/Users/maihoangviet/Projects/blokus/src/lib/pieces.js`
+  - `/Users/maihoangviet/Projects/blokus/server.js`
+- **Why**: The current live match layout still wastes too much space on chrome and padded containers, and the piece rail is text-only, so players cannot quickly recognize shapes. The project also duplicates piece definitions in client and server, which creates future drift risk as the platform expands.
+- **As-Is Diagram (ASCII)**:
+```text
+IN_GAME
+  -> oversized room chrome
+  -> text-only piece buttons
+  -> history/replay mixed into room workspace
+  -> large player cards
+  -> duplicated client/server piece catalogs
+```
+- **To-Be Diagram (ASCII)**:
+```text
+IN_GAME
+  -> compact live header
+  -> dominant board region
+  -> narrow utility rail with visual piece shapes
+  -> used shapes greyed out
+  -> compact player state strip
+  -> no history/replay in live match view
+  -> shared canonical piece catalog
+```
+- **Deliverables**:
+  - Live room screen is match-only during active phases.
+  - Visual piece rack with actual shape previews and greyed-out used pieces.
+  - Compact live match header and player strip.
+  - Shared canonical piece definitions between client and server.
+  - Piece catalog validation so rotations/flips are derived rather than duplicated as base entries.
+- **Done Criteria**:
+  - `IN_GAME` has no history/replay tabs or side panels.
+  - Piece rail shows actual geometry for each piece.
+  - Used pieces are visibly greyed out.
+  - Client and server use the same piece catalog/orientation model.
+  - `node --check server.js` passes.
+  - `npm run build` passes.
+- **Out-of-Scope**:
+  - Adding new games.
+  - Changing Blokus rules.
+  - Replay feature redesign.
+  - Home route layout changes.
