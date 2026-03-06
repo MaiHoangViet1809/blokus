@@ -19,6 +19,23 @@ const db = new Database(dbPath);
 db.pragma("journal_mode = WAL");
 
 db.exec(`
+  create table if not exists browser_containers (
+    id text primary key,
+    token text not null unique,
+    created_at text not null,
+    last_seen_at text not null
+  );
+
+  create table if not exists client_instances (
+    id text primary key,
+    token text not null unique,
+    browser_container_id text not null,
+    active_profile_id text,
+    room_code text,
+    created_at text not null,
+    last_seen_at text not null
+  );
+
   create table if not exists profiles (
     id text primary key,
     device_token text not null,
@@ -96,6 +113,47 @@ db.exec(`
   );
 `);
 
+function columnExists(tableName, columnName) {
+  return db.prepare(`pragma table_info(${tableName})`).all().some((column) => column.name === columnName);
+}
+
+if (!columnExists("sessions", "client_instance_id")) {
+  db.exec("alter table sessions add column client_instance_id text");
+}
+
+if (!columnExists("room_members", "client_instance_id")) {
+  db.exec("alter table room_members add column client_instance_id text");
+}
+
+if (!columnExists("rooms", "game_type")) {
+  db.exec("alter table rooms add column game_type text not null default 'blokus'");
+}
+
+if (!columnExists("rooms", "empty_since")) {
+  db.exec("alter table rooms add column empty_since text");
+}
+
+if (!columnExists("rooms", "suspended_at")) {
+  db.exec("alter table rooms add column suspended_at text");
+}
+
+if (!columnExists("rooms", "abandoned_at")) {
+  db.exec("alter table rooms add column abandoned_at text");
+}
+
+if (!columnExists("matches", "first_committed_at")) {
+  db.exec("alter table matches add column first_committed_at text");
+}
+
+db.exec(`
+  create unique index if not exists idx_sessions_client_instance
+  on sessions(client_instance_id)
+  where client_instance_id is not null;
+
+  create index if not exists idx_room_members_client_instance
+  on room_members(room_id, client_instance_id);
+`);
+
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: "*" } });
@@ -105,12 +163,25 @@ app.use(express.json());
 const BOARD_SIZE = 20;
 const MAX_PLAYERS = 4;
 const GRACE_MS = 60_000;
+const EMPTY_ROOM_TTL_MS = 5 * 60_000;
+const FINISHED_ROOM_TTL_MS = 15 * 60_000;
+const BROWSER_COOKIE_NAME = "blokus_browser_token";
+const BROWSER_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
 const ROOM_PHASES = {
-  LOBBY: "LOBBY",
+  PREPARE: "PREPARE",
   STARTING: "STARTING",
   IN_GAME: "IN_GAME",
+  SUSPENDED: "SUSPENDED",
+  ABANDONED: "ABANDONED",
   FINISHED: "FINISHED",
   ARCHIVED: "ARCHIVED"
+};
+const MATCH_STATUSES = {
+  STARTING: "starting",
+  ACTIVE: "active",
+  SUSPENDED: "suspended",
+  ABANDONED: "abandoned",
+  FINISHED: "finished"
 };
 const PLAYER_START_CORNERS = [
   [0, 0],
@@ -142,6 +213,8 @@ const PIECES = [
   { id: "pentomino_Y", cells: [[0, 0], [1, 0], [2, 0], [3, 0], [2, 1]] },
   { id: "pentomino_Z", cells: [[0, 0], [1, 0], [1, 1], [2, 1], [2, 2]] }
 ];
+
+db.prepare("update rooms set phase = ? where phase = 'LOBBY'").run(ROOM_PHASES.PREPARE);
 
 function nowIso() {
   return new Date().toISOString();
@@ -313,8 +386,80 @@ function totalRemainingCells(remainingPieces) {
   return remainingPieces.reduce((sum, pieceId) => sum + (PIECE_CELL_COUNTS[pieceId] || 0), 0);
 }
 
-function getDeviceToken(value) {
-  return typeof value === "string" && value.trim() ? value.trim() : makeToken();
+function parseCookieHeader(headerValue) {
+  return String(headerValue || "")
+    .split(";")
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .reduce((cookies, part) => {
+      const [name, ...rest] = part.split("=");
+      cookies[name] = decodeURIComponent(rest.join("=") || "");
+      return cookies;
+    }, {});
+}
+
+function setBrowserCookie(res, token) {
+  const cookie = [
+    `${BROWSER_COOKIE_NAME}=${encodeURIComponent(token)}`,
+    "Path=/",
+    "HttpOnly",
+    "SameSite=Lax",
+    `Max-Age=${BROWSER_COOKIE_MAX_AGE}`
+  ].join("; ");
+  res.setHeader("Set-Cookie", cookie);
+}
+
+function readBrowserToken(source) {
+  if (typeof source === "string" && source.trim()) {
+    return source.trim();
+  }
+  return makeToken();
+}
+
+function getBrowserContainerByToken(token) {
+  return db.prepare("select * from browser_containers where token = ?").get(token) || null;
+}
+
+function ensureBrowserContainer(token) {
+  const normalizedToken = readBrowserToken(token);
+  let container = getBrowserContainerByToken(normalizedToken);
+  if (!container) {
+    const timestamp = nowIso();
+    db.prepare(`
+      insert into browser_containers (id, token, created_at, last_seen_at)
+      values (?, ?, ?, ?)
+    `).run(makeId("browser"), normalizedToken, timestamp, timestamp);
+    container = getBrowserContainerByToken(normalizedToken);
+  } else {
+    db.prepare("update browser_containers set last_seen_at = ? where id = ?").run(nowIso(), container.id);
+    container = getBrowserContainerByToken(normalizedToken);
+  }
+  return container;
+}
+
+function getClientInstanceByToken(browserContainerId, token) {
+  return db.prepare(`
+    select *
+    from client_instances
+    where browser_container_id = ? and token = ?
+  `).get(browserContainerId, token) || null;
+}
+
+function ensureClientInstance(browserContainer, token) {
+  const normalizedToken = readBrowserToken(token);
+  let instance = getClientInstanceByToken(browserContainer.id, normalizedToken);
+  if (!instance) {
+    const timestamp = nowIso();
+    db.prepare(`
+      insert into client_instances (id, token, browser_container_id, active_profile_id, room_code, created_at, last_seen_at)
+      values (?, ?, ?, null, null, ?, ?)
+    `).run(makeId("client_instance"), normalizedToken, browserContainer.id, timestamp, timestamp);
+    instance = getClientInstanceByToken(browserContainer.id, normalizedToken);
+  } else {
+    db.prepare("update client_instances set last_seen_at = ? where id = ?").run(nowIso(), instance.id);
+    instance = getClientInstanceByToken(browserContainer.id, normalizedToken);
+  }
+  return instance;
 }
 
 function sessionFromToken(token) {
@@ -330,13 +475,34 @@ function sessionFromToken(token) {
   return row;
 }
 
-function listProfilesForDevice(deviceToken) {
+function sessionForInstance(clientInstanceId) {
+  if (!clientInstanceId) return null;
+  const row = db.prepare(`
+    select sessions.*, profiles.name as profile_name
+    from sessions
+    join profiles on profiles.id = sessions.profile_id
+    where sessions.client_instance_id = ?
+  `).get(clientInstanceId);
+  if (!row) return null;
+  db.prepare("update sessions set last_seen_at = ? where id = ?").run(nowIso(), row.id);
+  return row;
+}
+
+function syncInstanceState(clientInstanceId, profileId, roomCode) {
+  db.prepare(`
+    update client_instances
+    set active_profile_id = ?, room_code = ?, last_seen_at = ?
+    where id = ?
+  `).run(profileId || null, roomCode || null, nowIso(), clientInstanceId);
+}
+
+function listProfilesForBrowser(browserToken) {
   return db.prepare(`
     select id, name, created_at
     from profiles
     where device_token = ?
     order by created_at asc
-  `).all(deviceToken);
+  `).all(browserToken);
 }
 
 function getRoomByCode(roomCode) {
@@ -371,10 +537,10 @@ function getActiveMatch(roomId) {
   return db.prepare(`
     select *
     from matches
-    where room_id = ? and status = 'active'
+    where room_id = ? and status in (?, ?, ?)
     order by created_at desc
     limit 1
-  `).get(roomId) || null;
+  `).get(roomId, MATCH_STATUSES.STARTING, MATCH_STATUSES.ACTIVE, MATCH_STATUSES.SUSPENDED) || null;
 }
 
 function getMatchById(matchId) {
@@ -423,8 +589,13 @@ function moveCount(matchId) {
   return db.prepare("select count(*) as count from moves where match_id = ?").get(matchId).count;
 }
 
-function clearSessionRoomForProfile(profileId, roomCode) {
-  db.prepare("update sessions set room_code = null where profile_id = ? and room_code = ?").run(profileId, roomCode);
+function ttlDeadline(timestamp, ttlMs) {
+  if (!timestamp) return null;
+  return new Date(Date.parse(timestamp) + ttlMs).toISOString();
+}
+
+function hasFirstCommittedTurn(match) {
+  return !!match?.first_committed_at;
 }
 
 function normalizeLobbySeats(roomId) {
@@ -451,12 +622,179 @@ function transferHost(room) {
   db.prepare("update rooms set host_profile_id = ? where id = ?").run(replacement.profile_id, room.id);
 }
 
-function archiveIfEmpty(room) {
-  const count = db.prepare("select count(*) as count from room_members where room_id = ?").get(room.id).count;
-  if (count > 0) return false;
-  db.prepare("update rooms set phase = ?, archived_at = ? where id = ?").run(ROOM_PHASES.ARCHIVED, nowIso(), room.id);
+function setRoomPhase(roomId, phase, fields = {}) {
+  const room = db.prepare("select * from rooms where id = ?").get(roomId);
+  if (!room) return null;
+  db.prepare(`
+    update rooms
+    set phase = ?, archived_at = ?, empty_since = ?, suspended_at = ?, abandoned_at = ?
+    where id = ?
+  `).run(
+    phase,
+    fields.archivedAt === undefined ? room.archived_at : fields.archivedAt,
+    fields.emptySince === undefined ? room.empty_since : fields.emptySince,
+    fields.suspendedAt === undefined ? room.suspended_at : fields.suspendedAt,
+    fields.abandonedAt === undefined ? room.abandoned_at : fields.abandonedAt,
+    roomId
+  );
+  return db.prepare("select * from rooms where id = ?").get(roomId);
+}
+
+function archiveRoom(room) {
+  setRoomPhase(room.id, ROOM_PHASES.ARCHIVED, {
+    archivedAt: nowIso(),
+    emptySince: room.empty_since || nowIso(),
+    suspendedAt: null,
+    abandonedAt: room.abandoned_at
+  });
   db.prepare("update sessions set room_code = null where room_code = ?").run(room.code);
-  return true;
+  db.prepare("update client_instances set room_code = null where room_code = ?").run(room.code);
+}
+
+function markMatchAbandoned(match, eventType) {
+  if (!match || [MATCH_STATUSES.FINISHED, MATCH_STATUSES.ABANDONED].includes(match.status)) return;
+  db.prepare(`
+    update matches
+    set status = ?, finished_at = coalesce(finished_at, ?)
+    where id = ?
+  `).run(MATCH_STATUSES.ABANDONED, nowIso(), match.id);
+  if (eventType) {
+    appendMove(match.id, null, eventType, {});
+  }
+}
+
+function resetRoomToPrepare(room, keepMembers) {
+  const currentMatch = getActiveMatch(room.id);
+  if (currentMatch) {
+    markMatchAbandoned(currentMatch, currentMatch.status === MATCH_STATUSES.STARTING ? "match_cancelled" : "match_abandoned");
+  }
+  if (keepMembers) {
+    db.prepare(`
+      update room_members
+      set is_ready = 0, connection_state = case when connection_state = 'online' then 'online' else 'offline' end
+      where room_id = ? and role = 'player'
+    `).run(room.id);
+    normalizeLobbySeats(room.id);
+  } else {
+    db.prepare("delete from room_members where room_id = ?").run(room.id);
+    db.prepare("update sessions set room_code = null where room_code = ?").run(room.code);
+    db.prepare("update client_instances set room_code = null where room_code = ?").run(room.code);
+    db.prepare("update rooms set host_profile_id = null where id = ?").run(room.id);
+  }
+  const remainingMembers = db.prepare("select count(*) as count from room_members where room_id = ?").get(room.id).count;
+  setRoomPhase(room.id, ROOM_PHASES.PREPARE, {
+    archivedAt: null,
+    emptySince: remainingMembers === 0 ? nowIso() : null,
+    suspendedAt: null,
+    abandonedAt: null
+  });
+  transferHost(room);
+}
+
+function suspendRoom(room, match) {
+  if (!match || room.phase === ROOM_PHASES.SUSPENDED) return;
+  db.prepare("update matches set status = ? where id = ?").run(MATCH_STATUSES.SUSPENDED, match.id);
+  setRoomPhase(room.id, ROOM_PHASES.SUSPENDED, {
+    suspendedAt: room.suspended_at || nowIso(),
+    emptySince: null
+  });
+}
+
+function resumeSuspendedRoom(room, match) {
+  if (!match) return;
+  db.prepare("update matches set status = ? where id = ?").run(MATCH_STATUSES.ACTIVE, match.id);
+  setRoomPhase(room.id, ROOM_PHASES.IN_GAME, {
+    suspendedAt: null,
+    emptySince: null,
+    abandonedAt: null
+  });
+}
+
+function abandonRoom(room, match) {
+  if (match) {
+    markMatchAbandoned(match, "match_abandoned");
+  }
+  setRoomPhase(room.id, ROOM_PHASES.ABANDONED, {
+    suspendedAt: null,
+    abandonedAt: nowIso(),
+    emptySince: nowIso()
+  });
+}
+
+function reconcileRoomLifecycle(roomId) {
+  const room = db.prepare("select * from rooms where id = ?").get(roomId);
+  if (!room || room.phase === ROOM_PHASES.ARCHIVED) return null;
+  const members = getRoomMembers(roomId);
+  const onlinePlayers = members.filter((member) => member.role === "player" && member.connection_state === "online").length;
+  const currentMatch = getActiveMatch(roomId);
+
+  if (room.phase === ROOM_PHASES.PREPARE) {
+    if (members.length === 0) {
+      const freshRoom = !room.empty_since
+        ? setRoomPhase(room.id, ROOM_PHASES.PREPARE, { emptySince: nowIso(), suspendedAt: null, abandonedAt: null, archivedAt: null })
+        : room;
+      if (freshRoom.empty_since && Date.now() - Date.parse(freshRoom.empty_since) >= EMPTY_ROOM_TTL_MS) {
+        archiveRoom(freshRoom);
+      }
+    } else if (room.empty_since || room.suspended_at || room.abandoned_at) {
+      setRoomPhase(room.id, ROOM_PHASES.PREPARE, { emptySince: null, suspendedAt: null, abandonedAt: null, archivedAt: null });
+    }
+    return db.prepare("select * from rooms where id = ?").get(roomId);
+  }
+
+  if (room.phase === ROOM_PHASES.STARTING) {
+    if (!currentMatch) {
+      resetRoomToPrepare(room, members.length > 0);
+      return db.prepare("select * from rooms where id = ?").get(roomId);
+    }
+    if (onlinePlayers === 0 && !hasFirstCommittedTurn(currentMatch)) {
+      resetRoomToPrepare(room, false);
+      return db.prepare("select * from rooms where id = ?").get(roomId);
+    }
+    return room;
+  }
+
+  if (room.phase === ROOM_PHASES.IN_GAME) {
+    if (onlinePlayers === 0) {
+      suspendRoom(room, currentMatch);
+    } else if (room.suspended_at || room.empty_since || room.abandoned_at) {
+      setRoomPhase(room.id, ROOM_PHASES.IN_GAME, { suspendedAt: null, emptySince: null, abandonedAt: null });
+    }
+    return db.prepare("select * from rooms where id = ?").get(roomId);
+  }
+
+  if (room.phase === ROOM_PHASES.SUSPENDED) {
+    if (onlinePlayers > 0) {
+      resumeSuspendedRoom(room, currentMatch);
+      return db.prepare("select * from rooms where id = ?").get(roomId);
+    }
+    if (room.suspended_at && Date.now() - Date.parse(room.suspended_at) >= GRACE_MS) {
+      abandonRoom(room, currentMatch);
+    }
+    return db.prepare("select * from rooms where id = ?").get(roomId);
+  }
+
+  if (room.phase === ROOM_PHASES.ABANDONED) {
+    const freshRoom = members.length === 0
+      ? (!room.empty_since ? setRoomPhase(room.id, ROOM_PHASES.ABANDONED, { emptySince: nowIso() }) : room)
+      : (room.empty_since ? setRoomPhase(room.id, ROOM_PHASES.ABANDONED, { emptySince: null }) : room);
+    if (freshRoom.empty_since && Date.now() - Date.parse(freshRoom.empty_since) >= EMPTY_ROOM_TTL_MS) {
+      archiveRoom(freshRoom);
+    }
+    return db.prepare("select * from rooms where id = ?").get(roomId);
+  }
+
+  if (room.phase === ROOM_PHASES.FINISHED) {
+    const freshRoom = members.length === 0
+      ? (!room.empty_since ? setRoomPhase(room.id, ROOM_PHASES.FINISHED, { emptySince: nowIso() }) : room)
+      : (room.empty_since ? setRoomPhase(room.id, ROOM_PHASES.FINISHED, { emptySince: null }) : room);
+    if (freshRoom.empty_since && Date.now() - Date.parse(freshRoom.empty_since) >= FINISHED_ROOM_TTL_MS) {
+      archiveRoom(freshRoom);
+    }
+    return db.prepare("select * from rooms where id = ?").get(roomId);
+  }
+
+  return room;
 }
 
 function appendMove(matchId, profileId, eventType, payload) {
@@ -483,7 +821,7 @@ function cleanupExpiredMembers(roomId) {
   for (const member of members) {
     if (member.connection_state !== "offline" || !member.disconnected_at) continue;
     if (Date.parse(member.disconnected_at) >= cutoff) continue;
-    if (room.phase === ROOM_PHASES.IN_GAME && member.role === "player" && activeMatch) {
+    if ([ROOM_PHASES.IN_GAME, ROOM_PHASES.SUSPENDED].includes(room.phase) && member.role === "player" && activeMatch) {
       db.prepare(`
         update room_members
         set role = 'spectator', seat_index = null, is_ready = 0
@@ -496,14 +834,16 @@ function cleanupExpiredMembers(roomId) {
       `).run(activeMatch.id, member.profile_id);
     } else {
       db.prepare("delete from room_members where id = ?").run(member.id);
-      clearSessionRoomForProfile(member.profile_id, room.code);
+      if (member.client_instance_id) {
+        clearSessionRoomForInstance(member.client_instance_id, room.code);
+      }
     }
   }
-  if (room.phase !== ROOM_PHASES.IN_GAME) {
+  if (room.phase === ROOM_PHASES.PREPARE) {
     normalizeLobbySeats(room.id);
   }
   transferHost(room);
-  archiveIfEmpty(room);
+  reconcileRoomLifecycle(room.id);
 }
 
 function buildRoomSummary(room) {
@@ -512,13 +852,17 @@ function buildRoomSummary(room) {
   if (!freshRoom || freshRoom.phase === ROOM_PHASES.ARCHIVED) return null;
   const members = getRoomMembers(freshRoom.id);
   const host = members.find((member) => member.profile_id === freshRoom.host_profile_id);
+  const currentMatch = getLatestMatch(freshRoom.id);
   return {
     code: freshRoom.code,
     title: freshRoom.title,
+    gameType: freshRoom.game_type || "blokus",
     phase: freshRoom.phase,
     isPublic: !!freshRoom.is_public,
     hostProfileId: freshRoom.host_profile_id,
     hostName: host?.name || null,
+    currentMatchStatus: currentMatch?.status || null,
+    resumeDeadlineAt: freshRoom.phase === ROOM_PHASES.SUSPENDED ? ttlDeadline(freshRoom.suspended_at, GRACE_MS) : null,
     playerCount: members.filter((member) => member.role === "player").length,
     spectatorCount: members.filter((member) => member.role === "spectator").length
   };
@@ -534,14 +878,19 @@ function buildRoomSnapshot(roomCode) {
   if (!freshRoom) return null;
   const members = getRoomMembers(freshRoom.id);
   const host = members.find((member) => member.profile_id === freshRoom.host_profile_id);
+  const currentMatch = getLatestMatch(freshRoom.id);
   return {
     code: freshRoom.code,
     title: freshRoom.title,
+    gameType: freshRoom.game_type || "blokus",
     phase: freshRoom.phase,
     isPublic: !!freshRoom.is_public,
     hostProfileId: freshRoom.host_profile_id,
     hostName: host?.name || null,
     currentMatchId: getLatestMatch(freshRoom.id)?.id || null,
+    currentMatchStatus: currentMatch?.status || null,
+    resumeDeadlineAt: freshRoom.phase === ROOM_PHASES.SUSPENDED ? ttlDeadline(freshRoom.suspended_at, GRACE_MS) : null,
+    abandonedAt: freshRoom.abandoned_at || null,
     history: buildRoomHistory(freshRoom.id),
     members: members.map((member) => ({
       id: member.id,
@@ -559,6 +908,7 @@ function buildRoomSnapshot(roomCode) {
 function buildMatchSnapshot(roomCode) {
   const room = getRoomByCode(roomCode);
   if (!room) return null;
+  if (room.phase === ROOM_PHASES.PREPARE) return null;
   const match = getLatestMatch(room.id);
   if (!match) return null;
   const players = getOrderedMatchPlayers(match.id);
@@ -567,6 +917,7 @@ function buildMatchSnapshot(roomCode) {
     id: match.id,
     roomCode,
     status: match.status,
+    firstCommittedAt: match.first_committed_at || null,
     turnIndex: match.turn_index,
     board: parseBoard(match.board_json),
     winnerProfileId: match.winner_profile_id,
@@ -753,88 +1104,114 @@ function ensureRoomCodeUnique() {
   return code;
 }
 
-function ensureProfileBelongsToDevice(profileId, deviceToken) {
-  return db.prepare("select * from profiles where id = ? and device_token = ?").get(profileId, deviceToken) || null;
+function ensureProfileBelongsToBrowser(profileId, browserToken) {
+  return db.prepare("select * from profiles where id = ? and device_token = ?").get(profileId, browserToken) || null;
 }
 
-function createOrReuseSession(profileId, existingToken) {
+function createOrReuseSession(profileId, clientInstance) {
   const now = nowIso();
-  const existing = existingToken ? sessionFromToken(existingToken) : null;
+  const existing = sessionForInstance(clientInstance.id);
   if (existing) {
+    if (existing.profile_id !== profileId && existing.room_code) {
+      removeMembership(existing.room_code, existing.client_instance_id, true);
+    }
+    const nextRoomCode = existing.profile_id === profileId ? existing.room_code : null;
     db.prepare(`
       update sessions
-      set profile_id = ?, room_code = ?, last_seen_at = ?
+      set profile_id = ?, room_code = ?, client_instance_id = ?, last_seen_at = ?
       where id = ?
-    `).run(profileId, existing.profile_id === profileId ? existing.room_code : null, now, existing.id);
-    return sessionFromToken(existingToken);
+    `).run(profileId, nextRoomCode, clientInstance.id, now, existing.id);
+    syncInstanceState(clientInstance.id, profileId, nextRoomCode);
+    return sessionForInstance(clientInstance.id);
   }
   const token = makeToken();
   const sessionId = makeId("session");
   db.prepare(`
-    insert into sessions (id, token, profile_id, room_code, created_at, last_seen_at)
-    values (?, ?, ?, null, ?, ?)
-  `).run(sessionId, token, profileId, now, now);
-  return sessionFromToken(token);
+    insert into sessions (id, token, profile_id, room_code, client_instance_id, created_at, last_seen_at)
+    values (?, ?, ?, null, ?, ?, ?)
+  `).run(sessionId, token, profileId, clientInstance.id, now, now);
+  syncInstanceState(clientInstance.id, profileId, null);
+  return sessionForInstance(clientInstance.id);
 }
 
 function sessionPayload(session) {
   if (!session) return null;
   return {
     id: session.id,
+    clientInstanceId: session.client_instance_id || null,
     profileId: session.profile_id,
     profileName: session.profile_name,
     roomCode: session.room_code || null
   };
 }
 
-function resolveViewer(req) {
-  const deviceToken = getDeviceToken(req.header("x-device-token"));
-  const session = sessionFromToken(req.header("x-session-token"));
-  return { deviceToken, session };
+function resolveViewer(req, res) {
+  const cookies = parseCookieHeader(req.headers.cookie);
+  const browserToken = cookies[BROWSER_COOKIE_NAME] || req.header("x-browser-token-fallback") || req.header("x-device-token");
+  const browserContainer = ensureBrowserContainer(browserToken);
+  if (res) {
+    setBrowserCookie(res, browserContainer.token);
+  }
+  const clientInstance = ensureClientInstance(browserContainer, req.header("x-client-instance-id"));
+  return {
+    browserContainer,
+    clientInstance,
+    session: sessionForInstance(clientInstance.id)
+  };
 }
 
-function setMemberOnline(roomCode, profileId) {
+function setMemberOnline(roomCode, clientInstanceId) {
   const room = getRoomByCode(roomCode);
   if (!room) return;
   db.prepare(`
     update room_members
     set connection_state = 'online', disconnected_at = null
-    where room_id = ? and profile_id = ?
-  `).run(room.id, profileId);
+    where room_id = ? and client_instance_id = ?
+  `).run(room.id, clientInstanceId);
   transferHost(room);
+  reconcileRoomLifecycle(room.id);
 }
 
-function removeMembership(roomCode, profileId, explicitLeave) {
+function clearSessionRoomForInstance(clientInstanceId, roomCode) {
+  db.prepare(`
+    update sessions
+    set room_code = null
+    where client_instance_id = ? and room_code = ?
+  `).run(clientInstanceId, roomCode);
+  syncInstanceState(clientInstanceId, sessionForInstance(clientInstanceId)?.profile_id || null, null);
+}
+
+function removeMembership(roomCode, clientInstanceId, explicitLeave) {
   const room = getRoomByCode(roomCode);
   if (!room) return;
   const member = db.prepare(`
     select *
     from room_members
-    where room_id = ? and profile_id = ?
-  `).get(room.id, profileId);
-  if (!member) return;
-  if (room.phase === ROOM_PHASES.IN_GAME && member.role === "player") {
+    where room_id = ? and client_instance_id = ?
+  `).get(room.id, clientInstanceId);
+  if (!member) {
+    clearSessionRoomForInstance(clientInstanceId, roomCode);
+    return;
+  }
+  const currentMatch = getActiveMatch(room.id);
+  if ([ROOM_PHASES.STARTING, ROOM_PHASES.IN_GAME, ROOM_PHASES.SUSPENDED].includes(room.phase) && member.role === "player") {
     db.prepare("delete from room_members where id = ?").run(member.id);
-    const match = getActiveMatch(room.id);
-    if (match) {
+    if (currentMatch && (room.phase !== ROOM_PHASES.STARTING || hasFirstCommittedTurn(currentMatch))) {
       db.prepare(`
         update match_players
         set passed = 1, disconnected = 1, end_state = 'abandoned'
         where match_id = ? and profile_id = ?
-      `).run(match.id, profileId);
+      `).run(currentMatch.id, member.profile_id);
     }
   } else {
     db.prepare("delete from room_members where id = ?").run(member.id);
     normalizeLobbySeats(room.id);
   }
-  clearSessionRoomForProfile(profileId, roomCode);
+  clearSessionRoomForInstance(clientInstanceId, roomCode);
   transferHost(room);
-  if (!archiveIfEmpty(room)) {
-    if (room.phase === ROOM_PHASES.IN_GAME) {
-      syncMatchTurn(room.id);
-    } else if (explicitLeave && room.phase === ROOM_PHASES.FINISHED) {
-      db.prepare("update rooms set phase = ? where id = ?").run(ROOM_PHASES.LOBBY, room.id);
-    }
+  const freshRoom = reconcileRoomLifecycle(room.id);
+  if (freshRoom?.phase === ROOM_PHASES.IN_GAME) {
+    syncMatchTurn(room.id);
   }
 }
 
@@ -844,18 +1221,30 @@ function joinRoomAs(session, roomCode, role, socket) {
     throw new Error("Room does not exist.");
   }
   cleanupExpiredMembers(room.id);
-  const freshRoom = getRoomByCode(roomCode);
+  let freshRoom = getRoomByCode(roomCode);
+  if (freshRoom?.phase === ROOM_PHASES.ABANDONED) {
+    resetRoomToPrepare(freshRoom, false);
+    freshRoom = getRoomByCode(roomCode);
+  }
   if (session.room_code && session.room_code !== roomCode) {
-    removeMembership(session.room_code, session.profile_id, false);
+    removeMembership(session.room_code, session.client_instance_id, false);
     socket.leave(session.room_code);
   }
   let member = db.prepare(`
     select *
     from room_members
+    where room_id = ? and client_instance_id = ?
+  `).get(freshRoom.id, session.client_instance_id);
+  const conflictingMember = db.prepare(`
+    select *
+    from room_members
     where room_id = ? and profile_id = ?
   `).get(freshRoom.id, session.profile_id);
+  if (!member && conflictingMember && conflictingMember.client_instance_id !== session.client_instance_id) {
+    throw new Error("This profile is already active in the room from another tab.");
+  }
   if (member) {
-    if (role === "player" && freshRoom.phase !== ROOM_PHASES.LOBBY && member.role !== "player") {
+    if (role === "player" && freshRoom.phase !== ROOM_PHASES.PREPARE && member.role !== "player") {
       throw new Error("You can only spectate once a match has started.");
     }
     if (role === "player" && member.role === "spectator") {
@@ -881,7 +1270,7 @@ function joinRoomAs(session, roomCode, role, socket) {
   } else {
     let seatIndex = null;
     if (role === "player") {
-      if (freshRoom.phase !== ROOM_PHASES.LOBBY) {
+      if (freshRoom.phase !== ROOM_PHASES.PREPARE) {
         throw new Error("Player seats are only available before the match starts.");
       }
       const seatCount = db.prepare(`
@@ -894,34 +1283,37 @@ function joinRoomAs(session, roomCode, role, socket) {
     }
     db.prepare(`
       insert into room_members (
-        id, room_id, profile_id, role, seat_index, is_ready, connection_state, disconnected_at, joined_at
-      ) values (?, ?, ?, ?, ?, 0, 'online', null, ?)
-    `).run(makeId("member"), freshRoom.id, session.profile_id, role, seatIndex, nowIso());
+        id, room_id, profile_id, client_instance_id, role, seat_index, is_ready, connection_state, disconnected_at, joined_at
+      ) values (?, ?, ?, ?, ?, ?, 0, 'online', null, ?)
+    `).run(makeId("member"), freshRoom.id, session.profile_id, session.client_instance_id, role, seatIndex, nowIso());
   }
   db.prepare("update sessions set room_code = ?, last_seen_at = ? where id = ?").run(roomCode, nowIso(), session.id);
+  syncInstanceState(session.client_instance_id, session.profile_id, roomCode);
   socket.join(roomCode);
   transferHost(freshRoom);
+  reconcileRoomLifecycle(freshRoom.id);
   return buildRoomSnapshot(roomCode);
 }
 
 function createRoomForSession(session, title, isPublic, socket) {
   if (session.room_code) {
-    removeMembership(session.room_code, session.profile_id, true);
+    removeMembership(session.room_code, session.client_instance_id, true);
     socket.leave(session.room_code);
   }
   const roomId = makeId("room");
   const roomCode = ensureRoomCodeUnique();
   const timestamp = nowIso();
   db.prepare(`
-    insert into rooms (id, code, title, is_public, host_profile_id, phase, created_at, archived_at)
-    values (?, ?, ?, ?, ?, ?, ?, null)
-  `).run(roomId, roomCode, title, isPublic ? 1 : 0, session.profile_id, ROOM_PHASES.LOBBY, timestamp);
+    insert into rooms (id, code, title, is_public, host_profile_id, phase, game_type, created_at, archived_at, empty_since, suspended_at, abandoned_at)
+    values (?, ?, ?, ?, ?, ?, 'blokus', ?, null, null, null, null)
+  `).run(roomId, roomCode, title, isPublic ? 1 : 0, session.profile_id, ROOM_PHASES.PREPARE, timestamp);
   db.prepare(`
     insert into room_members (
-      id, room_id, profile_id, role, seat_index, is_ready, connection_state, disconnected_at, joined_at
-    ) values (?, ?, ?, 'player', 0, 0, 'online', null, ?)
-  `).run(makeId("member"), roomId, session.profile_id, timestamp);
+      id, room_id, profile_id, client_instance_id, role, seat_index, is_ready, connection_state, disconnected_at, joined_at
+    ) values (?, ?, ?, ?, 'player', 0, 0, 'online', null, ?)
+  `).run(makeId("member"), roomId, session.profile_id, session.client_instance_id, timestamp);
   db.prepare("update sessions set room_code = ? where id = ?").run(roomCode, session.id);
+  syncInstanceState(session.client_instance_id, session.profile_id, roomCode);
   socket.join(roomCode);
   return buildRoomSnapshot(roomCode);
 }
@@ -930,16 +1322,21 @@ function startMatch(roomCode, profileId) {
   const room = getRoomByCode(roomCode);
   if (!room) throw new Error("Room not found.");
   if (room.host_profile_id !== profileId) throw new Error("Only the host can start the match.");
-  if (room.phase !== ROOM_PHASES.LOBBY) throw new Error("Room is not in lobby phase.");
+  if (room.phase !== ROOM_PHASES.PREPARE) throw new Error("Room is not in prepare phase.");
   const players = getRoomMembers(room.id).filter((member) => member.role === "player");
   if (players.length < 2) throw new Error("Need at least two players.");
   if (!players.every((player) => player.is_ready)) throw new Error("All seated players must be ready.");
   const matchId = makeId("match");
-  db.prepare("update rooms set phase = ? where id = ?").run(ROOM_PHASES.STARTING, room.id);
+  setRoomPhase(room.id, ROOM_PHASES.STARTING, {
+    archivedAt: null,
+    emptySince: null,
+    suspendedAt: null,
+    abandonedAt: null
+  });
   db.prepare(`
-    insert into matches (id, room_id, status, turn_index, board_json, winner_profile_id, created_at, finished_at)
-    values (?, ?, 'active', 0, ?, null, ?, null)
-  `).run(matchId, room.id, serializeBoard(emptyBoard()), nowIso());
+    insert into matches (id, room_id, status, turn_index, board_json, winner_profile_id, created_at, finished_at, first_committed_at)
+    values (?, ?, ?, 0, ?, null, ?, null, null)
+  `).run(matchId, room.id, MATCH_STATUSES.STARTING, serializeBoard(emptyBoard()), nowIso());
   players.forEach((player, index) => {
     db.prepare(`
       insert into match_players (
@@ -955,7 +1352,6 @@ function startMatch(roomCode, profileId) {
     );
   });
   appendMove(matchId, profileId, "match_started", { roomCode });
-  db.prepare("update rooms set phase = ? where id = ?").run(ROOM_PHASES.IN_GAME, room.id);
   return buildMatchSnapshot(roomCode);
 }
 
@@ -995,12 +1391,33 @@ function finishMatch(roomId) {
   });
   db.prepare(`
     update matches
-    set status = 'finished', winner_profile_id = ?, finished_at = ?
+    set status = ?, winner_profile_id = ?, finished_at = ?
     where id = ?
-  `).run(winner?.profileId || null, nowIso(), match.id);
-  db.prepare("update rooms set phase = ? where id = ?").run(ROOM_PHASES.FINISHED, roomId);
+  `).run(MATCH_STATUSES.FINISHED, winner?.profileId || null, nowIso(), match.id);
+  setRoomPhase(roomId, ROOM_PHASES.FINISHED, {
+    archivedAt: null,
+    emptySince: null,
+    suspendedAt: null,
+    abandonedAt: null
+  });
   appendMove(match.id, winner?.profileId || null, "match_finished", { winnerProfileId: winner?.profileId || null });
   return buildMatchSnapshot(room.code);
+}
+
+function markMatchCommitted(roomId, matchId) {
+  const match = getMatchById(matchId);
+  if (!match || match.first_committed_at) return;
+  db.prepare(`
+    update matches
+    set first_committed_at = ?, status = ?
+    where id = ?
+  `).run(nowIso(), MATCH_STATUSES.ACTIVE, match.id);
+  setRoomPhase(roomId, ROOM_PHASES.IN_GAME, {
+    archivedAt: null,
+    emptySince: null,
+    suspendedAt: null,
+    abandonedAt: null
+  });
 }
 
 function syncMatchTurn(roomId) {
@@ -1055,7 +1472,7 @@ function syncMatchTurn(roomId) {
 
 function placeMove(roomCode, profileId, move) {
   const room = getRoomByCode(roomCode);
-  if (!room || room.phase !== ROOM_PHASES.IN_GAME) throw new Error("Game is not active.");
+  if (!room || ![ROOM_PHASES.STARTING, ROOM_PHASES.IN_GAME].includes(room.phase)) throw new Error("Game is not active.");
   const match = getActiveMatch(room.id);
   if (!match) throw new Error("No active match.");
   const players = getOrderedMatchPlayers(match.id);
@@ -1078,13 +1495,15 @@ function placeMove(roomCode, profileId, move) {
   `).run(JSON.stringify(remainingPieces), currentPlayer.id);
   db.prepare("update matches set board_json = ? where id = ?").run(serializeBoard(board), match.id);
   appendMove(match.id, profileId, "piece_placed", move);
+  markMatchCommitted(room.id, match.id);
   return syncMatchTurn(room.id);
 }
 
 function passTurn(roomCode, profileId) {
   const room = getRoomByCode(roomCode);
-  if (!room || room.phase !== ROOM_PHASES.IN_GAME) throw new Error("Game is not active.");
+  if (!room || ![ROOM_PHASES.STARTING, ROOM_PHASES.IN_GAME].includes(room.phase)) throw new Error("Game is not active.");
   const match = getActiveMatch(room.id);
+  if (!match) throw new Error("No active match.");
   const players = getOrderedMatchPlayers(match.id);
   const currentPlayer = players[match.turn_index];
   if (!currentPlayer || currentPlayer.profile_id !== profileId) throw new Error("Not your turn.");
@@ -1098,6 +1517,7 @@ function passTurn(roomCode, profileId) {
     where id = ?
   `).run(currentPlayer.id);
   appendMove(match.id, profileId, "turn_passed", {});
+  markMatchCommitted(room.id, match.id);
   return syncMatchTurn(room.id);
 }
 
@@ -1106,7 +1526,12 @@ function rematchRoom(roomCode, profileId) {
   if (!room) throw new Error("Room not found.");
   if (room.host_profile_id !== profileId) throw new Error("Only the host can reset for a rematch.");
   if (room.phase !== ROOM_PHASES.FINISHED) throw new Error("Room is not ready for rematch.");
-  db.prepare("update rooms set phase = ? where id = ?").run(ROOM_PHASES.LOBBY, room.id);
+  setRoomPhase(room.id, ROOM_PHASES.PREPARE, {
+    archivedAt: null,
+    emptySince: null,
+    suspendedAt: null,
+    abandonedAt: null
+  });
   db.prepare(`
     update room_members
     set is_ready = 0
@@ -1136,11 +1561,10 @@ function emitRoomState(roomCode) {
 }
 
 function requireSession(socket) {
-  if (!socket.data.session) {
+  const freshSession = sessionForInstance(socket.data.clientInstance?.id);
+  if (!freshSession) {
     throw new Error("Select a profile before using realtime commands.");
   }
-  const freshSession = sessionFromToken(socket.data.session.token);
-  if (!freshSession) throw new Error("Session expired.");
   socket.data.session = freshSession;
   return freshSession;
 }
@@ -1156,7 +1580,7 @@ function ackHandler(ack, handler) {
 }
 
 app.get("/api/bootstrap", (req, res) => {
-  const { deviceToken, session } = resolveViewer(req);
+  const { browserContainer, clientInstance, session } = resolveViewer(req, res);
   let activeSession = session;
   if (activeSession?.room_code) {
     const room = getRoomByCode(activeSession.room_code);
@@ -1164,18 +1588,19 @@ app.get("/api/bootstrap", (req, res) => {
       cleanupExpiredMembers(room.id);
       if (!buildRoomSnapshot(activeSession.room_code)) {
         db.prepare("update sessions set room_code = null where id = ?").run(activeSession.id);
-        activeSession = sessionFromToken(activeSession.token);
+        syncInstanceState(clientInstance.id, activeSession.profile_id, null);
+        activeSession = sessionForInstance(clientInstance.id);
       }
     } else {
       db.prepare("update sessions set room_code = null where id = ?").run(activeSession.id);
-      activeSession = sessionFromToken(activeSession.token);
+      syncInstanceState(clientInstance.id, activeSession.profile_id, null);
+      activeSession = sessionForInstance(clientInstance.id);
     }
   }
   res.json({
-    deviceToken,
-    sessionToken: activeSession?.token || "",
+    clientInstanceId: clientInstance.token,
     session: sessionPayload(activeSession),
-    profiles: listProfilesForDevice(deviceToken),
+    profiles: listProfilesForBrowser(browserContainer.token),
     rooms: listPublicRooms(),
     leaderboard: buildLeaderboard(),
     recentMatches: buildRecentFinishedMatches(),
@@ -1185,19 +1610,22 @@ app.get("/api/bootstrap", (req, res) => {
 });
 
 app.get("/api/rooms", (req, res) => {
-  res.json({ deviceToken: getDeviceToken(req.header("x-device-token")), rooms: listPublicRooms() });
+  const { clientInstance } = resolveViewer(req, res);
+  res.json({ clientInstanceId: clientInstance.token, rooms: listPublicRooms() });
 });
 
 app.get("/api/leaderboard", (req, res) => {
+  const { clientInstance } = resolveViewer(req, res);
   res.json({
-    deviceToken: getDeviceToken(req.header("x-device-token")),
+    clientInstanceId: clientInstance.token,
     leaderboard: buildLeaderboard()
   });
 });
 
 app.get("/api/matches/recent", (req, res) => {
+  const { clientInstance } = resolveViewer(req, res);
   res.json({
-    deviceToken: getDeviceToken(req.header("x-device-token")),
+    clientInstanceId: clientInstance.token,
     matches: buildRecentFinishedMatches()
   });
 });
@@ -1208,8 +1636,9 @@ app.get("/api/matches/:matchId", (req, res) => {
     res.status(404).json({ message: "Match not found." });
     return;
   }
+  const { clientInstance } = resolveViewer(req, res);
   res.json({
-    deviceToken: getDeviceToken(req.header("x-device-token")),
+    clientInstanceId: clientInstance.token,
     replay
   });
 });
@@ -1221,15 +1650,16 @@ app.get("/api/rooms/:roomCode", (req, res) => {
     res.status(404).json({ message: "Room not found." });
     return;
   }
+  const { clientInstance } = resolveViewer(req, res);
   res.json({
-    deviceToken: getDeviceToken(req.header("x-device-token")),
+    clientInstanceId: clientInstance.token,
     room,
     match: buildMatchSnapshot(roomCode)
   });
 });
 
 app.post("/api/profiles", (req, res) => {
-  const deviceToken = getDeviceToken(req.header("x-device-token") || req.body.deviceToken);
+  const { browserContainer, clientInstance } = resolveViewer(req, res);
   const name = String(req.body?.name || "").trim().slice(0, 24);
   if (!name) {
     res.status(400).json({ message: "Profile name is required." });
@@ -1238,28 +1668,27 @@ app.post("/api/profiles", (req, res) => {
   db.prepare(`
     insert into profiles (id, device_token, name, created_at)
     values (?, ?, ?, ?)
-  `).run(makeId("profile"), deviceToken, name, nowIso());
+  `).run(makeId("profile"), browserContainer.token, name, nowIso());
   res.json({
-    deviceToken,
-    profile: listProfilesForDevice(deviceToken).at(-1),
-    profiles: listProfilesForDevice(deviceToken)
+    clientInstanceId: clientInstance.token,
+    profile: listProfilesForBrowser(browserContainer.token).at(-1),
+    profiles: listProfilesForBrowser(browserContainer.token)
   });
 });
 
 app.post("/api/session/select-profile", (req, res) => {
-  const deviceToken = getDeviceToken(req.header("x-device-token") || req.body.deviceToken);
+  const { browserContainer, clientInstance } = resolveViewer(req, res);
   const profileId = String(req.body?.profileId || "");
-  const profile = ensureProfileBelongsToDevice(profileId, deviceToken);
+  const profile = ensureProfileBelongsToBrowser(profileId, browserContainer.token);
   if (!profile) {
     res.status(404).json({ message: "Profile not found on this device." });
     return;
   }
-  const session = createOrReuseSession(profileId, req.header("x-session-token"));
+  const session = createOrReuseSession(profileId, clientInstance);
   res.json({
-    deviceToken,
-    sessionToken: session.token,
+    clientInstanceId: clientInstance.token,
     session: sessionPayload(session),
-    profiles: listProfilesForDevice(deviceToken),
+    profiles: listProfilesForBrowser(browserContainer.token),
     rooms: listPublicRooms(),
     room: session.room_code ? buildRoomSnapshot(session.room_code) : null,
     match: session.room_code ? buildMatchSnapshot(session.room_code) : null
@@ -1267,23 +1696,32 @@ app.post("/api/session/select-profile", (req, res) => {
 });
 
 io.use((socket, next) => {
-  const session = sessionFromToken(socket.handshake.auth?.sessionToken);
-  socket.data.deviceToken = getDeviceToken(socket.handshake.auth?.deviceToken);
-  socket.data.session = session;
-  next();
+  try {
+    const cookies = parseCookieHeader(socket.request.headers.cookie);
+    const browserToken = cookies[BROWSER_COOKIE_NAME] || socket.handshake.auth?.browserTokenFallback;
+    const browserContainer = ensureBrowserContainer(browserToken);
+    const clientInstance = ensureClientInstance(browserContainer, socket.handshake.auth?.clientInstanceId);
+    socket.data.browserContainer = browserContainer;
+    socket.data.clientInstance = clientInstance;
+    socket.data.session = sessionForInstance(clientInstance.id);
+    next();
+  } catch (error) {
+    next(error);
+  }
 });
 
 io.on("connection", (socket) => {
   if (socket.data.session?.room_code) {
     socket.join(socket.data.session.room_code);
-    setMemberOnline(socket.data.session.room_code, socket.data.session.profile_id);
+    setMemberOnline(socket.data.session.room_code, socket.data.session.client_instance_id);
     emitRoomState(socket.data.session.room_code);
   }
 
   socket.on("session:resume", () => {
-    const session = socket.data.session;
+    const session = sessionForInstance(socket.data.clientInstance?.id);
     if (!session?.room_code) return;
-    setMemberOnline(session.room_code, session.profile_id);
+    socket.data.session = session;
+    setMemberOnline(session.room_code, session.client_instance_id);
     socket.join(session.room_code);
     emitRoomState(session.room_code);
   });
@@ -1292,7 +1730,7 @@ io.on("connection", (socket) => {
     ackHandler(ack, () => {
       const session = requireSession(socket);
       const room = createRoomForSession(session, String(title || "").trim().slice(0, 32) || "Untitled Room", !!isPublic, socket);
-      socket.data.session = sessionFromToken(session.token);
+      socket.data.session = sessionForInstance(session.client_instance_id);
       emitRoomState(room.code);
       return roomAndMatchPayload(room.code);
     });
@@ -1302,7 +1740,7 @@ io.on("connection", (socket) => {
     ackHandler(ack, () => {
       const session = requireSession(socket);
       const room = joinRoomAs(session, String(roomCode || "").toUpperCase(), "player", socket);
-      socket.data.session = sessionFromToken(session.token);
+      socket.data.session = sessionForInstance(session.client_instance_id);
       emitRoomState(room.code);
       return roomAndMatchPayload(room.code);
     });
@@ -1312,7 +1750,7 @@ io.on("connection", (socket) => {
     ackHandler(ack, () => {
       const session = requireSession(socket);
       const room = joinRoomAs(session, String(roomCode || "").toUpperCase(), "spectator", socket);
-      socket.data.session = sessionFromToken(session.token);
+      socket.data.session = sessionForInstance(session.client_instance_id);
       emitRoomState(room.code);
       return roomAndMatchPayload(room.code);
     });
@@ -1323,10 +1761,11 @@ io.on("connection", (socket) => {
       const session = requireSession(socket);
       const targetCode = String(roomCode || session.room_code || "").toUpperCase();
       if (!targetCode) throw new Error("No room to leave.");
-      removeMembership(targetCode, session.profile_id, true);
+      removeMembership(targetCode, session.client_instance_id, true);
       socket.leave(targetCode);
       db.prepare("update sessions set room_code = null where id = ?").run(session.id);
-      socket.data.session = sessionFromToken(session.token);
+      syncInstanceState(session.client_instance_id, session.profile_id, null);
+      socket.data.session = sessionForInstance(session.client_instance_id);
       emitRoomState(targetCode);
       return { rooms: listPublicRooms(), room: null, match: null };
     });
@@ -1336,12 +1775,12 @@ io.on("connection", (socket) => {
     ackHandler(ack, () => {
       const session = requireSession(socket);
       const room = getRoomByCode(roomCode);
-      if (!room || room.phase !== ROOM_PHASES.LOBBY) throw new Error("Room is not in lobby phase.");
+      if (!room || room.phase !== ROOM_PHASES.PREPARE) throw new Error("Room is not in prepare phase.");
       db.prepare(`
         update room_members
         set is_ready = ?
-        where room_id = ? and profile_id = ? and role = 'player'
-      `).run(ready ? 1 : 0, room.id, session.profile_id);
+        where room_id = ? and client_instance_id = ? and role = 'player'
+      `).run(ready ? 1 : 0, room.id, session.client_instance_id);
       emitRoomState(roomCode);
       return roomAndMatchPayload(roomCode);
     });
@@ -1391,9 +1830,10 @@ io.on("connection", (socket) => {
     db.prepare(`
       update room_members
       set connection_state = 'offline', disconnected_at = ?
-      where room_id = ? and profile_id = ?
-    `).run(nowIso(), room.id, session.profile_id);
+      where room_id = ? and client_instance_id = ?
+    `).run(nowIso(), room.id, session.client_instance_id);
     transferHost(room);
+    reconcileRoomLifecycle(room.id);
     emitRoomState(room.code);
   });
 });

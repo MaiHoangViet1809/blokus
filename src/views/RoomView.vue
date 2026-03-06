@@ -13,7 +13,9 @@ const roomCode = computed(() => String(route.params.roomCode || "").toUpperCase(
 const isHost = computed(() => store.room?.hostProfileId === store.session?.profileId);
 const currentMember = computed(() => store.currentMember);
 const selectedReplayId = computed(() => String(route.query.matchId || ""));
-const isLiveMatchPhase = computed(() => store.room?.phase === "IN_GAME");
+const isPreparePhase = computed(() => store.room?.phase === "PREPARE");
+const isLiveMatchPhase = computed(() => ["STARTING", "IN_GAME", "SUSPENDED"].includes(store.room?.phase || ""));
+const interactiveProfileId = computed(() => ["STARTING", "IN_GAME"].includes(store.room?.phase || "") ? (store.session?.profileId || "") : "");
 const activePane = computed({
   get() {
     const queryPane = String(route.query.pane || "");
@@ -37,12 +39,30 @@ const spectatorMembers = computed(() => store.room?.members.filter((member) => m
 const roomPaneLabel = computed(() => isLiveMatchPhase.value ? "Match" : "Room");
 const showSidePanel = computed(() => {
   if (!store.room) return false;
-  if (store.room.phase !== "IN_GAME") return true;
+  if (!isLiveMatchPhase.value) return true;
   return activePane.value !== "room";
 });
 const currentTurnName = computed(() => {
-  if (!store.match || store.room?.phase === "FINISHED") return "Finished";
+  if (!store.match || ["FINISHED", "ABANDONED"].includes(store.room?.phase || "")) return "Finished";
+  if (store.room?.phase === "SUSPENDED") return "Suspended";
+  if (store.room?.phase === "STARTING") return "Opening turn";
   return store.match.players[store.match.turnIndex]?.name || "Waiting";
+});
+const matchHeading = computed(() => {
+  if (store.room?.phase === "FINISHED") return "Match Summary";
+  if (store.room?.phase === "ABANDONED") return "Abandoned Match";
+  if (store.room?.phase === "SUSPENDED") return "Suspended Match";
+  if (store.room?.phase === "STARTING") return "Starting Match";
+  return "Active Match";
+});
+const phaseMessage = computed(() => {
+  if (!store.room) return "";
+  if (store.room.phase === "STARTING") return "The room has provisioned a match and will roll back to prepare if everyone leaves before the first committed turn.";
+  if (store.room.phase === "SUSPENDED") return store.room.resumeDeadlineAt
+    ? `All seated players are away. Reconnect before ${new Date(store.room.resumeDeadlineAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} to resume this match.`
+    : "All seated players are away. Reconnect to resume this match.";
+  if (store.room.phase === "ABANDONED") return "This match was abandoned. The room will reset to prepare on the next fresh join.";
+  return "";
 });
 
 async function placeMove(move) {
@@ -80,7 +100,7 @@ onMounted(async () => {
   if (selectedReplayId.value) {
     activePane.value = "replay";
     await store.fetchReplay(selectedReplayId.value);
-  } else if (store.room?.phase === "FINISHED" && store.room?.currentMatchId) {
+  } else if (["FINISHED", "ABANDONED"].includes(store.room?.phase || "") && store.room?.currentMatchId) {
     await store.fetchReplay(store.room.currentMatchId);
   }
 });
@@ -113,9 +133,9 @@ onMounted(async () => {
       <button class="segment-button" :class="{ active: activePane === 'replay' }" @click="activePane = 'replay'">Replay</button>
     </nav>
 
-    <section class="room-workspace" :class="store.room.phase === 'LOBBY' ? 'room-workspace--lobby' : 'room-workspace--match'">
+    <section class="room-workspace" :class="isPreparePhase ? 'room-workspace--lobby' : 'room-workspace--match'">
       <section class="room-primary">
-        <article v-if="store.room.phase === 'LOBBY'" class="panel lobby-panel">
+        <article v-if="isPreparePhase" class="panel lobby-panel">
           <div class="section-head">
             <div>
               <h2>Room Setup</h2>
@@ -177,16 +197,18 @@ onMounted(async () => {
         <article v-else-if="store.match" class="panel gameplay-panel">
           <div class="section-head">
             <div>
-              <h2>{{ store.room.phase === "FINISHED" ? "Match Summary" : "Active Match" }}</h2>
+              <h2>{{ matchHeading }}</h2>
               <p class="muted">Turn: {{ currentTurnName }}</p>
             </div>
             <span class="phase-pill">{{ store.room.phase }}</span>
           </div>
 
+          <p v-if="phaseMessage" class="muted">{{ phaseMessage }}</p>
+
           <GameBoard
             :room="store.room"
             :match="store.match"
-            :current-profile-id="store.session?.profileId || ''"
+            :current-profile-id="interactiveProfileId"
             @place="placeMove"
             @pass="store.passTurn"
           />
@@ -243,13 +265,13 @@ onMounted(async () => {
               <div class="stack">
                 <h3>Actions</h3>
                 <button
-                  v-if="currentMember?.role === 'player' && store.room.phase === 'LOBBY'"
+                  v-if="currentMember?.role === 'player' && store.room.phase === 'PREPARE'"
                   class="secondary"
                   @click="store.setReady(!currentMember.isReady)"
                 >
                   {{ currentMember?.isReady ? "Unready" : "Ready" }}
                 </button>
-                <button v-if="isHost && store.room.phase === 'LOBBY'" @click="store.startRoom">Start match</button>
+                <button v-if="isHost && store.room.phase === 'PREPARE'" @click="store.startRoom">Start match</button>
                 <button v-if="isHost && store.room.phase === 'FINISHED'" @click="store.rematch">Rematch lobby</button>
               </div>
             </div>
