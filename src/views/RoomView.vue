@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, onMounted, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import GameBoard from "../components/GameBoard.vue";
 import ReplayPanel from "../components/ReplayPanel.vue";
@@ -13,9 +13,33 @@ const roomCode = computed(() => String(route.params.roomCode || "").toUpperCase(
 const isHost = computed(() => store.room?.hostProfileId === store.session?.profileId);
 const currentMember = computed(() => store.currentMember);
 const selectedReplayId = computed(() => String(route.query.matchId || ""));
-const activePane = ref("room");
+const isLiveMatchPhase = computed(() => store.room?.phase === "IN_GAME");
+const activePane = computed({
+  get() {
+    const queryPane = String(route.query.pane || "");
+    if (["room", "history", "replay"].includes(queryPane)) {
+      return queryPane;
+    }
+    return selectedReplayId.value ? "replay" : "room";
+  },
+  set(value) {
+    router.replace({
+      path: `/rooms/${roomCode.value}`,
+      query: {
+        ...route.query,
+        pane: value === "room" ? undefined : value
+      }
+    });
+  }
+});
 const playerMembers = computed(() => store.room?.members.filter((member) => member.role === "player") || []);
 const spectatorMembers = computed(() => store.room?.members.filter((member) => member.role === "spectator") || []);
+const roomPaneLabel = computed(() => isLiveMatchPhase.value ? "Match" : "Room");
+const showSidePanel = computed(() => {
+  if (!store.room) return false;
+  if (store.room.phase !== "IN_GAME") return true;
+  return activePane.value !== "room";
+});
 const currentTurnName = computed(() => {
   if (!store.match || store.room?.phase === "FINISHED") return "Finished";
   return store.match.players[store.match.turnIndex]?.name || "Waiting";
@@ -36,7 +60,7 @@ async function openReplay(matchId) {
   await store.fetchReplay(matchId);
   await router.replace({
     path: `/rooms/${roomCode.value}`,
-    query: { matchId }
+    query: { ...route.query, matchId, pane: "replay" }
   });
 }
 
@@ -63,7 +87,13 @@ onMounted(async () => {
 </script>
 
 <template>
-  <section v-if="store.room" class="route-shell room-view" :data-active-pane="activePane">
+  <section
+    v-if="store.room"
+    class="route-shell room-view"
+    :data-active-pane="activePane"
+    :data-room-phase="store.room.phase"
+    :data-side-panel-open="showSidePanel ? 'true' : 'false'"
+  >
     <header class="room-header panel">
       <div>
         <p class="eyebrow">{{ store.room.code }}</p>
@@ -78,7 +108,7 @@ onMounted(async () => {
     </header>
 
     <nav class="segmented-control" aria-label="Room panels">
-      <button class="segment-button" :class="{ active: activePane === 'room' }" @click="activePane = 'room'">Room</button>
+      <button class="segment-button" :class="{ active: activePane === 'room' }" @click="activePane = 'room'">{{ roomPaneLabel }}</button>
       <button class="segment-button" :class="{ active: activePane === 'history' }" @click="activePane = 'history'">History</button>
       <button class="segment-button" :class="{ active: activePane === 'replay' }" @click="activePane = 'replay'">Replay</button>
     </nav>
@@ -175,7 +205,7 @@ onMounted(async () => {
         </article>
       </section>
 
-      <aside class="panel room-side-panel">
+      <aside v-if="showSidePanel" class="panel room-side-panel">
         <template v-if="activePane === 'room'">
           <div class="stack panel-fill">
             <div class="section-head">

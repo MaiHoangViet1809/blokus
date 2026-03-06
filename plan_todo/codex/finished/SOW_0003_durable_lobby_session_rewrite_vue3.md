@@ -105,3 +105,92 @@ Viewport
   - Backend/session changes.
   - Gameplay rule changes.
   - Legacy `public/` layout cleanup.
+
+## Extension 2026-03-06: Home Button Hit-Target Regression
+
+- **Status**: APPROVED
+- **Approved-By**: Viet
+- **Task**: Fix the home dashboard overlap that blocks button clicks, and move the `Profiles` section into a dedicated setup tab.
+- **Location**:
+  - `/Users/maihoangviet/Projects/blokus/src/views/HomeView.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/style.css`
+- **Why**: The viewport-fit layout compressed the left setup column into overlapping subsections, causing `Profiles` and room-action buttons to become partially unclickable.
+- **As-Is Diagram (ASCII)**:
+```text
+Home / Lobby
+  -> fixed setup column
+  -> 3 forced stacked subsections
+  -> overlap between Profiles and Join by Code
+  -> click interception on buttons
+```
+- **To-Be Diagram (ASCII)**:
+```text
+Home / Lobby
+  -> fixed setup column
+  -> one setup panel
+  -> tabs: Create Room / Join by Code / Profiles
+  -> no overlap
+  -> clear click targets for all home actions
+```
+- **Deliverables**:
+  - Tabbed setup panel on the home route.
+  - Non-overlapping layout for create/join/profile actions.
+  - Verified home interactions for profile create/select, room create, join-by-code, room refresh, and room join/watch buttons.
+- **Done Criteria**:
+  - `Create` in `Profiles` is clickable.
+  - `Create room` works after profile activation.
+  - Home action buttons no longer have intercepted hit targets.
+  - `npm run build` passes.
+  - Browser smoke check passes without page overflow regressions.
+- **Out-of-Scope**:
+  - Room route layout changes.
+  - Backend/session behavior changes.
+
+## Extension 2026-03-06: In-Game Board-First Layout Correction
+
+- **Status**: APPROVED
+- **Approved-By**: Viet
+- **Task**: Rework the `IN_GAME` room layout so the board is the dominant visual area, non-game panels no longer permanently consume a desktop column during live play, and the active match view fits the viewport while using available width more effectively.
+- **Location**:
+  - `/Users/maihoangviet/Projects/blokus/src/views/RoomView.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/components/GameBoard.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/style.css`
+- **Why**: The current room layout still behaves like a room-management dashboard during active play. The board is constrained by multiple width caps, while room/history/replay navigation and a persistent side panel continue to consume width during `IN_GAME`. This makes the board too small and reduces usability.
+- **As-Is Diagram (ASCII)**:
+```text
+IN_GAME route
+  -> shell width capped
+  -> two-column workspace always active
+     -> left: gameplay
+     -> right: room details / players / spectators / actions
+  -> board area also split again:
+     -> board
+     -> fixed rack column
+  -> board canvas capped by dvh width rule
+  -> result: board is visually too small
+```
+- **To-Be Diagram (ASCII)**:
+```text
+IN_GAME route
+  -> board-first workspace
+  -> primary width goes to board + piece controls
+  -> non-game panels move behind phase-aware tabs/drawer/pane switching
+  -> room/history/replay controls remain accessible but do not permanently cost gameplay width
+  -> board scales to available viewport space first
+```
+- **Deliverables**:
+  - Phase-aware room layout in `RoomView.vue`.
+  - Board/rack layout adjustment in `GameBoard.vue` and `style.css`.
+  - CSS correction so active-match rooms use available viewport width more efficiently without reintroducing page scroll.
+- **Done Criteria**:
+  - In `IN_GAME`, the board is visibly larger than the current implementation on desktop-width screens.
+  - `Room Details / Players / Spectators / Actions` do not permanently occupy a full side column during active play unless explicitly opened by the user.
+  - `Room / History / Replay` navigation is phase-aware and does not reduce gameplay width by default during live play.
+  - The room route still fits within the viewport with no page-level vertical or horizontal scroll.
+  - `npm run build` passes.
+  - Browser verification confirms the larger board footprint, usable gameplay controls, and reachable replay/history flows.
+- **Out-of-Scope**:
+  - Backend/session logic.
+  - Blokus rule changes.
+  - Replay data/model changes.
+  - Home route layout changes.

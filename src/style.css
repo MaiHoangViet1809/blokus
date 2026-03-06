@@ -101,7 +101,7 @@ p {
   .rack-panel,
   .piece-grid,
   .score-strip,
-  .home-setup-grid,
+  .home-setup-body,
   .room-workspace,
   .room-primary,
   .room-side-panel,
@@ -124,6 +124,11 @@ p {
   grid-template-rows: auto minmax(0, 1fr);
   gap: 12px;
   overflow: hidden;
+}
+
+.shell:has(.room-view) {
+  width: calc(100vw - 24px);
+  max-width: none;
 }
 
 .topbar,
@@ -323,13 +328,18 @@ p {
 }
 
 .home-setup-panel {
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto auto auto;
+  align-content: start;
+  overflow: auto;
 }
 
-.home-setup-grid {
-  display: grid;
-  grid-template-rows: minmax(0, 1.2fr) auto auto;
-  gap: 12px;
+.home-setup-tabs {
+  width: 100%;
+}
+
+.home-setup-body {
+  min-height: 0;
+  overflow: visible;
 }
 
 .home-subsection {
@@ -337,6 +347,12 @@ p {
   border-radius: 18px;
   background: var(--panel-strong);
   border: 1px solid var(--line);
+}
+
+.home-subsection--fill {
+  height: auto;
+  align-content: start;
+  overflow: hidden;
 }
 
 .home-rooms-panel,
@@ -388,6 +404,14 @@ p {
   grid-template-columns: minmax(0, min(60vw, calc(100dvh - 320px))) minmax(300px, 1fr);
 }
 
+.room-view[data-room-phase="IN_GAME"][data-side-panel-open="false"] .room-workspace--match {
+  grid-template-columns: 1fr;
+}
+
+.room-view[data-room-phase="IN_GAME"][data-side-panel-open="true"] .room-workspace--match {
+  grid-template-columns: minmax(0, 1.45fr) minmax(300px, 0.8fr);
+}
+
 .room-primary {
   overflow: hidden;
 }
@@ -421,7 +445,7 @@ p {
 
 .board-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 200px;
+  grid-template-columns: minmax(0, 1fr) minmax(148px, 176px);
   gap: 16px;
   align-items: stretch;
 }
@@ -434,7 +458,7 @@ p {
 }
 
 .board-canvas {
-  width: min(100%, 56dvh);
+  width: min(100%, clamp(360px, 62dvh, 760px));
   aspect-ratio: 1;
   display: block;
   background: #040910;
@@ -445,6 +469,13 @@ p {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   overflow: hidden;
+}
+
+.board-rack-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
 }
 
 .piece-grid {
@@ -482,6 +513,10 @@ p {
 
 .room-side-panel {
   overflow: hidden;
+}
+
+.room-view[data-room-phase="IN_GAME"][data-side-panel-open="false"] .room-primary {
+  grid-column: 1 / -1;
 }
 
 .room-footer {
@@ -556,11 +591,11 @@ p {
   }
 
   .board-layout {
-    grid-template-columns: minmax(0, 1fr) 150px;
+    grid-template-columns: minmax(0, 1fr) 140px;
   }
 
   .board-canvas {
-    width: min(100%, 48dvh);
+    width: min(100%, clamp(320px, 54dvh, 640px));
   }
 }
 
@@ -640,10 +675,6 @@ p {
   .hero-copy h1 {
     max-width: none;
     font-size: clamp(1.45rem, 8vw, 2.2rem);
-  }
-
-  .home-setup-grid {
-    grid-template-rows: repeat(3, minmax(0, 1fr));
   }
 
   .inline-form,

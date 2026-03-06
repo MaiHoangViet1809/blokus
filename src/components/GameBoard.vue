@@ -110,7 +110,10 @@ onMounted(draw);
     </div>
 
     <div class="rack-panel">
-      <h3>Pieces</h3>
+      <div class="board-rack-head">
+        <h3>Pieces</h3>
+        <span class="phase-pill">{{ currentPlayer?.remainingPieces?.length || 0 }} left</span>
+      </div>
       <div class="piece-grid">
         <button
           v-for="piece in PIECES"
