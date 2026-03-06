@@ -53,16 +53,6 @@ async function watchRoom(code) {
 
 <template>
   <section class="route-shell home-view">
-    <section class="hero-panel hero-panel--compact">
-      <div class="hero-copy">
-        <p class="eyebrow">Durable sessions. Explicit room phases. Server-authoritative game state.</p>
-        <h1>Run private Blokus matches without losing the room when the browser blinks.</h1>
-        <p class="lede">
-          Pick a saved profile on this device, browse active public rooms, or create a fresh room with a generated code.
-        </p>
-      </div>
-    </section>
-
     <nav class="segmented-control" aria-label="Home views">
       <button
         class="segment-button"

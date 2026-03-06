@@ -245,3 +245,38 @@ IN_GAME
   - Changing Blokus rules.
   - Replay feature redesign.
   - Home route layout changes.
+
+## Extension 2026-03-06: Home Hero Copy Removal
+
+- **Status**: APPROVED
+- **Approved-By**: Viet
+- **Task**: Remove the oversized hero copy block from the home route so the lobby workspace starts immediately.
+- **Location**:
+  - `/Users/maihoangviet/Projects/blokus/src/views/HomeView.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/style.css`
+- **Why**: The home route currently spends too much vertical space on marketing-style copy, which reduces the useful area for the actual lobby controls and room list.
+- **As-Is Diagram (ASCII)**:
+```text
+Home route
+  -> hero copy block
+  -> Lobby / Stats tabs
+  -> lobby workspace
+```
+- **To-Be Diagram (ASCII)**:
+```text
+Home route
+  -> Lobby / Stats tabs
+  -> lobby workspace
+```
+- **Deliverables**:
+  - Remove the hero eyebrow, headline, and supporting paragraph from the home route.
+  - Tighten the home route grid so the workspace starts immediately below the tabs.
+- **Done Criteria**:
+  - The home route no longer renders the hero copy block.
+  - Lobby and Stats tabs still work.
+  - The home route still fits the viewport cleanly.
+  - `npm run build` passes.
+- **Out-of-Scope**:
+  - Home route redesign beyond removing that section.
+  - Room route changes.
+  - Session/bootstrap logic changes.
