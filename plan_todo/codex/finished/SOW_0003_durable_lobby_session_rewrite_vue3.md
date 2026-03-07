@@ -337,3 +337,46 @@ live room
   - Changing seat order or allowing manual color selection.
   - Replay view redesign beyond clearer pass-event labeling.
   - Session/bootstrap architecture changes.
+
+## Extension 2026-03-07: Board Edge Color Markers and Two-Column Piece Rack
+
+- **Status**: APPROVED
+- **Approved-By**: Viet
+- **Task**: Simplify the live piece rack label, make board-edge color ownership explicit, and switch the live piece rack to a two-column layout.
+- **Location**:
+  - `/Users/maihoangviet/Projects/blokus/src/components/GameBoard.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/style.css`
+- **Why**: The rack header is currently over-labeled with player color text, the board still does not visibly communicate color ownership strongly enough at the four corners/edges, and the one-column rack wastes vertical space.
+- **As-Is Diagram (ASCII)**:
+```text
+BOARD
+  -> weak 1-cell corner outlines
+
+RACK
+  -> color-named header
+  -> 1 column piece list
+```
+- **To-Be Diagram (ASCII)**:
+```text
+BOARD
+  -> strong colored corner/edge markers
+  -> clear 4-corner ownership at a glance
+
+RACK
+  -> header: Pieces
+  -> player-colored piece previews
+  -> 2 column piece grid
+```
+- **Deliverables**:
+  - Change the live rack header back to plain `Pieces`.
+  - Replace weak corner outlines with stronger visible corner/edge color markers on the board.
+  - Change the live piece grid to 2 columns.
+- **Done Criteria**:
+  - Rack header no longer includes color words.
+  - The 4 board corners/edges clearly show color ownership.
+  - Piece rack renders in 2 columns on desktop live play.
+  - `npm run build` passes.
+- **Out-of-Scope**:
+  - Seat/color rule changes.
+  - Server gameplay changes.
+  - Replay/history changes.

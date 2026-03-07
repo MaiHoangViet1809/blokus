@@ -465,7 +465,7 @@ p {
 
 .board-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 158px;
+  grid-template-columns: minmax(0, 1fr) 236px;
   gap: 12px;
   align-items: stretch;
 }
@@ -504,7 +504,7 @@ p {
 }
 
 .piece-grid {
-  grid-template-columns: 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   align-content: start;
   overflow: auto;
   gap: 8px;
@@ -687,7 +687,7 @@ p {
   }
 
   .board-layout {
-    grid-template-columns: minmax(0, 1fr) 136px;
+    grid-template-columns: minmax(0, 1fr) 214px;
   }
 
   .board-canvas {
@@ -746,7 +746,7 @@ p {
   }
 
   .board-layout {
-    grid-template-columns: minmax(0, 1fr) 108px;
+    grid-template-columns: minmax(0, 1fr) 176px;
     gap: 12px;
   }
 
@@ -794,7 +794,7 @@ p {
   }
 
   .board-layout {
-    grid-template-columns: minmax(0, 1fr) 96px;
+    grid-template-columns: minmax(0, 1fr) 152px;
   }
 
   .piece-preview {
@@ -805,5 +805,9 @@ p {
   .piece-preview-cell {
     width: 8px;
     height: 8px;
+  }
+
+  .piece-grid {
+    grid-template-columns: 1fr;
   }
 }

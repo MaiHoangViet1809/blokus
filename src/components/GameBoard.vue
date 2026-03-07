@@ -68,12 +68,21 @@ function draw() {
       ctx.strokeRect(x * cellSize, y * cellSize, cellSize, cellSize);
     }
   }
+  const edgeMarkers = [
+    [[0, 0], [1, 0], [0, 1]],
+    [[BOARD_SIZE - 1, 0], [BOARD_SIZE - 2, 0], [BOARD_SIZE - 1, 1]],
+    [[BOARD_SIZE - 1, BOARD_SIZE - 1], [BOARD_SIZE - 2, BOARD_SIZE - 1], [BOARD_SIZE - 1, BOARD_SIZE - 2]],
+    [[0, BOARD_SIZE - 1], [0, BOARD_SIZE - 2], [1, BOARD_SIZE - 1]]
+  ];
   for (const colorMeta of PLAYER_COLORS) {
-    const [cornerX, cornerY] = START_CORNERS[colorMeta.colorIndex];
     ctx.save();
-    ctx.strokeStyle = `${colorMeta.fill}aa`;
-    ctx.lineWidth = 2;
-    ctx.strokeRect(cornerX * cellSize + 2, cornerY * cellSize + 2, cellSize - 4, cellSize - 4);
+    ctx.fillStyle = `${colorMeta.fill}99`;
+    for (const [markerX, markerY] of edgeMarkers[colorMeta.colorIndex]) {
+      ctx.fillRect(markerX * cellSize, markerY * cellSize, cellSize, cellSize);
+      ctx.strokeStyle = `${colorMeta.fill}cc`;
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(markerX * cellSize + 1, markerY * cellSize + 1, cellSize - 2, cellSize - 2);
+    }
     ctx.restore();
   }
   if (isMyTurn.value && hoverCell.value.x >= 0 && availablePieces.value.has(selectedPieceId.value)) {
@@ -154,10 +163,7 @@ onMounted(draw);
 
     <div class="rack-panel">
       <div class="board-rack-head">
-        <div class="stack stack-tight">
-          <h3>{{ activeColorMeta.name }} pieces</h3>
-          <p class="muted">Start: {{ activeColorMeta.cornerLabel }}</p>
-        </div>
+        <h3>Pieces</h3>
         <span class="phase-pill">{{ activeRackPlayer?.remainingPieces?.length || 0 }} left</span>
       </div>
       <div class="piece-grid">
