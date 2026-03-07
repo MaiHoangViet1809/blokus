@@ -3,6 +3,7 @@ import { computed, onMounted, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import GameBoard from "../components/GameBoard.vue";
 import ReplayPanel from "../components/ReplayPanel.vue";
+import { PLAYER_COLORS } from "../lib/pieces";
 import { useAppStore } from "../stores/app";
 
 const route = useRoute();
@@ -68,6 +69,10 @@ const phaseMessage = computed(() => {
   return "";
 });
 
+function seatColorMeta(seatIndex) {
+  return PLAYER_COLORS[seatIndex ?? 0] || PLAYER_COLORS[0];
+}
+
 async function placeMove(move) {
   await store.placeMove(move);
 }
@@ -121,32 +126,17 @@ onMounted(async () => {
     :data-room-phase="store.room.phase"
     :data-side-panel-open="showSidePanel ? 'true' : 'false'"
   >
-    <header class="room-header panel">
-      <template v-if="isLiveMatchPhase">
-        <div class="room-header-live">
-          <div class="room-header-live-copy">
-            <strong>Room: {{ store.room.code }} / {{ store.room.title }}</strong>
-            <span class="muted">Turn: {{ currentTurnName }}</span>
-            <span class="muted">Phase: {{ store.room.phase }}</span>
-          </div>
-          <div class="action-row">
-            <span class="phase-pill">{{ currentMember?.role || "Spectator" }}</span>
-            <button class="secondary" @click="leaveRoom">Leave</button>
-          </div>
-        </div>
-      </template>
-      <template v-else>
-        <div>
-          <p class="eyebrow">{{ store.room.code }}</p>
-          <h1>{{ store.room.title }}</h1>
-          <p class="muted">Phase: {{ store.room.phase }} · Host: {{ store.room.hostName }}</p>
-        </div>
-        <div class="action-row">
-          <span class="phase-pill">{{ currentMember?.role || "Spectator" }}</span>
-          <button class="secondary" @click="leaveRoom">Leave</button>
-          <button v-if="isHost && store.room.phase === 'FINISHED'" @click="store.rematch">Rematch lobby</button>
-        </div>
-      </template>
+    <header v-if="!isLiveMatchPhase" class="room-header panel">
+      <div>
+        <p class="eyebrow">{{ store.room.code }}</p>
+        <h1>{{ store.room.title }}</h1>
+        <p class="muted">Phase: {{ store.room.phase }} · Host: {{ store.room.hostName }}</p>
+      </div>
+      <div class="action-row">
+        <span class="phase-pill">{{ currentMember?.role || "Spectator" }}</span>
+        <button class="secondary" @click="leaveRoom">Leave</button>
+        <button v-if="isHost && store.room.phase === 'FINISHED'" @click="store.rematch">Rematch lobby</button>
+      </div>
     </header>
 
     <nav v-if="!isLiveMatchPhase" class="segmented-control" aria-label="Room panels">
@@ -180,7 +170,10 @@ onMounted(async () => {
               </div>
               <div class="panel-scroll list">
                 <div v-for="member in playerMembers" :key="member.id" class="list-row static">
-                  <span>P{{ member.seatIndex + 1 }} · {{ member.name }}</span>
+                  <span class="seat-player-label">
+                    <span class="seat-color-dot" :style="{ '--seat-color': seatColorMeta(member.seatIndex).fill }" />
+                    P{{ member.seatIndex + 1 }} · {{ seatColorMeta(member.seatIndex).name }} · {{ seatColorMeta(member.seatIndex).cornerLabel }} · {{ member.name }}
+                  </span>
                   <strong>{{ member.isReady ? "Ready" : member.connectionState }}</strong>
                 </div>
               </div>
@@ -232,12 +225,18 @@ onMounted(async () => {
             :match="store.match"
             :current-profile-id="interactiveProfileId"
             @place="placeMove"
-            @pass="store.passTurn"
           />
 
           <div class="player-strip" :class="{ 'player-strip--compact': isLiveMatchPhase }">
-            <div v-for="player in store.match.players" :key="player.profileId" class="player-strip-item" :class="{ active: player.profileId === store.match.players[store.match.turnIndex]?.profileId }">
+            <div
+              v-for="player in store.match.players"
+              :key="player.profileId"
+              class="player-strip-item"
+              :class="{ active: player.profileId === store.match.players[store.match.turnIndex]?.profileId }"
+              :style="{ '--player-color': seatColorMeta(player.colorIndex).fill }"
+            >
               <strong>{{ player.name }}</strong>
+              <span class="muted">{{ seatColorMeta(player.colorIndex).name }}</span>
               <span class="muted">{{ player.remainingCount }}</span>
               <span class="muted">{{ player.endState }}</span>
             </div>
@@ -337,7 +336,7 @@ onMounted(async () => {
     <footer class="panel room-footer">
       <div class="guide-strip">
         <span class="phase-pill">Guide</span>
-        <p class="muted">Pick a piece from the rack, right-click the board or use Rotate, click to place, and use Pass when no legal move remains.</p>
+        <p class="muted">Match your color to its starting corner, use Rotate or Flip to orient the piece, and click the board to place. Blocked turns now auto-pass.</p>
       </div>
     </footer>
   </section>

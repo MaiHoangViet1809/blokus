@@ -8,6 +8,20 @@ export const COLORS = {
   4: "#ffa502"
 };
 
+export const START_CORNERS = [
+  [0, 0],
+  [BOARD_SIZE - 1, 0],
+  [BOARD_SIZE - 1, BOARD_SIZE - 1],
+  [0, BOARD_SIZE - 1]
+];
+
+export const PLAYER_COLORS = [
+  { colorIndex: 0, name: "Blue", fill: COLORS[1], shortCorner: "TL", cornerLabel: "Top-left", start: START_CORNERS[0] },
+  { colorIndex: 1, name: "Red", fill: COLORS[2], shortCorner: "TR", cornerLabel: "Top-right", start: START_CORNERS[1] },
+  { colorIndex: 2, name: "Green", fill: COLORS[3], shortCorner: "BR", cornerLabel: "Bottom-right", start: START_CORNERS[2] },
+  { colorIndex: 3, name: "Orange", fill: COLORS[4], shortCorner: "BL", cornerLabel: "Bottom-left", start: START_CORNERS[3] }
+];
+
 const BASE_PIECES = [
   { id: "mono", label: "Mono", cells: [[0, 0]] },
   { id: "domino", label: "Domino", cells: [[0, 0], [1, 0]] },
@@ -90,6 +104,7 @@ function buildPreview(cells) {
 }
 
 const seenCatalogShapes = new Map();
+const BASE_PIECE_LOOKUP = new Map(BASE_PIECES.map((piece) => [piece.id, piece]));
 
 export const PIECES = BASE_PIECES.map((piece) => {
   const preview = buildPreview(piece.cells);
@@ -116,3 +131,29 @@ export const PIECE_CELL_COUNTS = Object.fromEntries(
 );
 
 export const ALL_PIECE_IDS = PIECES.map((piece) => piece.id);
+
+function transformCells(cells, rotation, flipped) {
+  let current = cells.map((cell) => [...cell]);
+  if (flipped) {
+    current = current.map(flipX);
+  }
+  for (let index = 0; index < rotation; index += 1) {
+    current = current.map(rotate90);
+  }
+  return normalizeCells(current);
+}
+
+export function resolvePieceTransform(pieceId, rotation = 0, flipped = false) {
+  const piece = BASE_PIECE_LOOKUP.get(pieceId);
+  if (!piece) {
+    return { cells: [], orientationIndex: 0 };
+  }
+  const normalizedRotation = ((rotation % 4) + 4) % 4;
+  const cells = transformCells(piece.cells, normalizedRotation, flipped);
+  const transformedSignature = signature(cells);
+  const orientationIndex = (ORIENTATIONS[pieceId] || []).findIndex((variant) => signature(variant) === transformedSignature);
+  return {
+    cells,
+    orientationIndex: orientationIndex >= 0 ? orientationIndex : 0
+  };
+}

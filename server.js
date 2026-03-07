@@ -6,7 +6,7 @@ import { mkdirSync, existsSync } from "fs";
 import { dirname, join } from "path";
 import { fileURLToPath } from "url";
 import { randomBytes } from "crypto";
-import { ALL_PIECE_IDS, BOARD_SIZE, ORIENTATIONS as PIECE_ORIENTATIONS, PIECES, PIECE_CELL_COUNTS } from "./src/lib/pieces.js";
+import { ALL_PIECE_IDS, BOARD_SIZE, ORIENTATIONS as PIECE_ORIENTATIONS, PIECE_CELL_COUNTS, START_CORNERS } from "./src/lib/pieces.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -183,13 +183,6 @@ const MATCH_STATUSES = {
   ABANDONED: "abandoned",
   FINISHED: "finished"
 };
-const PLAYER_START_CORNERS = [
-  [0, 0],
-  [BOARD_SIZE - 1, 0],
-  [BOARD_SIZE - 1, BOARD_SIZE - 1],
-  [0, BOARD_SIZE - 1]
-];
-
 db.prepare("update rooms set phase = ? where phase = 'LOBBY'").run(ROOM_PHASES.PREPARE);
 
 function nowIso() {
@@ -264,7 +257,7 @@ function touchesCornerSameColor(board, cellsAbs, colorValue) {
 }
 
 function coversStartCorner(cellsAbs, colorIndex) {
-  const [cx, cy] = PLAYER_START_CORNERS[colorIndex];
+  const [cx, cy] = START_CORNERS[colorIndex];
   return cellsAbs.some(([x, y]) => x === cx && y === cy);
 }
 
@@ -634,6 +627,7 @@ function resumeSuspendedRoom(room, match) {
     emptySince: null,
     abandonedAt: null
   });
+  syncMatchTurn(room.id);
 }
 
 function abandonRoom(room, match) {
@@ -939,7 +933,9 @@ function buildReplaySnapshot(matchId) {
         move.eventType === "match_started"
           ? "Match started"
           : move.eventType === "turn_passed"
-            ? `${move.playerName || "Player"} passed`
+            ? move.payload?.automatic
+              ? `${move.playerName || "Player"} auto-passed`
+              : `${move.playerName || "Player"} passed`
             : move.eventType === "piece_placed"
               ? `${move.playerName || "Player"} placed ${move.payload.pieceId}`
               : move.eventType === "match_finished"
@@ -1363,6 +1359,12 @@ function syncMatchTurn(roomId) {
       continue;
     }
     if (!hasAnyLegalMove(board, player)) {
+      if (!player.passed && player.end_state !== "abandoned") {
+        appendMove(match.id, player.profile_id, "turn_passed", {
+          automatic: true,
+          reason: "no_legal_move"
+        });
+      }
       db.prepare(`
         update match_players
         set passed = 1, end_state = case when end_state = 'abandoned' then 'abandoned' else 'blocked' end

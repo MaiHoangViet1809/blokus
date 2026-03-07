@@ -148,6 +148,11 @@ p {
   padding: 14px 18px;
 }
 
+.topbar--live {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+}
+
 .brand {
   color: var(--text);
   text-decoration: none;
@@ -155,11 +160,25 @@ p {
   font-weight: 700;
 }
 
+.topbar-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  min-width: 0;
+  text-align: center;
+  white-space: nowrap;
+}
+
 .status-strip {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
   justify-content: flex-end;
+}
+
+.topbar--live .status-strip {
+  justify-self: end;
 }
 
 .status-pill,
@@ -390,21 +409,6 @@ p {
   font-size: clamp(1.35rem, 2.4vw, 2.1rem);
 }
 
-.room-header-live {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.room-header-live-copy {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  flex-wrap: wrap;
-}
-
 .room-workspace {
   display: grid;
   gap: 12px;
@@ -495,6 +499,10 @@ p {
   gap: 10px;
 }
 
+.stack-tight {
+  gap: 4px;
+}
+
 .piece-grid {
   grid-template-columns: 1fr;
   align-content: start;
@@ -512,7 +520,8 @@ p {
 }
 
 .piece-chip.active {
-  border-color: rgba(255, 209, 102, 0.6);
+  border-color: var(--piece-color, rgba(255, 209, 102, 0.6));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--piece-color, #ffd166) 55%, transparent);
 }
 
 .piece-chip.used {
@@ -540,7 +549,7 @@ p {
   width: 10px;
   height: 10px;
   border-radius: 3px;
-  background: rgba(88, 178, 255, 0.92);
+  background: var(--piece-color, rgba(88, 178, 255, 0.92));
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
 }
 
@@ -571,6 +580,7 @@ p {
   background: rgba(14, 26, 42, 0.92);
   border: 1px solid var(--line);
   white-space: nowrap;
+  box-shadow: inset 4px 0 0 var(--player-color, transparent);
 }
 
 .player-strip-item.active {
@@ -587,6 +597,22 @@ p {
 
 .room-view[data-room-phase="IN_GAME"][data-side-panel-open="false"] .room-primary {
   grid-column: 1 / -1;
+}
+
+.seat-player-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.seat-color-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  background: var(--seat-color, var(--accent));
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.16);
+  flex: 0 0 auto;
 }
 
 .room-footer {
@@ -685,6 +711,17 @@ p {
   .panel,
   .hero-panel {
     padding-inline: 16px;
+  }
+
+  .topbar--live {
+    grid-template-columns: 1fr;
+  }
+
+  .topbar-center,
+  .topbar--live .status-strip {
+    justify-self: stretch;
+    justify-content: flex-start;
+    white-space: normal;
   }
 
   .room-view[data-active-pane="room"] .room-side-panel {

@@ -280,3 +280,60 @@ Home route
   - Home route redesign beyond removing that section.
   - Room route changes.
   - Session/bootstrap logic changes.
+
+## Extension 2026-03-07: Live Color Guidance, Header Unification, Flip Control, and Auto-Pass
+
+- **Status**: APPROVED
+- **Approved-By**: Viet
+- **Task**: Unify the live match header into the application bar, expose seat/color ownership clearly, add explicit flip controls, and replace visible manual pass UX with server-authoritative auto-pass.
+- **Location**:
+  - `/Users/maihoangviet/Projects/blokus/src/App.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/views/RoomView.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/components/GameBoard.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/style.css`
+  - `/Users/maihoangviet/Projects/blokus/src/lib/pieces.js`
+  - `/Users/maihoangviet/Projects/blokus/server.js`
+- **Why**: The live match currently hides the seat-to-color mapping, lacks an explicit flip control, still exposes a pass action that should be automatic, and wastes vertical space by repeating match info in a second header block below the application bar.
+- **As-Is Diagram (ASCII)**:
+```text
+top app bar
+  -> brand + profile + connection
+
+live room
+  -> second header block with room / turn / phase
+  -> color ownership mostly implicit
+  -> rotate only
+  -> manual pass button
+```
+- **To-Be Diagram (ASCII)**:
+```text
+top app bar
+  -> brand
+  -> centered live room info (room / turn / phase)
+  -> profile / connection / role / leave
+
+live room
+  -> no duplicate room header block
+  -> visible seat colors + starting corners
+  -> rotate + flip
+  -> auto-pass when no legal move exists
+```
+- **Deliverables**:
+  - Unified live application bar with centered room/turn/phase info.
+  - Visible seat color and starting-corner guidance in lobby and live match.
+  - Color-correct player strip and piece rack previews.
+  - Explicit flip control in the live rack.
+  - Server-side auto-pass flow with replay-visible auto-pass events.
+- **Done Criteria**:
+  - Live rooms no longer render the duplicate room header block.
+  - Seat color ownership is visible before and during matches.
+  - Piece previews use the player’s actual color.
+  - `Flip` is available beside `Rotate`.
+  - Visible `Pass` button is removed from live play.
+  - Server auto-skips blocked players and preserves replay/history clarity.
+  - `node --check server.js` passes.
+  - `npm run build` passes.
+- **Out-of-Scope**:
+  - Changing seat order or allowing manual color selection.
+  - Replay view redesign beyond clearer pass-event labeling.
+  - Session/bootstrap architecture changes.

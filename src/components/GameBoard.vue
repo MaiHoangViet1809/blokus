@@ -1,6 +1,6 @@
 <script setup>
 import { computed, onMounted, ref, watch } from "vue";
-import { BOARD_SIZE, COLORS, ORIENTATIONS, PIECES } from "../lib/pieces";
+import { BOARD_SIZE, COLORS, PIECES, PLAYER_COLORS, START_CORNERS, resolvePieceTransform } from "../lib/pieces";
 
 const props = defineProps({
   room: { type: Object, required: true },
@@ -8,11 +8,12 @@ const props = defineProps({
   currentProfileId: { type: String, default: "" }
 });
 
-const emit = defineEmits(["place", "pass"]);
+const emit = defineEmits(["place"]);
 
 const canvasRef = ref(null);
 const selectedPieceId = ref("mono");
-const orientationIndex = ref(0);
+const rotation = ref(0);
+const flipped = ref(false);
 const hoverCell = ref({ x: -1, y: -1 });
 
 const currentPlayer = computed(() => {
@@ -25,7 +26,15 @@ const isMyTurn = computed(() => {
   return props.match.players[props.match.turnIndex]?.profileId === props.currentProfileId;
 });
 
-const availablePieces = computed(() => new Set(currentPlayer.value?.remainingPieces || []));
+const currentTurnPlayer = computed(() => {
+  if (!props.match) return null;
+  return props.match.players[props.match.turnIndex] || null;
+});
+const activeRackPlayer = computed(() => currentPlayer.value || currentTurnPlayer.value || null);
+const highlightedCornerPlayer = computed(() => currentTurnPlayer.value || currentPlayer.value || null);
+const availablePieces = computed(() => new Set(activeRackPlayer.value?.remainingPieces || []));
+const activeColorMeta = computed(() => PLAYER_COLORS[activeRackPlayer.value?.colorIndex || 0] || PLAYER_COLORS[0]);
+const activePieceTransform = computed(() => resolvePieceTransform(selectedPieceId.value, rotation.value, flipped.value));
 const visiblePieces = computed(() => PIECES.map((piece) => ({
   ...piece,
   used: !availablePieces.value.has(piece.id)
@@ -59,9 +68,17 @@ function draw() {
       ctx.strokeRect(x * cellSize, y * cellSize, cellSize, cellSize);
     }
   }
+  for (const colorMeta of PLAYER_COLORS) {
+    const [cornerX, cornerY] = START_CORNERS[colorMeta.colorIndex];
+    ctx.save();
+    ctx.strokeStyle = `${colorMeta.fill}aa`;
+    ctx.lineWidth = 2;
+    ctx.strokeRect(cornerX * cellSize + 2, cornerY * cellSize + 2, cellSize - 4, cellSize - 4);
+    ctx.restore();
+  }
   if (isMyTurn.value && hoverCell.value.x >= 0 && availablePieces.value.has(selectedPieceId.value)) {
-    const piece = ORIENTATIONS[selectedPieceId.value]?.[orientationIndex.value] || [];
-    const color = COLORS[(currentPlayer.value?.colorIndex || 0) + 1];
+    const piece = activePieceTransform.value.cells;
+    const color = activeColorMeta.value.fill;
     ctx.globalAlpha = 0.55;
     ctx.fillStyle = color;
     for (const [dx, dy] of piece) {
@@ -73,29 +90,48 @@ function draw() {
     }
     ctx.globalAlpha = 1;
   }
+  if (highlightedCornerPlayer.value && !highlightedCornerPlayer.value.hasMoved) {
+    const [cornerX, cornerY] = START_CORNERS[highlightedCornerPlayer.value.colorIndex];
+    ctx.save();
+    ctx.strokeStyle = PLAYER_COLORS[highlightedCornerPlayer.value.colorIndex]?.fill || activeColorMeta.value.fill;
+    ctx.lineWidth = 4;
+    ctx.strokeRect(cornerX * cellSize + 1, cornerY * cellSize + 1, cellSize - 2, cellSize - 2);
+    ctx.restore();
+  }
 }
 
 function rotate() {
-  const count = ORIENTATIONS[selectedPieceId.value]?.length || 1;
-  orientationIndex.value = (orientationIndex.value + 1) % count;
+  rotation.value = (rotation.value + 1) % 4;
+}
+
+function flip() {
+  flipped.value = !flipped.value;
 }
 
 function place() {
   if (!isMyTurn.value || hoverCell.value.x < 0) return;
   emit("place", {
     pieceId: selectedPieceId.value,
-    orientationIndex: orientationIndex.value,
+    orientationIndex: activePieceTransform.value.orientationIndex,
     x: hoverCell.value.x,
     y: hoverCell.value.y
   });
 }
 
-watch(() => [props.match, selectedPieceId.value, orientationIndex.value, hoverCell.value.x, hoverCell.value.y], draw, { deep: true });
+watch(() => [
+  props.match,
+  selectedPieceId.value,
+  rotation.value,
+  flipped.value,
+  hoverCell.value.x,
+  hoverCell.value.y
+], draw, { deep: true });
 watch(availablePieces, (pieces) => {
   if (!pieces.has(selectedPieceId.value)) {
     const nextPiece = PIECES.find((piece) => pieces.has(piece.id));
     selectedPieceId.value = nextPiece?.id || PIECES[0].id;
-    orientationIndex.value = 0;
+    rotation.value = 0;
+    flipped.value = false;
   }
 });
 onMounted(draw);
@@ -118,8 +154,11 @@ onMounted(draw);
 
     <div class="rack-panel">
       <div class="board-rack-head">
-        <h3>Pieces</h3>
-        <span class="phase-pill">{{ currentPlayer?.remainingPieces?.length || 0 }} left</span>
+        <div class="stack stack-tight">
+          <h3>{{ activeColorMeta.name }} pieces</h3>
+          <p class="muted">Start: {{ activeColorMeta.cornerLabel }}</p>
+        </div>
+        <span class="phase-pill">{{ activeRackPlayer?.remainingPieces?.length || 0 }} left</span>
       </div>
       <div class="piece-grid">
         <button
@@ -128,7 +167,8 @@ onMounted(draw);
           class="piece-chip"
           :class="{ active: piece.id === selectedPieceId, used: piece.used }"
           :disabled="piece.used"
-          @click="selectedPieceId = piece.id; orientationIndex = 0"
+          :style="{ '--piece-color': activeColorMeta.fill }"
+          @click="selectedPieceId = piece.id; rotation = 0; flipped = false"
         >
           <span
             class="piece-preview"
@@ -147,7 +187,7 @@ onMounted(draw);
       </div>
       <div class="rack-actions">
         <button class="secondary" :disabled="!isMyTurn" @click="rotate">Rotate</button>
-        <button class="secondary" :disabled="!isMyTurn" @click="$emit('pass')">Pass</button>
+        <button class="secondary" :disabled="!isMyTurn" @click="flip">Flip</button>
       </div>
     </div>
   </div>
