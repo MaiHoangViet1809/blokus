@@ -46,6 +46,19 @@ const showSidePanel = computed(() => {
   if (!store.room) return false;
   return showReplayWorkspace.value;
 });
+const playerSlots = computed(() => Array.from({ length: 4 }, (_, seatIndex) => (
+  playerMembers.value.find((member) => member.seatIndex === seatIndex) || null
+)));
+const takenPrepareColors = computed(() => new Set(
+  playerMembers.value
+    .map((member) => member.chosenColorIndex)
+    .filter((colorIndex) => Number.isInteger(colorIndex))
+));
+const startReady = computed(() => (
+  playerMembers.value.length >= 2
+  && playerMembers.value.every((member) => member.isReady && Number.isInteger(member.chosenColorIndex))
+  && takenPrepareColors.value.size === playerMembers.value.length
+));
 const currentTurnName = computed(() => {
   if (!store.match || ["FINISHED", "ABANDONED"].includes(store.room?.phase || "")) return "Finished";
   if (store.room?.phase === "SUSPENDED") return "Suspended";
@@ -69,8 +82,12 @@ const phaseMessage = computed(() => {
   return "";
 });
 
-function seatColorMeta(seatIndex) {
-  return PLAYER_COLORS[seatIndex ?? 0] || PLAYER_COLORS[0];
+function colorMeta(colorIndex) {
+  return PLAYER_COLORS[colorIndex ?? 0] || PLAYER_COLORS[0];
+}
+
+function colorTakenByOther(member, colorIndex) {
+  return playerMembers.value.some((entry) => entry.id !== member?.id && entry.chosenColorIndex === colorIndex);
 }
 
 async function placeMove(move) {
@@ -90,6 +107,14 @@ async function openReplay(matchId) {
     path: `/rooms/${roomCode.value}`,
     query: { ...route.query, matchId, pane: "replay" }
   });
+}
+
+async function claimSeat() {
+  await store.joinRoom(roomCode.value);
+}
+
+async function chooseColor(colorIndex) {
+  await store.emit("room:set-color", { roomCode: store.room?.code, colorIndex });
 }
 
 watch(selectedReplayId, async (matchId) => {
@@ -150,62 +175,104 @@ onMounted(async () => {
         <article v-if="isPreparePhase" class="panel lobby-panel">
           <div class="section-head">
             <div>
-              <h2>Room Setup</h2>
-              <p class="muted">Seat players, confirm readiness, then launch from the host seat.</p>
+              <h2>Match Staging</h2>
+              <p class="muted">Choose a seat, claim a unique color, ready your slot, and launch from the host seat.</p>
             </div>
-            <button
-              v-if="currentMember?.role === 'player'"
-              class="secondary"
-              @click="store.setReady(!currentMember.isReady)"
-            >
-              {{ currentMember?.isReady ? "Unready" : "Ready" }}
-            </button>
+            <span class="phase-pill">{{ store.room.code }}</span>
           </div>
 
-          <div class="lobby-grid">
-            <section class="stack room-subsection">
-              <div class="section-head">
-                <h3>Players</h3>
-                <span class="phase-pill">{{ playerMembers.length }}/4 seated</span>
-              </div>
-              <div class="panel-scroll list">
-                <div v-for="member in playerMembers" :key="member.id" class="list-row static">
-                  <span class="seat-player-label">
-                    <span class="seat-color-dot" :style="{ '--seat-color': seatColorMeta(member.seatIndex).fill }" />
-                    P{{ member.seatIndex + 1 }} · {{ seatColorMeta(member.seatIndex).name }} · {{ seatColorMeta(member.seatIndex).cornerLabel }} · {{ member.name }}
-                  </span>
-                  <strong>{{ member.isReady ? "Ready" : member.connectionState }}</strong>
+          <div class="staging-shell">
+            <section class="slot-grid">
+              <article
+                v-for="(member, seatIndex) in playerSlots"
+                :key="`slot-${seatIndex}`"
+                class="slot-card"
+                :class="{ 'slot-card--empty': !member, 'slot-card--ready': member?.isReady }"
+              >
+                <div class="section-head">
+                  <div>
+                    <p class="eyebrow">Seat {{ seatIndex + 1 }}</p>
+                    <h3>{{ member?.name || "Open Slot" }}</h3>
+                  </div>
+                  <span class="phase-pill">{{ member ? (member.isReady ? "Ready" : member.connectionState) : "Open" }}</span>
                 </div>
-              </div>
-            </section>
 
-            <section class="stack room-subsection">
-              <div class="section-head">
-                <h3>Spectators</h3>
-                <span class="phase-pill">{{ spectatorMembers.length }}</span>
-              </div>
-              <div class="panel-scroll list">
-                <template v-if="spectatorMembers.length">
-                  <div v-for="member in spectatorMembers" :key="member.id" class="list-row static">
-                    <span>{{ member.name }}</span>
-                    <strong>{{ member.connectionState }}</strong>
+                <template v-if="member">
+                  <div class="seat-player-label">
+                    <span class="seat-color-dot" :style="{ '--seat-color': colorMeta(member.chosenColorIndex).fill }" />
+                    <strong>{{ colorMeta(member.chosenColorIndex).name }}</strong>
+                    <span class="muted">{{ colorMeta(member.chosenColorIndex).cornerLabel }}</span>
+                    <span v-if="member.isHost" class="phase-pill">Host</span>
+                  </div>
+
+                  <div class="color-picker">
+                    <button
+                      v-for="entry in PLAYER_COLORS"
+                      :key="entry.colorIndex"
+                      class="color-picker-chip"
+                      :class="{ active: member.chosenColorIndex === entry.colorIndex, blocked: colorTakenByOther(member, entry.colorIndex) }"
+                      :style="{ '--seat-color': entry.fill }"
+                      :disabled="member.profileId !== store.session?.profileId || colorTakenByOther(member, entry.colorIndex)"
+                      @click="chooseColor(entry.colorIndex)"
+                    >
+                      <span class="seat-color-dot" :style="{ '--seat-color': entry.fill }" />
+                      <span>{{ entry.name }}</span>
+                    </button>
+                  </div>
+
+                  <div class="action-row">
+                    <button
+                      v-if="member.profileId === store.session?.profileId"
+                      class="secondary"
+                      @click="store.setReady(!member.isReady)"
+                    >
+                      {{ member.isReady ? "Unready" : "Ready" }}
+                    </button>
+                    <p v-else class="muted">Waiting on this player.</p>
                   </div>
                 </template>
-                <p v-else class="muted">No spectators in this room.</p>
-              </div>
+
+                <template v-else>
+                  <p class="muted">Open player slot. Claim it to join the launch lineup.</p>
+                  <button
+                    v-if="currentMember?.role !== 'player'"
+                    class="secondary"
+                    @click="claimSeat"
+                  >
+                    Take seat
+                  </button>
+                </template>
+              </article>
             </section>
 
-            <section class="stack room-subsection">
-              <div class="section-head">
-                <h3>Controls</h3>
-                <span class="phase-pill">{{ store.room.phase }}</span>
-              </div>
-              <div class="stack">
-                <p class="muted">Share room code <strong>{{ store.room.code }}</strong> to let others join directly.</p>
-                <button v-if="isHost" @click="store.startRoom">Start match</button>
+            <aside class="staging-side stack">
+              <section class="room-subsection stack">
+                <div class="section-head">
+                  <h3>Launch Control</h3>
+                  <span class="phase-pill">{{ playerMembers.length }}/4</span>
+                </div>
+                <p class="muted">Share room code <strong>{{ store.room.code }}</strong> and make sure each seated player has a unique color before launch.</p>
+                <p class="muted">{{ startReady ? "Room is ready to launch." : "Need 2+ ready players with unique colors." }}</p>
+                <button v-if="isHost" :disabled="!startReady" @click="store.startRoom">Start match</button>
                 <p v-else class="muted">Only the host can start the match.</p>
-              </div>
-            </section>
+              </section>
+
+              <section class="room-subsection stack">
+                <div class="section-head">
+                  <h3>Spectators</h3>
+                  <span class="phase-pill">{{ spectatorMembers.length }}</span>
+                </div>
+                <div class="panel-scroll list">
+                  <template v-if="spectatorMembers.length">
+                    <div v-for="member in spectatorMembers" :key="member.id" class="list-row static">
+                      <span>{{ member.name }}</span>
+                      <strong>{{ member.connectionState }}</strong>
+                    </div>
+                  </template>
+                  <p v-else class="muted">No spectators in this room.</p>
+                </div>
+              </section>
+            </aside>
           </div>
         </article>
 
@@ -233,10 +300,10 @@ onMounted(async () => {
               :key="player.profileId"
               class="player-strip-item"
               :class="{ active: player.profileId === store.match.players[store.match.turnIndex]?.profileId }"
-              :style="{ '--player-color': seatColorMeta(player.colorIndex).fill }"
+              :style="{ '--player-color': colorMeta(player.colorIndex).fill }"
             >
               <strong>{{ player.name }}</strong>
-              <span class="muted">{{ seatColorMeta(player.colorIndex).name }}</span>
+              <span class="muted">{{ colorMeta(player.colorIndex).name }}</span>
               <span class="muted">{{ player.remainingCount }}</span>
               <span class="muted">{{ player.endState }}</span>
             </div>

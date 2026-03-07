@@ -380,3 +380,63 @@ RACK
   - Seat/color rule changes.
   - Server gameplay changes.
   - Replay/history changes.
+
+## Extension 2026-03-07: Player-Chosen Colors and RTS-Style Match Staging
+
+- **Status**: APPROVED
+- **Approved-By**: Viet
+- **Task**: Decouple player color from seat order, let seated players choose a unique color before match start, reduce board corner markers to a single colored tile per player, and redesign the prepare-phase room into an RTS-style staging lobby.
+- **Location**:
+  - `/Users/maihoangviet/Projects/blokus/server.js`
+  - `/Users/maihoangviet/Projects/blokus/src/views/RoomView.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/components/GameBoard.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/style.css`
+  - `/Users/maihoangviet/Projects/blokus/src/lib/pieces.js`
+- **Why**: Color ownership is still seat-derived, the board markers are heavier than needed, and the pre-game room does not behave like a real match lobby. The room needs explicit player-owned colors and a clearer staging flow before launch.
+- **As-Is Diagram (ASCII)**:
+```text
+PREPARE
+  -> generic room setup panel
+  -> seat order implies color
+  -> no player-owned color selection
+
+IN_GAME
+  -> board corners use oversized markers
+  -> player/rack color follows seat order
+```
+- **To-Be Diagram (ASCII)**:
+```text
+PREPARE
+  -> RTS-style staging room
+  -> 4 visible player slots
+  -> seated player chooses one unique color
+  -> start requires ready players with unique colors
+
+IN_GAME
+  -> player/rack color follows chosen color
+  -> each start corner shows one colored tile
+```
+- **Deliverables**:
+  - Add per-player chosen color state in the room model.
+  - Add a prepare-phase room command for changing color.
+  - Enforce unique chosen colors across seated players.
+  - Block match start until seated players have unique chosen colors.
+  - Copy chosen colors into `match_players.color_index`.
+  - Replace the prepare-phase room with an RTS-style staging layout:
+    - 4 explicit player slots
+    - visible empty slots
+    - color ownership and ready state on each slot
+    - launch controls and spectators in a separate staging sidebar
+  - Reduce board corner markers to a single colored tile per player corner.
+- **Done Criteria**:
+  - Seated players can choose colors during `PREPARE`.
+  - Two seated players cannot keep the same color.
+  - Match start uses chosen colors rather than seat order.
+  - The prepare-phase room reads like a game staging lobby.
+  - The board shows one colored tile per starting corner.
+  - `node --check server.js` passes.
+  - `npm run build` passes.
+- **Out-of-Scope**:
+  - Mid-game color changes.
+  - Replay redesign.
+  - Changing the 4 Blokus starting corners.

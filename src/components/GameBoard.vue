@@ -68,21 +68,16 @@ function draw() {
       ctx.strokeRect(x * cellSize, y * cellSize, cellSize, cellSize);
     }
   }
-  const edgeMarkers = [
-    [[0, 0], [1, 0], [0, 1]],
-    [[BOARD_SIZE - 1, 0], [BOARD_SIZE - 2, 0], [BOARD_SIZE - 1, 1]],
-    [[BOARD_SIZE - 1, BOARD_SIZE - 1], [BOARD_SIZE - 2, BOARD_SIZE - 1], [BOARD_SIZE - 1, BOARD_SIZE - 2]],
-    [[0, BOARD_SIZE - 1], [0, BOARD_SIZE - 2], [1, BOARD_SIZE - 1]]
-  ];
-  for (const colorMeta of PLAYER_COLORS) {
+  for (const player of props.match?.players || []) {
+    const colorMeta = PLAYER_COLORS[player.colorIndex];
+    if (!colorMeta) continue;
+    const [cornerX, cornerY] = START_CORNERS[player.colorIndex];
     ctx.save();
     ctx.fillStyle = `${colorMeta.fill}99`;
-    for (const [markerX, markerY] of edgeMarkers[colorMeta.colorIndex]) {
-      ctx.fillRect(markerX * cellSize, markerY * cellSize, cellSize, cellSize);
-      ctx.strokeStyle = `${colorMeta.fill}cc`;
-      ctx.lineWidth = 1.5;
-      ctx.strokeRect(markerX * cellSize + 1, markerY * cellSize + 1, cellSize - 2, cellSize - 2);
-    }
+    ctx.fillRect(cornerX * cellSize, cornerY * cellSize, cellSize, cellSize);
+    ctx.strokeStyle = `${colorMeta.fill}dd`;
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(cornerX * cellSize + 1, cornerY * cellSize + 1, cellSize - 2, cellSize - 2);
     ctx.restore();
   }
   if (isMyTurn.value && hoverCell.value.x >= 0 && availablePieces.value.has(selectedPieceId.value)) {

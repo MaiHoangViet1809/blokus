@@ -416,7 +416,7 @@ p {
 }
 
 .room-workspace--lobby {
-  grid-template-columns: minmax(0, 1.35fr) minmax(300px, 0.95fr);
+  grid-template-columns: 1fr;
 }
 
 .room-workspace--match {
@@ -429,6 +429,10 @@ p {
 
 .room-view[data-room-phase="IN_GAME"][data-side-panel-open="true"] .room-workspace--match {
   grid-template-columns: minmax(0, 1.45fr) minmax(300px, 0.8fr);
+}
+
+.room-view[data-room-phase="PREPARE"][data-side-panel-open="true"] .room-workspace--lobby {
+  grid-template-columns: minmax(0, 1.35fr) minmax(300px, 0.95fr);
 }
 
 .room-primary {
@@ -444,11 +448,43 @@ p {
   grid-template-rows: auto minmax(0, 1fr);
 }
 
-.lobby-grid {
+.staging-shell {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1.45fr) minmax(280px, 0.9fr);
   gap: 12px;
   overflow: hidden;
+}
+
+.slot-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  align-content: start;
+  overflow: auto;
+}
+
+.slot-card {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 18px;
+  background:
+    linear-gradient(135deg, rgba(88, 178, 255, 0.08), rgba(10, 19, 33, 0.96)),
+    var(--panel-strong);
+  border: 1px solid var(--line);
+  align-content: start;
+}
+
+.slot-card--ready {
+  border-color: var(--line-strong);
+}
+
+.slot-card--empty {
+  background: rgba(16, 28, 45, 0.7);
+}
+
+.staging-side {
+  min-height: 0;
 }
 
 .room-subsection {
@@ -615,6 +651,33 @@ p {
   flex: 0 0 auto;
 }
 
+.color-picker {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.color-picker-chip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 0.6rem 0.75rem;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.color-picker-chip.active {
+  border-color: var(--seat-color, var(--line-strong));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--seat-color, #ffd166) 55%, transparent);
+}
+
+.color-picker-chip.blocked {
+  opacity: 0.45;
+}
+
 .room-footer {
   padding-block: 14px;
 }
@@ -682,8 +745,8 @@ p {
     grid-template-rows: minmax(0, 1fr) minmax(180px, 0.7fr);
   }
 
-  .lobby-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .staging-shell {
+    grid-template-columns: 1fr;
   }
 
   .board-layout {
@@ -741,7 +804,7 @@ p {
     grid-template-rows: auto minmax(0, 1fr);
   }
 
-  .lobby-grid {
+  .slot-grid {
     grid-template-columns: 1fr;
   }
 
@@ -808,6 +871,10 @@ p {
   }
 
   .piece-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .color-picker {
     grid-template-columns: 1fr;
   }
 }

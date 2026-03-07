@@ -126,6 +126,10 @@ if (!columnExists("room_members", "client_instance_id")) {
   db.exec("alter table room_members add column client_instance_id text");
 }
 
+if (!columnExists("room_members", "chosen_color_index")) {
+  db.exec("alter table room_members add column chosen_color_index integer");
+}
+
 if (!columnExists("rooms", "game_type")) {
   db.exec("alter table rooms add column game_type text not null default 'blokus'");
 }
@@ -154,6 +158,12 @@ db.exec(`
   create index if not exists idx_room_members_client_instance
   on room_members(room_id, client_instance_id);
 `);
+
+db.prepare(`
+  update room_members
+  set chosen_color_index = seat_index
+  where role = 'player' and chosen_color_index is null and seat_index is not null
+`).run();
 
 const app = express();
 const server = http.createServer(app);
@@ -517,6 +527,36 @@ function hasFirstCommittedTurn(match) {
   return !!match?.first_committed_at;
 }
 
+function usedColorIndices(roomId, excludeMemberId = null) {
+  return new Set(
+    db.prepare(`
+      select chosen_color_index
+      from room_members
+      where room_id = ? and role = 'player' and chosen_color_index is not null and (? is null or id != ?)
+    `).all(roomId, excludeMemberId, excludeMemberId).map((row) => row.chosen_color_index)
+  );
+}
+
+function firstAvailableColorIndex(roomId, excludeMemberId = null) {
+  const taken = usedColorIndices(roomId, excludeMemberId);
+  for (let colorIndex = 0; colorIndex < START_CORNERS.length; colorIndex += 1) {
+    if (!taken.has(colorIndex)) return colorIndex;
+  }
+  return null;
+}
+
+function ensurePrepareMemberColor(roomId, memberId) {
+  const member = db.prepare("select * from room_members where id = ?").get(memberId);
+  if (!member || member.role !== "player") return member;
+  if (member.chosen_color_index !== null && !usedColorIndices(roomId, member.id).has(member.chosen_color_index)) {
+    return member;
+  }
+  const colorIndex = firstAvailableColorIndex(roomId, member.id);
+  if (colorIndex === null) throw new Error("No player colors available.");
+  db.prepare("update room_members set chosen_color_index = ? where id = ?").run(colorIndex, member.id);
+  return db.prepare("select * from room_members where id = ?").get(member.id);
+}
+
 function normalizeLobbySeats(roomId) {
   const players = db.prepare(`
     select id
@@ -526,6 +566,7 @@ function normalizeLobbySeats(roomId) {
   `).all(roomId);
   players.forEach((player, index) => {
     db.prepare("update room_members set seat_index = ? where id = ?").run(index, player.id);
+    ensurePrepareMemberColor(roomId, player.id);
   });
 }
 
@@ -818,6 +859,7 @@ function buildRoomSnapshot(roomCode) {
       name: member.name,
       role: member.role,
       seatIndex: member.seat_index,
+      chosenColorIndex: member.chosen_color_index,
       isReady: !!member.is_ready,
       connectionState: member.connection_state,
       isHost: member.profile_id === freshRoom.host_profile_id
@@ -1182,12 +1224,16 @@ function joinRoomAs(session, roomCode, role, socket) {
         where id = ?
       `).run(seatCount, member.id);
       member = db.prepare("select * from room_members where id = ?").get(member.id);
+      member = ensurePrepareMemberColor(freshRoom.id, member.id);
     } else {
       db.prepare(`
         update room_members
         set connection_state = 'online', disconnected_at = null
         where id = ?
       `).run(member.id);
+      if (freshRoom.phase === ROOM_PHASES.PREPARE && member.role === "player") {
+        member = ensurePrepareMemberColor(freshRoom.id, member.id);
+      }
     }
   } else {
     let seatIndex = null;
@@ -1205,9 +1251,18 @@ function joinRoomAs(session, roomCode, role, socket) {
     }
     db.prepare(`
       insert into room_members (
-        id, room_id, profile_id, client_instance_id, role, seat_index, is_ready, connection_state, disconnected_at, joined_at
-      ) values (?, ?, ?, ?, ?, ?, 0, 'online', null, ?)
-    `).run(makeId("member"), freshRoom.id, session.profile_id, session.client_instance_id, role, seatIndex, nowIso());
+        id, room_id, profile_id, client_instance_id, role, seat_index, chosen_color_index, is_ready, connection_state, disconnected_at, joined_at
+      ) values (?, ?, ?, ?, ?, ?, ?, 0, 'online', null, ?)
+    `).run(
+      makeId("member"),
+      freshRoom.id,
+      session.profile_id,
+      session.client_instance_id,
+      role,
+      seatIndex,
+      role === "player" ? firstAvailableColorIndex(freshRoom.id) : null,
+      nowIso()
+    );
   }
   db.prepare("update sessions set room_code = ?, last_seen_at = ? where id = ?").run(roomCode, nowIso(), session.id);
   syncInstanceState(session.client_instance_id, session.profile_id, roomCode);
@@ -1231,8 +1286,8 @@ function createRoomForSession(session, title, isPublic, socket) {
   `).run(roomId, roomCode, title, isPublic ? 1 : 0, session.profile_id, ROOM_PHASES.PREPARE, timestamp);
   db.prepare(`
     insert into room_members (
-      id, room_id, profile_id, client_instance_id, role, seat_index, is_ready, connection_state, disconnected_at, joined_at
-    ) values (?, ?, ?, ?, 'player', 0, 0, 'online', null, ?)
+      id, room_id, profile_id, client_instance_id, role, seat_index, chosen_color_index, is_ready, connection_state, disconnected_at, joined_at
+    ) values (?, ?, ?, ?, 'player', 0, 0, 0, 'online', null, ?)
   `).run(makeId("member"), roomId, session.profile_id, session.client_instance_id, timestamp);
   db.prepare("update sessions set room_code = ? where id = ?").run(roomCode, session.id);
   syncInstanceState(session.client_instance_id, session.profile_id, roomCode);
@@ -1248,6 +1303,12 @@ function startMatch(roomCode, profileId) {
   const players = getRoomMembers(room.id).filter((member) => member.role === "player");
   if (players.length < 2) throw new Error("Need at least two players.");
   if (!players.every((player) => player.is_ready)) throw new Error("All seated players must be ready.");
+  if (!players.every((player) => Number.isInteger(player.chosen_color_index))) {
+    throw new Error("All seated players must choose a color.");
+  }
+  if (new Set(players.map((player) => player.chosen_color_index)).size !== players.length) {
+    throw new Error("Each seated player must have a unique color.");
+  }
   const matchId = makeId("match");
   setRoomPhase(room.id, ROOM_PHASES.STARTING, {
     archivedAt: null,
@@ -1269,12 +1330,34 @@ function startMatch(roomCode, profileId) {
       matchId,
       player.profile_id,
       player.seat_index ?? index,
-      player.seat_index ?? index,
+      player.chosen_color_index,
       JSON.stringify(ALL_PIECE_IDS),
     );
   });
   appendMove(matchId, profileId, "match_started", { roomCode });
   return buildMatchSnapshot(roomCode);
+}
+
+function setPlayerColor(roomCode, clientInstanceId, colorIndex) {
+  const room = getRoomByCode(roomCode);
+  if (!room || room.phase !== ROOM_PHASES.PREPARE) throw new Error("Room is not in prepare phase.");
+  if (!Number.isInteger(colorIndex) || colorIndex < 0 || colorIndex >= START_CORNERS.length) {
+    throw new Error("Invalid color choice.");
+  }
+  const member = db.prepare(`
+    select *
+    from room_members
+    where room_id = ? and client_instance_id = ? and role = 'player'
+  `).get(room.id, clientInstanceId);
+  if (!member) throw new Error("Only seated players can choose colors.");
+  const takenByOther = db.prepare(`
+    select id
+    from room_members
+    where room_id = ? and role = 'player' and chosen_color_index = ? and id != ?
+  `).get(room.id, colorIndex, member.id);
+  if (takenByOther) throw new Error("That color is already taken.");
+  db.prepare("update room_members set chosen_color_index = ? where id = ?").run(colorIndex, member.id);
+  return buildRoomSnapshot(roomCode);
 }
 
 function hasAnyLegalMove(board, player) {
@@ -1711,6 +1794,15 @@ io.on("connection", (socket) => {
       `).run(ready ? 1 : 0, room.id, session.client_instance_id);
       emitRoomState(roomCode);
       return roomAndMatchPayload(roomCode);
+    });
+  });
+
+  socket.on("room:set-color", ({ roomCode, colorIndex }, ack) => {
+    ackHandler(ack, () => {
+      const session = requireSession(socket);
+      const room = setPlayerColor(roomCode, session.client_instance_id, colorIndex);
+      emitRoomState(roomCode);
+      return { ...roomAndMatchPayload(roomCode), room };
     });
   });
 
