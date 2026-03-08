@@ -1,0 +1,254 @@
+## SOW_0007 Multi-Board-Game Platform Refactor with MOBA-Style Reconnect
+
+- **Status**: APPROVED
+- **Approved-By**: Viet
+
+### Summary
+- **Task**: Refactor the current Blokus app into a real multi-board-game platform with a platform core, game-driver layer, and game-specific UI layer, while supporting MOBA-style disconnect/rejoin semantics with default `suspend then reclaim` behavior.
+- **Location**:
+  - `/Users/maihoangviet/Projects/blokus/server.js`
+  - `/Users/maihoangviet/Projects/blokus/src/stores/app.js`
+  - `/Users/maihoangviet/Projects/blokus/src/router.js`
+  - `/Users/maihoangviet/Projects/blokus/src/views/RoomView.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/components/GameBoard.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/components/ReplayPanel.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/lib/pieces.js`
+  - `/Users/maihoangviet/Projects/blokus/src/games/`
+  - `/Users/maihoangviet/Projects/blokus/plan_todo/codex/SOW_0007_multi_board_game_platform_refactor.md`
+- **Why**: The current app has durable room/session state, but platform lifecycle, Blokus rules, replay, and UI are still tightly coupled. The system needs a generic platform boundary so other board games can be added without rewriting room/session/reconnect logic again.
+
+### As-Is Diagram (ASCII)
+
+#### 1. Current Architecture
+```text
+Browser
+  -> client instance
+  -> profile
+  -> room
+  -> match
+
+server.js
+  -> browser/session logic
+  -> room lifecycle
+  -> room member rules
+  -> Blokus setup rules
+  -> Blokus move legality
+  -> Blokus board state
+  -> Blokus replay
+  -> leaderboard
+
+Result:
+  platform logic and Blokus logic are coupled together
+```
+
+#### 2. Current Room / Match Lifecycle
+```text
+[NO_ROOM]
+   |
+   | create/join
+   v
+[PREPARE]
+   | ready / setup
+   | host start
+   v
+[STARTING]
+   | create match
+   v
+[IN_GAME]
+   | place move / auto-pass
+   | disconnect handling
+   v
+[SUSPENDED]
+   | reconnect
+   +------------------> [IN_GAME]
+   |
+   | grace timeout
+   v
+[ABANDONED]
+   | next join resets room
+   v
+[PREPARE]
+
+[IN_GAME]
+   | finish
+   v
+[FINISHED]
+   | rematch
+   v
+[PREPARE]
+```
+
+#### 3. Current Disconnect Handling Problem
+```text
+disconnect
+  -> member goes offline
+  -> room may suspend
+  -> match-specific consequences are partly hard-coded in platform code
+  -> reclaim/abandon rules are not generalized by game type
+```
+
+### To-Be Diagram (ASCII)
+
+#### 1. Target Platform Architecture
+```text
++-----------------------+
+| Platform Core         |
+|-----------------------|
+| browser containers    |
+| client instances      |
+| profiles              |
+| sessions              |
+| rooms                 |
+| seats / members       |
+| room phases           |
+| reconnect leases      |
+| suspend / abandon     |
+| replay catalog        |
+| transport             |
++-----------+-----------+
+            |
+            v
++-----------------------+
+| Game Driver Registry  |
+|-----------------------|
+| blokus                |
+| chess                 |
+| checkers              |
+| ...                   |
++-----------+-----------+
+            |
+            v
++-----------------------+
+| Game-Specific UI      |
+|-----------------------|
+| staging/live/replay   |
+| by game type          |
++-----------------------+
+```
+
+#### 2. Target Room State Machine
+```text
+[ROOM_ABSENT]
+   |
+   | create room(game_type, config)
+   v
+[ROOM_PREPARE]
+   | join / seat / ready / setup
+   | start allowed by platform + driver
+   v
+[ROOM_STARTING]
+   | driver provisions match
+   | everyone leaves before playable state
+   +---------------------------> [ROOM_PREPARE]
+   |
+   | playable
+   v
+[ROOM_ACTIVE]
+   | game commands routed to driver
+   | disconnect of any required player
+   v
+[ROOM_SUSPEND_PENDING]
+   | platform reserves seats and opens reclaim window
+   v
+[ROOM_SUSPENDED]
+   | player rejoins within ttl
+   +---------------------------> [ROOM_ACTIVE]
+   |
+   | ttl expires
+   v
+[ROOM_ABANDONED]
+   | reusable room policy
+   +---------------------------> [ROOM_PREPARE]
+   |
+   | archive policy
+   +---------------------------> [ROOM_ARCHIVED]
+
+[ROOM_ACTIVE]
+   | driver returns terminal result
+   v
+[ROOM_FINISHED]
+   | rematch
+   +---------------------------> [ROOM_PREPARE]
+   |
+   | history ttl
+   +---------------------------> [ROOM_ARCHIVED]
+```
+
+#### 3. Target Disconnect / Rejoin State Machine
+```text
+[CONNECTED_PLAYER]
+   |
+   | websocket disconnect / browser drop
+   v
+[OFFLINE_RESERVED]
+   | seat reserved
+   | reclaim token/identity remains valid
+   | reconnect timer running
+   |
+   | reconnect with same platform identity
+   +------------------------------> [CONNECTED_PLAYER]
+   |
+   | grace expires
+   v
+[ABANDONED_PLAYER]
+   | driver/platform abandonment policy applied
+   | may become spectator / forfeited / removed
+```
+
+#### 4. Target Match Control Model
+```text
+platform event
+  -> "player_disconnected"
+  -> "player_reconnected"
+  -> "reclaim_expired"
+
+driver policy decides:
+  -> suspend match
+  -> keep suspended until reclaim
+  -> resume on return
+  -> abandon/forfeit after ttl
+```
+
+### Deliverables
+- Introduce a platform/game driver split in the server:
+  - platform-owned room/session/presence logic
+  - a driver registry keyed by `gameType`
+  - Blokus migrated as the first registered driver
+- Replace direct game-specific live commands with a generic `match:command` path while preserving existing room commands.
+- Split room/match payloads into generic platform metadata plus driver-produced `gameView`.
+- Add reconnect lease handling as a generic platform concept with default `suspend then reclaim`.
+- Move Blokus setup/rules/replay concerns behind the Blokus driver boundary.
+- Split the frontend room flow into a generic room shell plus driver-selected game setup/live/replay views.
+- Add routes for non-live history/replay views that no longer depend on a single room workspace layout.
+- Make leaderboard/history game-aware via `gameType`.
+
+### Done Criteria
+- `gameType` is operational, not decorative.
+- Room/session lifecycle works without importing Blokus rules directly into the platform core.
+- Blokus is loaded through the driver registry and still works functionally.
+- Disconnect during active play suspends the room and allows reclaim within the grace window.
+- Reconnect resumes the same seat without hijack from another tab/profile.
+- Live gameplay transport supports a generic game command path.
+- Room/match responses expose generic platform state plus a game-specific view payload.
+- History/replay paths are driven by driver logic rather than hard-coded Blokus reconstruction in platform code.
+- `node --check server.js` passes.
+- `npm run build` passes.
+
+### Out-of-Scope
+- Adding a second concrete game implementation.
+- External plugin loading for drivers.
+- Full account/auth redesign.
+- Replacing SQLite.
+- Large visual redesign outside what is required to separate generic room shell and Blokus game views.
+
+### Proposed-By
+- Codex GPT-5
+
+### plan
+- multi-board-game-platform-refactor-v1
+
+### Cautions / Risks
+- `src/stores/app.js` already has unrelated uncommitted work; implementation must preserve it while evolving the store shape.
+- Existing replay/history and live room routes must not regress while payloads are split.
+- The driver contract must be generic enough for hidden-info and simultaneous-phase games without over-engineering a plugin system now.
+- Reconnect lease data must remain platform-owned and not drift back into game-specific state.
