@@ -410,6 +410,86 @@ Host refresh
 ### Cautions / Risks
 - Host transfer must still work for explicit leave and real expiry/removal.
 - Realtime room updates must not regress the public room list flow.
+
+---
+
+## Extension: Universal RTS-Style Staging Table
+
+- **Status**: APPROVED
+- **Approved-By**: Viet
+
+### Summary
+- **Task**: Replace the current pre-game slot-card layout with a platform-owned RTS-style staging table shell that supports game-defined setup columns.
+- **Location**:
+  - `/Users/maihoangviet/Projects/blokus/src/views/RoomView.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/games/clientRegistry.js`
+  - `/Users/maihoangviet/Projects/blokus/src/games/`
+  - `/Users/maihoangviet/Projects/blokus/src/style.css`
+  - `/Users/maihoangviet/Projects/blokus/plan_todo/codex/SOW_0007_multi_board_game_platform_refactor.md`
+- **Why**: A multi-game platform needs one consistent staging model. The current slot cards are too Blokus-specific and do not scale to side-by-side setup fields like color, faction, team, or AI configuration.
+
+### As-Is Diagram (ASCII)
+```text
+/rooms/:roomCode
+  -> setup view
+     -> slot cards
+     -> launch control card
+     -> spectators card
+
+Problem:
+  game setup is not structured as a reusable lobby table
+```
+
+### To-Be Diagram (ASCII)
+```text
+/rooms/:roomCode
+  -> platform staging shell
+
++--------------------------------------------------------------------------------+
+| Slot | Player | Control | Ready | Status | [Game Column] | [Game Column] ... |
+| 1    | Viet   | Human   | Yes   | Online | Blue          | Top-left          |
+| 2    | Open   | Open    | -     | Empty  | Red           | Top-right         |
+| 3    | Open   | Open    | -     | Empty  | Green         | Bottom-right      |
+| 4    | Open   | Open    | -     | Empty  | Orange        | Bottom-left       |
++--------------------------------------------------------------------------------+
+| Spectators / launch control remain in bounded side panels                      |
++--------------------------------------------------------------------------------+
+```
+
+### Deliverables
+- Replace the staging card grid in `RoomView.vue` with a table-style shell.
+- Keep fixed platform columns:
+  - `Slot`
+  - `Player`
+  - `Control`
+  - `Ready`
+  - `Status`
+  - `Actions`
+- Add game-defined extra columns through the client game registry.
+- Migrate Blokus to the new staging model with extra columns:
+  - `Color`
+  - `Starting Corner`
+- Preserve existing staging actions:
+  - take seat
+  - choose color
+  - ready/unready
+  - host start
+- Keep spectators and launch control as secondary panels.
+
+### Done Criteria
+- `PREPARE` renders as a bounded RTS-style staging table, not slot cards.
+- The staging shell is platform-owned and reusable.
+- Blokus shows driver-defined `Color` and `Starting Corner` columns.
+- `npm run build` passes.
+
+### Out-of-Scope
+- Implementing faction/team/AI fields for Blokus.
+- Adding a second game.
+- Changing live match or replay routes.
+
+### Cautions / Risks
+- The shell must not hard-code Blokus-only columns.
+- The table must remain usable within the fixed viewport.
 - Replacing SQLite.
 - Large visual redesign outside what is required to separate generic room shell and Blokus game views.
 

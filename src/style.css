@@ -356,7 +356,8 @@ p {
 .platform-game-panel,
 .platform-room-table-panel,
 .game-lobby-panel,
-.room-history-panel {
+.room-history-panel,
+.staging-table-shell {
   grid-template-rows: auto minmax(0, 1fr);
 }
 
@@ -426,6 +427,37 @@ p {
 .room-table-actions {
   display: inline-flex;
   gap: 8px;
+}
+
+.staging-table {
+  min-width: 980px;
+}
+
+.staging-table-shell {
+  padding: 0;
+  overflow: hidden;
+}
+
+.staging-table-shell .room-table {
+  width: 100%;
+}
+
+.staging-player-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.staging-color-picker {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(88px, 1fr));
+  gap: 6px;
+}
+
+.staging-color-picker .color-picker-chip {
+  padding: 0.46rem 0.6rem;
+  font-size: 0.78rem;
 }
 
 .room-card,
@@ -817,6 +849,10 @@ p {
   .match-header {
     grid-template-columns: 1fr;
   }
+
+  .staging-table {
+    min-width: 860px;
+  }
 }
 
 @media (max-width: 620px) {
@@ -843,6 +879,10 @@ p {
 
   .board-layout {
     grid-template-columns: minmax(0, 1fr) 152px;
+  }
+
+  .staging-color-picker {
+    grid-template-columns: 1fr;
   }
 
   .piece-preview {

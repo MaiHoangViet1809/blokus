@@ -1,13 +1,13 @@
-import BlokusSetupView from "./blokus/SetupView.vue";
 import BlokusLiveView from "./blokus/LiveView.vue";
 import BlokusReplayView from "./blokus/ReplayView.vue";
+import { buildBlokusStagingTableModel } from "./blokus/stagingModel.js";
 
 const REGISTRY = {
   blokus: {
     gameType: "blokus",
     title: "Blokus",
     description: "Corner-touching polyomino strategy for 2 to 4 players.",
-    setupComponent: BlokusSetupView,
+    buildStagingTableModel: buildBlokusStagingTableModel,
     liveComponent: BlokusLiveView,
     replayComponent: BlokusReplayView
   }
