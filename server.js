@@ -7,6 +7,7 @@ import { dirname, join } from "path";
 import { fileURLToPath } from "url";
 import { randomBytes } from "crypto";
 import { ALL_PIECE_IDS, BOARD_SIZE, ORIENTATIONS as PIECE_ORIENTATIONS, PIECE_CELL_COUNTS, START_CORNERS } from "./src/lib/pieces.js";
+import { getGameDriver } from "./src/games/serverRegistry.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -60,6 +61,7 @@ db.exec(`
     is_public integer not null,
     host_profile_id text,
     phase text not null,
+    config_json text not null default '{}',
     created_at text not null,
     archived_at text
   );
@@ -112,6 +114,20 @@ db.exec(`
     payload_json text not null,
     created_at text not null
   );
+
+  create table if not exists reconnect_leases (
+    id text primary key,
+    room_id text not null,
+    match_id text,
+    profile_id text not null,
+    client_instance_id text,
+    seat_index integer,
+    status text not null,
+    disconnected_at text not null,
+    reserved_until text not null,
+    reclaimed_at text,
+    released_at text
+  );
 `);
 
 function columnExists(tableName, columnName) {
@@ -132,6 +148,10 @@ if (!columnExists("room_members", "chosen_color_index")) {
 
 if (!columnExists("rooms", "game_type")) {
   db.exec("alter table rooms add column game_type text not null default 'blokus'");
+}
+
+if (!columnExists("rooms", "config_json")) {
+  db.exec("alter table rooms add column config_json text not null default '{}'");
 }
 
 if (!columnExists("rooms", "empty_since")) {
@@ -157,6 +177,9 @@ db.exec(`
 
   create index if not exists idx_room_members_client_instance
   on room_members(room_id, client_instance_id);
+
+  create index if not exists idx_reconnect_leases_room_status
+  on reconnect_leases(room_id, status);
 `);
 
 db.prepare(`
@@ -180,6 +203,7 @@ const BROWSER_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
 const ROOM_PHASES = {
   PREPARE: "PREPARE",
   STARTING: "STARTING",
+  SUSPEND_PENDING: "SUSPEND_PENDING",
   IN_GAME: "IN_GAME",
   SUSPENDED: "SUSPENDED",
   ABANDONED: "ABANDONED",
@@ -439,6 +463,14 @@ function getRoomByCode(roomCode) {
   return db.prepare("select * from rooms where code = ?").get(String(roomCode).toUpperCase()) || null;
 }
 
+function roomDriver(room) {
+  return getGameDriver(room?.game_type || "blokus");
+}
+
+function parseRoomConfig(room) {
+  return parseJson(room?.config_json, {});
+}
+
 function getRoomMembers(roomId) {
   return db.prepare(`
     select room_members.*, profiles.name
@@ -460,6 +492,73 @@ function getLatestMatch(roomId) {
     order by created_at desc
     limit 1
   `).get(roomId) || null;
+}
+
+function getActiveReconnectLease(roomId, profileId) {
+  return db.prepare(`
+    select *
+    from reconnect_leases
+    where room_id = ? and profile_id = ? and status = 'active'
+    order by disconnected_at desc
+    limit 1
+  `).get(roomId, profileId) || null;
+}
+
+function countActiveReconnectLeases(roomId) {
+  return db.prepare(`
+    select count(*) as count
+    from reconnect_leases
+    where room_id = ? and status = 'active'
+  `).get(roomId).count;
+}
+
+function upsertReconnectLease(room, match, member) {
+  const existing = getActiveReconnectLease(room.id, member.profile_id);
+  const disconnectedAt = nowIso();
+  const reservedUntil = ttlDeadline(disconnectedAt, GRACE_MS);
+  if (existing) {
+    db.prepare(`
+      update reconnect_leases
+      set match_id = ?, client_instance_id = ?, seat_index = ?, disconnected_at = ?, reserved_until = ?, reclaimed_at = null, released_at = null
+      where id = ?
+    `).run(match?.id || null, member.client_instance_id || null, member.seat_index, disconnectedAt, reservedUntil, existing.id);
+    return db.prepare("select * from reconnect_leases where id = ?").get(existing.id);
+  }
+  const leaseId = makeId("lease");
+  db.prepare(`
+    insert into reconnect_leases (
+      id, room_id, match_id, profile_id, client_instance_id, seat_index, status, disconnected_at, reserved_until, reclaimed_at, released_at
+    ) values (?, ?, ?, ?, ?, ?, 'active', ?, ?, null, null)
+  `).run(
+    leaseId,
+    room.id,
+    match?.id || null,
+    member.profile_id,
+    member.client_instance_id || null,
+    member.seat_index,
+    disconnectedAt,
+    reservedUntil
+  );
+  return db.prepare("select * from reconnect_leases where id = ?").get(leaseId);
+}
+
+function markReconnectLeaseReclaimed(roomId, profileId) {
+  const lease = getActiveReconnectLease(roomId, profileId);
+  if (!lease) return null;
+  db.prepare(`
+    update reconnect_leases
+    set status = 'reclaimed', reclaimed_at = ?
+    where id = ?
+  `).run(nowIso(), lease.id);
+  return db.prepare("select * from reconnect_leases where id = ?").get(lease.id);
+}
+
+function expireReconnectLease(leaseId) {
+  db.prepare(`
+    update reconnect_leases
+    set status = 'expired', released_at = ?
+    where id = ?
+  `).run(nowIso(), leaseId);
 }
 
 function getActiveMatch(roomId) {
@@ -539,7 +638,7 @@ function usedColorIndices(roomId, excludeMemberId = null) {
 
 function firstAvailableColorIndex(roomId, excludeMemberId = null) {
   const taken = usedColorIndices(roomId, excludeMemberId);
-  for (let colorIndex = 0; colorIndex < START_CORNERS.length; colorIndex += 1) {
+  for (let colorIndex = 0; colorIndex < MAX_PLAYERS; colorIndex += 1) {
     if (!taken.has(colorIndex)) return colorIndex;
   }
   return null;
@@ -668,7 +767,6 @@ function resumeSuspendedRoom(room, match) {
     emptySince: null,
     abandonedAt: null
   });
-  syncMatchTurn(room.id);
 }
 
 function abandonRoom(room, match) {
@@ -687,6 +785,7 @@ function reconcileRoomLifecycle(roomId) {
   if (!room || room.phase === ROOM_PHASES.ARCHIVED) return null;
   const members = getRoomMembers(roomId);
   const onlinePlayers = members.filter((member) => member.role === "player" && member.connection_state === "online").length;
+  const offlinePlayers = members.filter((member) => member.role === "player" && member.connection_state !== "online").length;
   const currentMatch = getActiveMatch(roomId);
 
   if (room.phase === ROOM_PHASES.PREPARE) {
@@ -712,11 +811,15 @@ function reconcileRoomLifecycle(roomId) {
       resetRoomToPrepare(room, false);
       return db.prepare("select * from rooms where id = ?").get(roomId);
     }
+    if (offlinePlayers > 0) {
+      suspendRoom(room, currentMatch);
+      return db.prepare("select * from rooms where id = ?").get(roomId);
+    }
     return room;
   }
 
   if (room.phase === ROOM_PHASES.IN_GAME) {
-    if (onlinePlayers === 0) {
+    if (offlinePlayers > 0) {
       suspendRoom(room, currentMatch);
     } else if (room.suspended_at || room.empty_since || room.abandoned_at) {
       setRoomPhase(room.id, ROOM_PHASES.IN_GAME, { suspendedAt: null, emptySince: null, abandonedAt: null });
@@ -725,7 +828,7 @@ function reconcileRoomLifecycle(roomId) {
   }
 
   if (room.phase === ROOM_PHASES.SUSPENDED) {
-    if (onlinePlayers > 0) {
+    if (offlinePlayers === 0 && onlinePlayers > 0) {
       resumeSuspendedRoom(room, currentMatch);
       return db.prepare("select * from rooms where id = ?").get(roomId);
     }
@@ -776,24 +879,42 @@ function appendMove(matchId, profileId, eventType, payload) {
 function cleanupExpiredMembers(roomId) {
   const room = db.prepare("select * from rooms where id = ?").get(roomId);
   if (!room || room.phase === ROOM_PHASES.ARCHIVED) return;
-  const cutoff = Date.now() - GRACE_MS;
-  const members = getRoomMembers(roomId);
-  const activeMatch = getActiveMatch(roomId);
-  for (const member of members) {
-    if (member.connection_state !== "offline" || !member.disconnected_at) continue;
-    if (Date.parse(member.disconnected_at) >= cutoff) continue;
-    if ([ROOM_PHASES.IN_GAME, ROOM_PHASES.SUSPENDED].includes(room.phase) && member.role === "player" && activeMatch) {
+  const leases = db.prepare(`
+    select *
+    from reconnect_leases
+    where room_id = ? and status = 'active'
+  `).all(room.id);
+  for (const lease of leases) {
+    if (Date.parse(lease.reserved_until) > Date.now()) continue;
+    const activeMatch = lease.match_id ? getMatchById(lease.match_id) : getActiveMatch(roomId);
+    const member = db.prepare(`
+      select *
+      from room_members
+      where room_id = ? and profile_id = ?
+    `).get(room.id, lease.profile_id);
+    if (activeMatch && member) {
+      const driver = roomDriver(room);
+      const players = getOrderedMatchPlayers(activeMatch.id);
+      const events = [];
+      const result = driver.onReclaimExpired(activeMatch, players, lease.profile_id, nowIso, (profileId, eventType, payload) => {
+        events.push({ profileId, eventType, payload });
+      });
+      result.events = events;
+      applyDriverMutation(room, activeMatch, result);
       db.prepare(`
         update room_members
         set role = 'spectator', seat_index = null, is_ready = 0
         where id = ?
       `).run(member.id);
-      db.prepare(`
-        update match_players
-        set passed = 1, disconnected = 1, end_state = 'abandoned'
-        where match_id = ? and profile_id = ?
-      `).run(activeMatch.id, member.profile_id);
-    } else {
+    }
+    expireReconnectLease(lease.id);
+  }
+  const cutoff = Date.now() - GRACE_MS;
+  const members = getRoomMembers(roomId);
+  for (const member of members) {
+    if (member.connection_state !== "offline" || !member.disconnected_at) continue;
+    if (Date.parse(member.disconnected_at) >= cutoff) continue;
+    if (![ROOM_PHASES.STARTING, ROOM_PHASES.IN_GAME, ROOM_PHASES.SUSPENDED].includes(room.phase) || member.role !== "player") {
       db.prepare("delete from room_members where id = ?").run(member.id);
       if (member.client_instance_id) {
         clearSessionRoomForInstance(member.client_instance_id, room.code);
@@ -820,6 +941,7 @@ function buildRoomSummary(room) {
     gameType: freshRoom.game_type || "blokus",
     phase: freshRoom.phase,
     isPublic: !!freshRoom.is_public,
+    config: parseRoomConfig(freshRoom),
     hostProfileId: freshRoom.host_profile_id,
     hostName: host?.name || null,
     currentMatchStatus: currentMatch?.status || null,
@@ -846,6 +968,7 @@ function buildRoomSnapshot(roomCode) {
     gameType: freshRoom.game_type || "blokus",
     phase: freshRoom.phase,
     isPublic: !!freshRoom.is_public,
+    config: parseRoomConfig(freshRoom),
     hostProfileId: freshRoom.host_profile_id,
     hostName: host?.name || null,
     currentMatchId: getLatestMatch(freshRoom.id)?.id || null,
@@ -859,7 +982,6 @@ function buildRoomSnapshot(roomCode) {
       name: member.name,
       role: member.role,
       seatIndex: member.seat_index,
-      chosenColorIndex: member.chosen_color_index,
       isReady: !!member.is_ready,
       connectionState: member.connection_state,
       isHost: member.profile_id === freshRoom.host_profile_id
@@ -878,10 +1000,13 @@ function buildMatchSnapshot(roomCode) {
   return {
     id: match.id,
     roomCode,
+    gameType: room.game_type || "blokus",
     status: match.status,
+    phase: room.phase,
     firstCommittedAt: match.first_committed_at || null,
     turnIndex: match.turn_index,
-    board: parseBoard(match.board_json),
+    activePlayerProfileId: players[match.turn_index]?.profile_id || null,
+    activePlayerName: players[match.turn_index]?.name || null,
     winnerProfileId: match.winner_profile_id,
     winnerName: winner?.name || null,
     createdAt: match.created_at,
@@ -890,17 +1015,29 @@ function buildMatchSnapshot(roomCode) {
     players: players.map((player) => ({
       profileId: player.profile_id,
       name: player.name,
-      colorIndex: player.color_index,
       seatIndex: player.seat_index,
-      hasMoved: player.hasMoved,
-      passed: player.passed,
       disconnected: player.disconnected,
-      remainingCount: player.remainingPieces.length,
-      remainingPieces: player.remainingPieces,
       endState: player.end_state,
       score: player.score
     }))
   };
+}
+
+function buildGameView(roomCode, viewerProfileId = null) {
+  const room = getRoomByCode(roomCode);
+  if (!room) return null;
+  const driver = roomDriver(room);
+  const members = getRoomMembers(room.id).map((member) => ({
+    ...member,
+    isHost: member.profile_id === room.host_profile_id
+  }));
+  if (room.phase === ROOM_PHASES.PREPARE) {
+    return driver.projectRoomSetup(room, members, viewerProfileId);
+  }
+  const match = getLatestMatch(room.id);
+  if (!match) return null;
+  const players = getOrderedMatchPlayers(match.id);
+  return driver.projectMatch(room, match, players, viewerProfileId);
 }
 
 function buildFinishedMatchSummary(match, room) {
@@ -910,6 +1047,7 @@ function buildFinishedMatchSummary(match, room) {
     id: match.id,
     roomCode: room.code,
     roomTitle: room.title,
+    gameType: room.game_type || "blokus",
     winnerProfileId: match.winner_profile_id,
     winnerName: winner?.name || null,
     createdAt: match.created_at,
@@ -941,72 +1079,10 @@ function buildReplaySnapshot(matchId) {
   if (!match) return null;
   const room = db.prepare("select * from rooms where id = ?").get(match.room_id);
   if (!room) return null;
+  const driver = roomDriver(room);
   const players = getOrderedMatchPlayers(match.id);
-  const winner = players.find((player) => player.profile_id === match.winner_profile_id);
   const moves = getMovesForMatch(match.id);
-  const board = emptyBoard();
-  const frames = [{
-    step: 0,
-    eventType: "initial",
-    label: "Start of match",
-    actorName: null,
-    board: emptyBoard(),
-    payload: {}
-  }];
-  let step = 0;
-  for (const move of moves) {
-    if (move.eventType === "piece_placed") {
-      const cells = buildAbsCells(
-        move.payload.pieceId,
-        move.payload.orientationIndex,
-        move.payload.x,
-        move.payload.y
-      );
-      const player = players.find((entry) => entry.profile_id === move.profileId);
-      if (cells && player) {
-        placeCells(board, cells, player.colorIndex + 1);
-      }
-    }
-    step += 1;
-    frames.push({
-      step,
-      eventType: move.eventType,
-      label:
-        move.eventType === "match_started"
-          ? "Match started"
-          : move.eventType === "turn_passed"
-            ? move.payload?.automatic
-              ? `${move.playerName || "Player"} auto-passed`
-              : `${move.playerName || "Player"} passed`
-            : move.eventType === "piece_placed"
-              ? `${move.playerName || "Player"} placed ${move.payload.pieceId}`
-              : move.eventType === "match_finished"
-                ? `Match finished${winner?.name ? `, winner: ${winner.name}` : ""}`
-                : move.eventType,
-      actorName: move.playerName,
-      board: board.map((row) => [...row]),
-      payload: move.payload
-    });
-  }
-  return {
-    id: match.id,
-    roomCode: room.code,
-    roomTitle: room.title,
-    status: match.status,
-    winnerProfileId: match.winner_profile_id,
-    winnerName: winner?.name || null,
-    createdAt: match.created_at,
-    finishedAt: match.finished_at,
-    moveCount: moveCount(match.id),
-    players: players.map((player) => ({
-      profileId: player.profile_id,
-      name: player.name,
-      colorIndex: player.colorIndex,
-      score: player.score,
-      endState: player.endState
-    })),
-    frames
-  };
+  return driver.buildReplay(room, match, players, moves);
 }
 
 function buildLeaderboard() {
@@ -1014,6 +1090,7 @@ function buildLeaderboard() {
     select
       profiles.id as profile_id,
       profiles.name as name,
+      rooms.game_type as game_type,
       count(match_players.id) as matches_played,
       sum(case when matches.winner_profile_id = profiles.id then 1 else 0 end) as wins,
       sum(match_players.score) as total_score,
@@ -1021,8 +1098,9 @@ function buildLeaderboard() {
     from profiles
     join match_players on match_players.profile_id = profiles.id
     join matches on matches.id = match_players.match_id
+    join rooms on rooms.id = matches.room_id
     where matches.status = 'finished'
-    group by profiles.id, profiles.name
+    group by profiles.id, profiles.name, rooms.game_type
     order by wins desc, total_score desc, matches_played desc, last_win_at desc, profiles.name asc
     limit 12
   `).all();
@@ -1030,6 +1108,7 @@ function buildLeaderboard() {
     rank: index + 1,
     profileId: row.profile_id,
     name: row.name,
+    gameType: row.game_type || "blokus",
     wins: row.wins,
     matchesPlayed: row.matches_played,
     totalScore: row.total_score || 0,
@@ -1039,7 +1118,7 @@ function buildLeaderboard() {
 
 function buildRecentFinishedMatches(limit = 12) {
   return db.prepare(`
-    select matches.*, rooms.code as room_code, rooms.title as room_title
+    select matches.*, rooms.code as room_code, rooms.title as room_title, rooms.game_type as room_game_type
     from matches
     join rooms on rooms.id = matches.room_id
     where matches.status = 'finished'
@@ -1047,7 +1126,8 @@ function buildRecentFinishedMatches(limit = 12) {
     limit ?
   `).all(limit).map((match) => buildFinishedMatchSummary(match, {
     code: match.room_code,
-    title: match.room_title
+    title: match.room_title,
+    game_type: match.room_game_type
   }));
 }
 
@@ -1132,6 +1212,27 @@ function setMemberOnline(roomCode, clientInstanceId) {
     set connection_state = 'online', disconnected_at = null
     where room_id = ? and client_instance_id = ?
   `).run(room.id, clientInstanceId);
+  const member = db.prepare(`
+    select *
+    from room_members
+    where room_id = ? and client_instance_id = ?
+  `).get(room.id, clientInstanceId);
+  const currentMatch = getActiveMatch(room.id);
+  if (member?.role === "player" && currentMatch) {
+    markReconnectLeaseReclaimed(room.id, member.profile_id);
+    const remainingLeaseCount = countActiveReconnectLeases(room.id);
+    const driver = roomDriver(room);
+    const players = getOrderedMatchPlayers(currentMatch.id);
+    const events = [];
+    const result = driver.onReconnect(currentMatch, players, member.profile_id, (profileId, eventType, payload) => {
+      events.push({ profileId, eventType, payload });
+    });
+    result.events = events;
+    if (remainingLeaseCount > 0) {
+      result.status = MATCH_STATUSES.SUSPENDED;
+    }
+    applyDriverMutation(room, currentMatch, result);
+  }
   transferHost(room);
   reconcileRoomLifecycle(room.id);
 }
@@ -1161,11 +1262,14 @@ function removeMembership(roomCode, clientInstanceId, explicitLeave) {
   if ([ROOM_PHASES.STARTING, ROOM_PHASES.IN_GAME, ROOM_PHASES.SUSPENDED].includes(room.phase) && member.role === "player") {
     db.prepare("delete from room_members where id = ?").run(member.id);
     if (currentMatch && (room.phase !== ROOM_PHASES.STARTING || hasFirstCommittedTurn(currentMatch))) {
-      db.prepare(`
-        update match_players
-        set passed = 1, disconnected = 1, end_state = 'abandoned'
-        where match_id = ? and profile_id = ?
-      `).run(currentMatch.id, member.profile_id);
+      const driver = roomDriver(room);
+      const players = getOrderedMatchPlayers(currentMatch.id);
+      const events = [];
+      const result = driver.onReclaimExpired(currentMatch, players, member.profile_id, nowIso, (profileId, eventType, payload) => {
+        events.push({ profileId, eventType, payload });
+      });
+      result.events = events;
+      applyDriverMutation(room, currentMatch, result);
     }
   } else {
     db.prepare("delete from room_members where id = ?").run(member.id);
@@ -1173,10 +1277,7 @@ function removeMembership(roomCode, clientInstanceId, explicitLeave) {
   }
   clearSessionRoomForInstance(clientInstanceId, roomCode);
   transferHost(room);
-  const freshRoom = reconcileRoomLifecycle(room.id);
-  if (freshRoom?.phase === ROOM_PHASES.IN_GAME) {
-    syncMatchTurn(room.id);
-  }
+  reconcileRoomLifecycle(room.id);
 }
 
 function joinRoomAs(session, roomCode, role, socket) {
@@ -1272,18 +1373,22 @@ function joinRoomAs(session, roomCode, role, socket) {
   return buildRoomSnapshot(roomCode);
 }
 
-function createRoomForSession(session, title, isPublic, socket) {
+function createRoomForSession(session, title, isPublic, socket, gameType = "blokus", roomConfig = null) {
   if (session.room_code) {
     removeMembership(session.room_code, session.client_instance_id, true);
     socket.leave(session.room_code);
   }
+  const driver = getGameDriver(gameType);
   const roomId = makeId("room");
   const roomCode = ensureRoomCodeUnique();
   const timestamp = nowIso();
+  const normalizedConfig = roomConfig && typeof roomConfig === "object"
+    ? roomConfig
+    : driver.buildRoomConfig();
   db.prepare(`
-    insert into rooms (id, code, title, is_public, host_profile_id, phase, game_type, created_at, archived_at, empty_since, suspended_at, abandoned_at)
-    values (?, ?, ?, ?, ?, ?, 'blokus', ?, null, null, null, null)
-  `).run(roomId, roomCode, title, isPublic ? 1 : 0, session.profile_id, ROOM_PHASES.PREPARE, timestamp);
+    insert into rooms (id, code, title, is_public, host_profile_id, phase, game_type, config_json, created_at, archived_at, empty_since, suspended_at, abandoned_at)
+    values (?, ?, ?, ?, ?, ?, ?, ?, ?, null, null, null, null)
+  `).run(roomId, roomCode, title, isPublic ? 1 : 0, session.profile_id, ROOM_PHASES.PREPARE, driver.gameType, JSON.stringify(normalizedConfig), timestamp);
   db.prepare(`
     insert into room_members (
       id, room_id, profile_id, client_instance_id, role, seat_index, chosen_color_index, is_ready, connection_state, disconnected_at, joined_at
@@ -1300,16 +1405,10 @@ function startMatch(roomCode, profileId) {
   if (!room) throw new Error("Room not found.");
   if (room.host_profile_id !== profileId) throw new Error("Only the host can start the match.");
   if (room.phase !== ROOM_PHASES.PREPARE) throw new Error("Room is not in prepare phase.");
+  const driver = roomDriver(room);
   const players = getRoomMembers(room.id).filter((member) => member.role === "player");
-  if (players.length < 2) throw new Error("Need at least two players.");
-  if (!players.every((player) => player.is_ready)) throw new Error("All seated players must be ready.");
-  if (!players.every((player) => Number.isInteger(player.chosen_color_index))) {
-    throw new Error("All seated players must choose a color.");
-  }
-  if (new Set(players.map((player) => player.chosen_color_index)).size !== players.length) {
-    throw new Error("Each seated player must have a unique color.");
-  }
-  const matchId = makeId("match");
+  driver.validateRoomSetup(room, players, parseRoomConfig(room));
+  const created = driver.createMatch(room, players, makeId, nowIso);
   setRoomPhase(room.id, ROOM_PHASES.STARTING, {
     archivedAt: null,
     emptySince: null,
@@ -1319,29 +1418,31 @@ function startMatch(roomCode, profileId) {
   db.prepare(`
     insert into matches (id, room_id, status, turn_index, board_json, winner_profile_id, created_at, finished_at, first_committed_at)
     values (?, ?, ?, 0, ?, null, ?, null, null)
-  `).run(matchId, room.id, MATCH_STATUSES.STARTING, serializeBoard(emptyBoard()), nowIso());
-  players.forEach((player, index) => {
+  `).run(created.match.id, room.id, created.match.status, created.match.boardJson, created.match.createdAt);
+  created.matchPlayers.forEach((player) => {
     db.prepare(`
       insert into match_players (
         id, match_id, profile_id, seat_index, color_index, has_moved, passed, disconnected, remaining_pieces_json, score, end_state
       ) values (?, ?, ?, ?, ?, 0, 0, 0, ?, 0, 'active')
     `).run(
-      makeId("match_player"),
-      matchId,
+      player.id,
+      created.match.id,
       player.profile_id,
-      player.seat_index ?? index,
-      player.chosen_color_index,
-      JSON.stringify(ALL_PIECE_IDS),
+      player.seatIndex,
+      player.colorIndex,
+      player.remainingPiecesJson,
     );
   });
-  appendMove(matchId, profileId, "match_started", { roomCode });
+  created.events.forEach((event) => {
+    appendMove(created.match.id, event.profileId, event.eventType, event.payload);
+  });
   return buildMatchSnapshot(roomCode);
 }
 
 function setPlayerColor(roomCode, clientInstanceId, colorIndex) {
   const room = getRoomByCode(roomCode);
   if (!room || room.phase !== ROOM_PHASES.PREPARE) throw new Error("Room is not in prepare phase.");
-  if (!Number.isInteger(colorIndex) || colorIndex < 0 || colorIndex >= START_CORNERS.length) {
+  if (!Number.isInteger(colorIndex) || colorIndex < 0 || colorIndex >= MAX_PLAYERS) {
     throw new Error("Invalid color choice.");
   }
   const member = db.prepare(`
@@ -1358,6 +1459,73 @@ function setPlayerColor(roomCode, clientInstanceId, colorIndex) {
   if (takenByOther) throw new Error("That color is already taken.");
   db.prepare("update room_members set chosen_color_index = ? where id = ?").run(colorIndex, member.id);
   return buildRoomSnapshot(roomCode);
+}
+
+function applyDriverMutation(room, match, result) {
+  db.prepare(`
+    update matches
+    set status = ?, turn_index = ?, board_json = ?, winner_profile_id = ?, finished_at = ?, first_committed_at = ?
+    where id = ?
+  `).run(
+    result.status || match.status,
+    result.turnIndex ?? match.turn_index,
+    result.boardJson ?? match.board_json,
+    result.winnerProfileId === undefined ? match.winner_profile_id : result.winnerProfileId,
+    result.finishedAt === undefined ? match.finished_at : result.finishedAt,
+    result.firstCommittedAt === undefined ? match.first_committed_at : result.firstCommittedAt,
+    match.id
+  );
+  for (const player of result.players || []) {
+    db.prepare(`
+      update match_players
+      set has_moved = ?, passed = ?, disconnected = ?, remaining_pieces_json = ?, score = ?, end_state = ?
+      where id = ?
+    `).run(
+      player.hasMoved ? 1 : 0,
+      player.passed ? 1 : 0,
+      player.disconnected ? 1 : 0,
+      JSON.stringify(player.remainingPieces || []),
+      player.score || 0,
+      player.end_state,
+      player.id
+    );
+  }
+  for (const event of result.events || []) {
+    appendMove(match.id, event.profileId, event.eventType, event.payload);
+  }
+  if ((result.status || match.status) === MATCH_STATUSES.FINISHED) {
+    setRoomPhase(room.id, ROOM_PHASES.FINISHED, {
+      archivedAt: null,
+      emptySince: null,
+      suspendedAt: null,
+      abandonedAt: null
+    });
+  } else if ((result.status || match.status) === MATCH_STATUSES.SUSPENDED) {
+    setRoomPhase(room.id, ROOM_PHASES.SUSPENDED, {
+      emptySince: null,
+      suspendedAt: nowIso(),
+      abandonedAt: null
+    });
+  } else if (result.firstCommittedAt || room.phase === ROOM_PHASES.STARTING) {
+    setRoomPhase(room.id, ROOM_PHASES.IN_GAME, {
+      archivedAt: null,
+      emptySince: null,
+      suspendedAt: null,
+      abandonedAt: null
+    });
+  }
+  return buildMatchSnapshot(room.code);
+}
+
+function handleMatchCommand(roomCode, profileId, command) {
+  const room = getRoomByCode(roomCode);
+  if (!room || ![ROOM_PHASES.STARTING, ROOM_PHASES.IN_GAME].includes(room.phase)) throw new Error("Game is not active.");
+  const match = getActiveMatch(room.id);
+  if (!match) throw new Error("No active match.");
+  const driver = roomDriver(room);
+  const players = getOrderedMatchPlayers(match.id);
+  const result = driver.handleCommand(room, match, players, profileId, command, nowIso);
+  return applyDriverMutation(room, match, result);
 }
 
 function hasAnyLegalMove(board, player) {
@@ -1552,22 +1720,30 @@ function rematchRoom(roomCode, profileId) {
   return buildRoomSnapshot(roomCode);
 }
 
-function roomAndMatchPayload(roomCode) {
+function roomAndMatchPayload(roomCode, viewerProfileId = null) {
   return {
     room: buildRoomSnapshot(roomCode),
     match: buildMatchSnapshot(roomCode),
+    gameView: buildGameView(roomCode, viewerProfileId),
     rooms: listPublicRooms()
   };
 }
 
-function emitRoomState(roomCode) {
+async function emitRoomState(roomCode) {
   const room = buildRoomSnapshot(roomCode);
   if (!room) return;
   io.emit("state:room", room);
   io.to(roomCode).emit("state:room", room);
+  const sockets = await io.in(roomCode).fetchSockets();
   const match = buildMatchSnapshot(roomCode);
   if (match) {
-    io.to(roomCode).emit("state:match", match);
+    sockets.forEach((socket) => {
+      const viewerProfileId = socket.data.session?.profile_id || null;
+      socket.emit("state:match", {
+        match,
+        gameView: buildGameView(roomCode, viewerProfileId)
+      });
+    });
   }
 }
 
@@ -1616,7 +1792,8 @@ app.get("/api/bootstrap", (req, res) => {
     leaderboard: buildLeaderboard(),
     recentMatches: buildRecentFinishedMatches(),
     room: activeSession?.room_code ? buildRoomSnapshot(activeSession.room_code) : null,
-    match: activeSession?.room_code ? buildMatchSnapshot(activeSession.room_code) : null
+    match: activeSession?.room_code ? buildMatchSnapshot(activeSession.room_code) : null,
+    gameView: activeSession?.room_code ? buildGameView(activeSession.room_code, activeSession.profile_id) : null
   });
 });
 
@@ -1665,7 +1842,8 @@ app.get("/api/rooms/:roomCode", (req, res) => {
   res.json({
     clientInstanceId: clientInstance.token,
     room,
-    match: buildMatchSnapshot(roomCode)
+    match: buildMatchSnapshot(roomCode),
+    gameView: buildGameView(roomCode, sessionForInstance(clientInstance.id)?.profile_id || null)
   });
 });
 
@@ -1702,7 +1880,8 @@ app.post("/api/session/select-profile", (req, res) => {
     profiles: listProfilesForBrowser(browserContainer.token),
     rooms: listPublicRooms(),
     room: session.room_code ? buildRoomSnapshot(session.room_code) : null,
-    match: session.room_code ? buildMatchSnapshot(session.room_code) : null
+    match: session.room_code ? buildMatchSnapshot(session.room_code) : null,
+    gameView: session.room_code ? buildGameView(session.room_code, session.profile_id) : null
   });
 });
 
@@ -1737,13 +1916,20 @@ io.on("connection", (socket) => {
     emitRoomState(session.room_code);
   });
 
-  socket.on("room:create", ({ title, isPublic }, ack) => {
+  socket.on("room:create", ({ title, isPublic, gameType, config }, ack) => {
     ackHandler(ack, () => {
       const session = requireSession(socket);
-      const room = createRoomForSession(session, String(title || "").trim().slice(0, 32) || "Untitled Room", !!isPublic, socket);
+      const room = createRoomForSession(
+        session,
+        String(title || "").trim().slice(0, 32) || "Untitled Room",
+        !!isPublic,
+        socket,
+        String(gameType || "blokus"),
+        config
+      );
       socket.data.session = sessionForInstance(session.client_instance_id);
       emitRoomState(room.code);
-      return roomAndMatchPayload(room.code);
+      return roomAndMatchPayload(room.code, session.profile_id);
     });
   });
 
@@ -1753,7 +1939,7 @@ io.on("connection", (socket) => {
       const room = joinRoomAs(session, String(roomCode || "").toUpperCase(), "player", socket);
       socket.data.session = sessionForInstance(session.client_instance_id);
       emitRoomState(room.code);
-      return roomAndMatchPayload(room.code);
+      return roomAndMatchPayload(room.code, session.profile_id);
     });
   });
 
@@ -1763,7 +1949,7 @@ io.on("connection", (socket) => {
       const room = joinRoomAs(session, String(roomCode || "").toUpperCase(), "spectator", socket);
       socket.data.session = sessionForInstance(session.client_instance_id);
       emitRoomState(room.code);
-      return roomAndMatchPayload(room.code);
+      return roomAndMatchPayload(room.code, session.profile_id);
     });
   });
 
@@ -1793,7 +1979,7 @@ io.on("connection", (socket) => {
         where room_id = ? and client_instance_id = ? and role = 'player'
       `).run(ready ? 1 : 0, room.id, session.client_instance_id);
       emitRoomState(roomCode);
-      return roomAndMatchPayload(roomCode);
+      return roomAndMatchPayload(roomCode, session.profile_id);
     });
   });
 
@@ -1802,7 +1988,17 @@ io.on("connection", (socket) => {
       const session = requireSession(socket);
       const room = setPlayerColor(roomCode, session.client_instance_id, colorIndex);
       emitRoomState(roomCode);
-      return { ...roomAndMatchPayload(roomCode), room };
+      return { ...roomAndMatchPayload(roomCode, session.profile_id), room };
+    });
+  });
+
+  socket.on("room:update-config", ({ roomCode, patch }, ack) => {
+    ackHandler(ack, () => {
+      const session = requireSession(socket);
+      if (patch?.type !== "set_color") throw new Error("Unsupported room config patch.");
+      const room = setPlayerColor(roomCode, session.client_instance_id, patch.colorIndex);
+      emitRoomState(roomCode);
+      return { ...roomAndMatchPayload(roomCode, session.profile_id), room };
     });
   });
 
@@ -1811,25 +2007,28 @@ io.on("connection", (socket) => {
       const session = requireSession(socket);
       const match = startMatch(roomCode, session.profile_id);
       emitRoomState(roomCode);
-      return { ...roomAndMatchPayload(roomCode), match };
+      return { ...roomAndMatchPayload(roomCode, session.profile_id), match };
+    });
+  });
+
+  socket.on("match:command", ({ roomCode, command }, ack) => {
+    ackHandler(ack, () => {
+      const session = requireSession(socket);
+      const match = handleMatchCommand(roomCode, session.profile_id, command);
+      emitRoomState(roomCode);
+      return { ...roomAndMatchPayload(roomCode, session.profile_id), match };
     });
   });
 
   socket.on("match:place", ({ roomCode, move }, ack) => {
     ackHandler(ack, () => {
       const session = requireSession(socket);
-      const match = placeMove(roomCode, session.profile_id, move);
+      const match = handleMatchCommand(roomCode, session.profile_id, {
+        commandType: "place_piece",
+        commandPayload: move
+      });
       emitRoomState(roomCode);
-      return { ...roomAndMatchPayload(roomCode), match };
-    });
-  });
-
-  socket.on("match:pass", ({ roomCode }, ack) => {
-    ackHandler(ack, () => {
-      const session = requireSession(socket);
-      const match = passTurn(roomCode, session.profile_id);
-      emitRoomState(roomCode);
-      return { ...roomAndMatchPayload(roomCode), match };
+      return { ...roomAndMatchPayload(roomCode, session.profile_id), match };
     });
   });
 
@@ -1838,7 +2037,7 @@ io.on("connection", (socket) => {
       const session = requireSession(socket);
       const room = rematchRoom(roomCode, session.profile_id);
       emitRoomState(roomCode);
-      return { ...roomAndMatchPayload(roomCode), room, match: null };
+      return { ...roomAndMatchPayload(roomCode, session.profile_id), room, match: null, gameView: buildGameView(roomCode, session.profile_id) };
     });
   });
 
@@ -1852,6 +2051,23 @@ io.on("connection", (socket) => {
       set connection_state = 'offline', disconnected_at = ?
       where room_id = ? and client_instance_id = ?
     `).run(nowIso(), room.id, session.client_instance_id);
+    const member = db.prepare(`
+      select *
+      from room_members
+      where room_id = ? and client_instance_id = ?
+    `).get(room.id, session.client_instance_id);
+    const currentMatch = getActiveMatch(room.id);
+    if (member?.role === "player" && currentMatch) {
+      upsertReconnectLease(room, currentMatch, member);
+      const driver = roomDriver(room);
+      const players = getOrderedMatchPlayers(currentMatch.id);
+      const events = [];
+      const result = driver.onDisconnect(currentMatch, players, member.profile_id, (profileId, eventType, payload) => {
+        events.push({ profileId, eventType, payload });
+      });
+      result.events = events;
+      applyDriverMutation(room, currentMatch, result);
+    }
     transferHost(room);
     reconcileRoomLifecycle(room.id);
     emitRoomState(room.code);

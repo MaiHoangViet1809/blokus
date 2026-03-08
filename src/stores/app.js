@@ -5,10 +5,21 @@ const API_HEADERS = {
   "Content-Type": "application/json"
 };
 
+const CLIENT_INSTANCE_STORAGE_KEY = "blokus-client-instance-id";
+const LEGACY_BROWSER_TOKEN_KEY = "blokus-device-token";
+const LEGACY_SESSION_TOKEN_KEY = "blokus-session-token";
+
+function makeClientInstanceId() {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return `client_${crypto.randomUUID()}`;
+  }
+  return `client_${Math.random().toString(16).slice(2)}${Date.now().toString(16)}`;
+}
+
 export const useAppStore = defineStore("app", {
   state: () => ({
-    deviceToken: localStorage.getItem("blokus-device-token") || "",
-    sessionToken: localStorage.getItem("blokus-session-token") || "",
+    legacyBrowserToken: localStorage.getItem(LEGACY_BROWSER_TOKEN_KEY) || "",
+    clientInstanceId: sessionStorage.getItem(CLIENT_INSTANCE_STORAGE_KEY) || "",
     profiles: [],
     session: null,
     rooms: [],
@@ -16,6 +27,7 @@ export const useAppStore = defineStore("app", {
     recentMatches: [],
     room: null,
     match: null,
+    gameView: null,
     replay: null,
     socket: null,
     connected: false,
@@ -36,23 +48,46 @@ export const useAppStore = defineStore("app", {
       return state.room.members.find((member) => member.profileId === state.session.profileId) || null;
     },
     currentMatchPlayer(state) {
-      if (!state.match || !state.session) return null;
-      return state.match.players.find((player) => player.profileId === state.session.profileId) || null;
+      if (!state.gameView || !state.session) return null;
+      return state.gameView.players?.find((player) => player.profileId === state.session.profileId) || null;
     }
   },
   actions: {
-    persistTokens() {
-      if (this.deviceToken) localStorage.setItem("blokus-device-token", this.deviceToken);
-      if (this.sessionToken) localStorage.setItem("blokus-session-token", this.sessionToken);
-      if (!this.sessionToken) localStorage.removeItem("blokus-session-token");
+    ensureClientInstanceId() {
+      if (!this.clientInstanceId) {
+        this.clientInstanceId = makeClientInstanceId();
+        sessionStorage.setItem(CLIENT_INSTANCE_STORAGE_KEY, this.clientInstanceId);
+      }
+      return this.clientInstanceId;
+    },
+    syncClientInstanceId(nextId) {
+      const normalized = String(nextId || "").trim();
+      if (!normalized) return this.ensureClientInstanceId();
+      if (normalized !== this.clientInstanceId) {
+        this.clientInstanceId = normalized;
+        sessionStorage.setItem(CLIENT_INSTANCE_STORAGE_KEY, normalized);
+      }
+      if (this.socket) {
+        this.socket.auth = {
+          clientInstanceId: normalized,
+          browserTokenFallback: this.legacyBrowserToken
+        };
+      }
+      return normalized;
+    },
+    clearLegacySessionToken() {
+      localStorage.removeItem(LEGACY_SESSION_TOKEN_KEY);
     },
     async api(path, options = {}) {
       const response = await fetch(path, {
+        credentials: "same-origin",
         ...options,
         headers: {
           ...API_HEADERS,
-          "x-device-token": this.deviceToken,
-          "x-session-token": this.sessionToken,
+          "x-client-instance-id": this.ensureClientInstanceId(),
+          ...(this.legacyBrowserToken
+            ? { "x-browser-token-fallback": this.legacyBrowserToken }
+            : {}),
           ...(options.headers || {})
         }
       });
@@ -60,14 +95,18 @@ export const useAppStore = defineStore("app", {
       if (!response.ok) {
         throw new Error(data.message || "Request failed");
       }
-      if (data.deviceToken) this.deviceToken = data.deviceToken;
-      if (data.sessionToken !== undefined) this.sessionToken = data.sessionToken || "";
-      this.persistTokens();
+      if (data.clientInstanceId) {
+        this.syncClientInstanceId(data.clientInstanceId);
+      }
+      this.clearLegacySessionToken();
       return data;
     },
     applyBootstrap(data) {
-      this.deviceToken = data.deviceToken || this.deviceToken;
-      this.sessionToken = data.sessionToken || "";
+      if (data.clientInstanceId) {
+        this.syncClientInstanceId(data.clientInstanceId);
+      } else {
+        this.ensureClientInstanceId();
+      }
       this.session = data.session || null;
       this.profiles = data.profiles || [];
       this.rooms = data.rooms || [];
@@ -75,7 +114,7 @@ export const useAppStore = defineStore("app", {
       this.recentMatches = data.recentMatches || [];
       this.room = data.room || null;
       this.match = data.match || null;
-      this.persistTokens();
+      this.gameView = data.gameView || null;
     },
     async bootstrap() {
       this.loading = true;
@@ -83,50 +122,97 @@ export const useAppStore = defineStore("app", {
         const data = await this.api("/api/bootstrap", { method: "GET" });
         this.applyBootstrap(data);
         this.ensureSocket();
+        await this.waitForSocketReady().catch(() => {});
       } finally {
         this.loading = false;
         this.hydrationDone = true;
       }
     },
     ensureSocket() {
-      if (this.socket) return;
-      this.socket = io("/", {
-        autoConnect: false,
-        auth: () => ({
-          sessionToken: this.sessionToken,
-          deviceToken: this.deviceToken
-        })
-      });
-      this.socket.on("connect", () => {
-        this.connected = true;
-        this.socket.emit("session:resume");
-      });
-      this.socket.on("disconnect", () => {
-        this.connected = false;
-      });
-      this.socket.on("state:room", (room) => {
-        if (this.room?.code === room.code) {
-          this.room = room;
+      const clientInstanceId = this.ensureClientInstanceId();
+      if (!this.socket) {
+        this.socket = io("/", {
+          autoConnect: false,
+          withCredentials: true,
+          auth: () => ({
+            clientInstanceId,
+            browserTokenFallback: this.legacyBrowserToken
+          })
+        });
+        this.socket.on("connect", () => {
+          this.connected = true;
+          this.socket.emit("session:resume");
+        });
+        this.socket.on("disconnect", () => {
+          this.connected = false;
+        });
+        this.socket.on("connect_error", (error) => {
+          this.connected = false;
+          this.error = error.message || "Realtime connection failed";
+        });
+        this.socket.on("state:room", (room) => {
+          if (this.room?.code === room.code) {
+            this.room = room;
+          }
+          this.fetchRooms().catch(() => {});
+        });
+        this.socket.on("state:match", (payload) => {
+          if (this.room?.code === payload?.match?.roomCode) {
+            this.match = payload.match;
+            this.gameView = payload.gameView || null;
+          }
+          if (payload?.match?.status === "finished") {
+            this.fetchLeaderboard().catch(() => {});
+            this.fetchRecentMatches().catch(() => {});
+          }
+        });
+        this.socket.on("error", (payload) => {
+          this.error = payload?.message || "Unexpected error";
+        });
+      }
+      this.socket.auth = {
+        clientInstanceId: this.clientInstanceId,
+        browserTokenFallback: this.legacyBrowserToken
+      };
+      if (!this.socket.connected && !this.socket.active) {
+        this.socket.connect();
+      }
+      return this.socket;
+    },
+    waitForSocketReady() {
+      const socket = this.ensureSocket();
+      if (socket.connected) {
+        return Promise.resolve(socket);
+      }
+      return new Promise((resolve, reject) => {
+        const cleanup = () => {
+          clearTimeout(timer);
+          socket.off("connect", handleConnect);
+          socket.off("connect_error", handleError);
+        };
+        const handleConnect = () => {
+          cleanup();
+          resolve(socket);
+        };
+        const handleError = (error) => {
+          cleanup();
+          reject(error);
+        };
+        const timer = window.setTimeout(() => {
+          cleanup();
+          reject(new Error("Timed out"));
+        }, 5000);
+        socket.on("connect", handleConnect);
+        socket.on("connect_error", handleError);
+        if (!socket.active) {
+          socket.connect();
         }
-        this.fetchRooms();
       });
-      this.socket.on("state:match", (match) => {
-        if (this.room?.code === match.roomCode) {
-          this.match = match;
-        }
-        if (match?.status === "finished") {
-          this.fetchLeaderboard();
-          this.fetchRecentMatches();
-        }
-      });
-      this.socket.on("error", (payload) => {
-        this.error = payload?.message || "Unexpected error";
-      });
-      this.socket.connect();
     },
     async fetchRooms() {
       const data = await this.api("/api/rooms", { method: "GET" });
       this.rooms = data.rooms || [];
+      return data;
     },
     async fetchLeaderboard() {
       const data = await this.api("/api/leaderboard", { method: "GET" });
@@ -142,6 +228,7 @@ export const useAppStore = defineStore("app", {
       const data = await this.api(`/api/rooms/${roomCode}`, { method: "GET" });
       this.room = data.room;
       this.match = data.match;
+      this.gameView = data.gameView || null;
       this.replay = null;
       return data;
     },
@@ -165,16 +252,16 @@ export const useAppStore = defineStore("app", {
       });
       this.applyBootstrap(data);
       this.ensureSocket();
+      return data.session;
     },
-    emit(event, payload = {}) {
+    async emit(event, payload = {}) {
       this.error = "";
+      const socket = this.ensureSocket();
+      await this.waitForSocketReady();
       return new Promise((resolve, reject) => {
-        if (!this.socket) {
-          reject(new Error("Socket not connected"));
-          return;
-        }
-        this.socket.timeout(5000).emit(event, payload, (err, response) => {
+        socket.timeout(5000).emit(event, payload, (err, response) => {
           if (err) {
+            this.error = "Timed out";
             reject(new Error("Timed out"));
             return;
           }
@@ -184,8 +271,9 @@ export const useAppStore = defineStore("app", {
             reject(new Error(message));
             return;
           }
-          if (response.room) this.room = response.room;
+          if (response.room !== undefined) this.room = response.room;
           if (response.match !== undefined) this.match = response.match;
+          if (response.gameView !== undefined) this.gameView = response.gameView;
           if (response.rooms) this.rooms = response.rooms;
           if (response.leaderboard) this.leaderboard = response.leaderboard;
           if (response.recentMatches) this.recentMatches = response.recentMatches;
@@ -193,8 +281,8 @@ export const useAppStore = defineStore("app", {
         });
       });
     },
-    async createRoom(title, isPublic) {
-      const response = await this.emit("room:create", { title, isPublic });
+    async createRoom(title, isPublic, gameType = "blokus", config = {}) {
+      const response = await this.emit("room:create", { title, isPublic, gameType, config });
       return response.room;
     },
     async joinRoom(roomCode) {
@@ -208,6 +296,7 @@ export const useAppStore = defineStore("app", {
       const response = await this.emit("room:leave", { roomCode });
       this.room = null;
       this.match = null;
+      this.gameView = null;
       this.replay = null;
       return response;
     },
@@ -218,10 +307,22 @@ export const useAppStore = defineStore("app", {
       return this.emit("room:start", { roomCode: this.room?.code });
     },
     async placeMove(move) {
-      return this.emit("match:place", { roomCode: this.room?.code, move });
+      return this.emit("match:command", {
+        roomCode: this.room?.code,
+        command: {
+          commandType: "place_piece",
+          commandPayload: move
+        }
+      });
     },
     async passTurn() {
-      return this.emit("match:pass", { roomCode: this.room?.code });
+      return this.emit("match:command", {
+        roomCode: this.room?.code,
+        command: {
+          commandType: "pass_turn",
+          commandPayload: {}
+        }
+      });
     },
     async rematch() {
       return this.emit("match:rematch", { roomCode: this.room?.code });
