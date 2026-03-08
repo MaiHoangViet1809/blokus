@@ -164,6 +164,13 @@ export const useAppStore = defineStore("app", {
           }
           this.fetchRooms().catch(() => {});
         });
+        this.socket.on("state:room-view", (payload) => {
+          if (!payload?.room || this.room?.code !== payload.room.code) return;
+          this.room = payload.room;
+          if (payload.gameView !== undefined) {
+            this.gameView = payload.gameView;
+          }
+        });
         this.socket.on("state:match", (payload) => {
           if (this.room?.code === payload?.match?.roomCode) {
             this.match = payload.match;

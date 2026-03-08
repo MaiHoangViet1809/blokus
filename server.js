@@ -676,7 +676,7 @@ function transferHost(room) {
     return;
   }
   const current = members.find((member) => member.profile_id === room.host_profile_id);
-  if (current && current.connection_state === "online") return;
+  if (current) return;
   const replacement = members.find((member) => member.connection_state === "online") || members[0];
   db.prepare("update rooms set host_profile_id = ? where id = ?").run(replacement.profile_id, room.id);
 }
@@ -1748,18 +1748,22 @@ async function emitRoomState(roomCode) {
   const room = buildRoomSnapshot(roomCode);
   if (!room) return;
   io.emit("state:room", room);
-  io.to(roomCode).emit("state:room", room);
   const sockets = await io.in(roomCode).fetchSockets();
   const match = buildMatchSnapshot(roomCode);
-  if (match) {
-    sockets.forEach((socket) => {
-      const viewerProfileId = socket.data.session?.profile_id || null;
+  sockets.forEach((socket) => {
+    const viewerProfileId = socket.data.session?.profile_id || null;
+    const gameView = buildGameView(roomCode, viewerProfileId);
+    socket.emit("state:room-view", {
+      room,
+      gameView
+    });
+    if (match) {
       socket.emit("state:match", {
         match,
-        gameView: buildGameView(roomCode, viewerProfileId)
+        gameView
       });
-    });
-  }
+    }
+  });
 }
 
 function requireSession(socket) {

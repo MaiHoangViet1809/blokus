@@ -344,6 +344,72 @@ driver policy decides:
 - `HomeView.vue` already has local uncommitted edits and must be merged carefully.
 - Room and match are distinct resources now, so navigation and hydration must not assume one route can own both.
 - Existing replay/history payloads must keep working while the router responsibility moves.
+
+---
+
+## Extension: Staging Realtime Sync and Host Ownership Preservation
+
+- **Status**: APPROVED
+- **Approved-By**: Viet
+
+### Summary
+- **Task**: Fix staging-room realtime updates so seat/slot changes appear without refresh, and preserve host ownership across transient browser refresh/disconnect.
+- **Location**:
+  - `/Users/maihoangviet/Projects/blokus/server.js`
+  - `/Users/maihoangviet/Projects/blokus/src/stores/app.js`
+  - `/Users/maihoangviet/Projects/blokus/plan_todo/codex/SOW_0007_multi_board_game_platform_refactor.md`
+- **Why**: After the platform-first route split, joining a `PREPARE` room no longer refreshes the setup slot view for existing viewers, and a host browser refresh can incorrectly transfer host ownership to another member.
+
+### As-Is Diagram (ASCII)
+```text
+PREPARE join
+  -> room member inserted
+  -> server emits room snapshot only
+  -> client updates room but not setup gameView
+  -> slot grid stays stale
+
+Host refresh
+  -> socket disconnect
+  -> host marked offline
+  -> transferHost() runs immediately
+  -> another member becomes host
+  -> original host reconnects without reclaiming host role
+```
+
+### To-Be Diagram (ASCII)
+```text
+PREPARE join
+  -> room member inserted
+  -> server emits room snapshot + setup gameView to room viewers
+  -> client updates room and setup state together
+  -> slot grid reflects seat/color/ready changes immediately
+
+Host refresh
+  -> socket disconnect
+  -> host marked offline
+  -> host role remains reserved during grace/reconnect window
+  -> reconnect restores same host ownership
+  -> host transfer only happens when the host truly leaves or expires
+```
+
+### Deliverables
+- Preserve host ownership during transient disconnects by changing host-transfer behavior.
+- Add a room-view realtime payload for room viewers that includes setup `gameView`.
+- Update the client store to consume setup room-view payloads without requiring a manual refresh.
+
+### Done Criteria
+- A second player joining a `PREPARE` room appears in the host’s slot grid without page refresh.
+- Refreshing the host page does not transfer host ownership to another player.
+- `node --check server.js` passes.
+- `npm run build` passes.
+
+### Out-of-Scope
+- Fixing the separate `client_instances.token` uniqueness bug.
+- Redesigning the room/member identity model.
+
+### Cautions / Risks
+- Host transfer must still work for explicit leave and real expiry/removal.
+- Realtime room updates must not regress the public room list flow.
 - Replacing SQLite.
 - Large visual redesign outside what is required to separate generic room shell and Blokus game views.
 
