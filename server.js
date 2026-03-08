@@ -944,6 +944,8 @@ function buildRoomSummary(room) {
     config: parseRoomConfig(freshRoom),
     hostProfileId: freshRoom.host_profile_id,
     hostName: host?.name || null,
+    capacity: MAX_PLAYERS,
+    currentMatchId: currentMatch?.id || null,
     currentMatchStatus: currentMatch?.status || null,
     resumeDeadlineAt: freshRoom.phase === ROOM_PHASES.SUSPENDED ? ttlDeadline(freshRoom.suspended_at, GRACE_MS) : null,
     playerCount: members.filter((member) => member.role === "player").length,
@@ -1040,6 +1042,18 @@ function buildGameView(roomCode, viewerProfileId = null) {
   return driver.projectMatch(room, match, players, viewerProfileId);
 }
 
+function buildMatchLivePayload(matchId, viewerProfileId = null) {
+  const match = getMatchById(matchId);
+  if (!match) return null;
+  const room = db.prepare("select * from rooms where id = ?").get(match.room_id);
+  if (!room) return null;
+  return {
+    room: buildRoomSnapshot(room.code),
+    match: buildMatchSnapshot(room.code),
+    gameView: buildGameView(room.code, viewerProfileId)
+  };
+}
+
 function buildFinishedMatchSummary(match, room) {
   const players = getOrderedMatchPlayers(match.id);
   const winner = players.find((player) => player.profile_id === match.winner_profile_id);
@@ -1131,13 +1145,13 @@ function buildRecentFinishedMatches(limit = 12) {
   }));
 }
 
-function listPublicRooms() {
+function listPublicRooms(gameType = null) {
   return db.prepare(`
     select *
     from rooms
-    where is_public = 1 and phase != ?
+    where is_public = 1 and phase != ? and (? is null or game_type = ?)
     order by created_at desc
-  `).all(ROOM_PHASES.ARCHIVED).map(buildRoomSummary).filter(Boolean);
+  `).all(ROOM_PHASES.ARCHIVED, gameType, gameType).map(buildRoomSummary).filter(Boolean);
 }
 
 function ensureRoomCodeUnique() {
@@ -1721,11 +1735,12 @@ function rematchRoom(roomCode, profileId) {
 }
 
 function roomAndMatchPayload(roomCode, viewerProfileId = null) {
+  const room = buildRoomSnapshot(roomCode);
   return {
-    room: buildRoomSnapshot(roomCode),
+    room,
     match: buildMatchSnapshot(roomCode),
     gameView: buildGameView(roomCode, viewerProfileId),
-    rooms: listPublicRooms()
+    rooms: listPublicRooms(room?.gameType || null)
   };
 }
 
@@ -1788,7 +1803,7 @@ app.get("/api/bootstrap", (req, res) => {
     clientInstanceId: clientInstance.token,
     session: sessionPayload(activeSession),
     profiles: listProfilesForBrowser(browserContainer.token),
-    rooms: listPublicRooms(),
+    rooms: listPublicRooms(activeSession?.room_code ? getRoomByCode(activeSession.room_code)?.game_type || null : null),
     leaderboard: buildLeaderboard(),
     recentMatches: buildRecentFinishedMatches(),
     room: activeSession?.room_code ? buildRoomSnapshot(activeSession.room_code) : null,
@@ -1799,7 +1814,8 @@ app.get("/api/bootstrap", (req, res) => {
 
 app.get("/api/rooms", (req, res) => {
   const { clientInstance } = resolveViewer(req, res);
-  res.json({ clientInstanceId: clientInstance.token, rooms: listPublicRooms() });
+  const requestedGameType = String(req.query.gameType || "").trim() || null;
+  res.json({ clientInstanceId: clientInstance.token, rooms: listPublicRooms(requestedGameType) });
 });
 
 app.get("/api/leaderboard", (req, res) => {
@@ -1828,6 +1844,20 @@ app.get("/api/matches/:matchId", (req, res) => {
   res.json({
     clientInstanceId: clientInstance.token,
     replay
+  });
+});
+
+app.get("/api/matches/:matchId/live", (req, res) => {
+  const { clientInstance } = resolveViewer(req, res);
+  const session = sessionForInstance(clientInstance.id);
+  const payload = buildMatchLivePayload(String(req.params.matchId || ""), session?.profile_id || null);
+  if (!payload?.match) {
+    res.status(404).json({ message: "Match not found." });
+    return;
+  }
+  res.json({
+    clientInstanceId: clientInstance.token,
+    ...payload
   });
 });
 

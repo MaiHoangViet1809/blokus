@@ -238,6 +238,112 @@ driver policy decides:
 - Adding a second concrete game implementation.
 - External plugin loading for drivers.
 - Full account/auth redesign.
+
+---
+
+## Extension: Platform-First Router and View Redesign
+
+- **Status**: APPROVED
+- **Approved-By**: Viet
+
+### Summary
+- **Task**: Rework the SPA navigation into a platform-first flow where `/` is the universal lobby, room creation moves to `/games/:gameType`, room staging lives at `/rooms/:roomCode`, and live/replay are split onto `/matches/:matchId...`.
+- **Location**:
+  - `/Users/maihoangviet/Projects/blokus/server.js`
+  - `/Users/maihoangviet/Projects/blokus/src/App.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/router.js`
+  - `/Users/maihoangviet/Projects/blokus/src/stores/app.js`
+  - `/Users/maihoangviet/Projects/blokus/src/views/HomeView.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/views/RoomView.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/views/`
+  - `/Users/maihoangviet/Projects/blokus/src/games/`
+  - `/Users/maihoangviet/Projects/blokus/src/style.css`
+  - `/Users/maihoangviet/Projects/blokus/plan_todo/codex/SOW_0007_multi_board_game_platform_refactor.md`
+- **Why**: The platform is still room-first and Blokus-shaped. Multi-game support needs platform-first navigation: choose a game, browse matching rooms in a table, create a room from a per-game page, and treat live matches as separate resources from staging rooms.
+
+### As-Is Diagram (ASCII)
+```text
+/
+  -> HomeView
+     -> profiles
+     -> create room
+     -> join by code
+     -> public rooms
+     -> leaderboard / recent
+
+/rooms/:roomCode
+  -> RoomView
+     -> prepare
+     -> live
+     -> history
+     -> replay
+```
+
+### To-Be Diagram (ASCII)
+```text
+/
+  -> PlatformLobbyView
+     -> profiles
+     -> game selector/filter
+     -> room table
+     -> row actions: Join / Watch
+     -> Create room -> /games/:gameType
+
+/games/:gameType
+  -> GameLobbyView
+     -> per-game create room flow
+
+/rooms/:roomCode
+  -> RoomStagingView
+     -> room shell
+     -> seats / ready / spectators
+     -> game setup only
+
+/matches/:matchId
+  -> MatchLiveView
+     -> live gameplay only
+
+/matches/:matchId/replay
+  -> MatchReplayView
+     -> replay only
+```
+
+### Deliverables
+- Replace the current room-first router with platform-first routes:
+  - `/`
+  - `/games/:gameType`
+  - `/rooms/:roomCode`
+  - `/matches/:matchId`
+  - `/matches/:matchId/replay`
+- Rebuild `/` into a platform lobby with:
+  - profile section
+  - active game selector/filter
+  - compact room table filtered by selected game
+  - `Join` / `Watch` actions in each room row
+- Move room creation off `/` and into `/games/:gameType`.
+- Make `/rooms/:roomCode` staging-only.
+- Make `/matches/:matchId` live-only and `/matches/:matchId/replay` replay-only.
+- Update store/API usage so room tables and match routes can hydrate from game-aware platform payloads.
+
+### Done Criteria
+- `/` shows profiles, a game selector/filter, and a room table filtered by the selected game.
+- Room rows expose `Join` and `Watch` in the same row.
+- `Create room` from `/` navigates to `/games/:gameType`.
+- `/rooms/:roomCode` no longer owns live/replay responsibility.
+- `/matches/:matchId` renders live play and `/matches/:matchId/replay` renders replay.
+- Browser refresh on each route restores the same resource view.
+- `node --check server.js` passes.
+- `npm run build` passes.
+
+### Out-of-Scope
+- Adding a second game implementation.
+- Reworking the underlying reconnect/session model beyond what routing/state hydration needs.
+- New leaderboard/rankings routes beyond preserving existing data access.
+
+### Cautions / Risks
+- `HomeView.vue` already has local uncommitted edits and must be merged carefully.
+- Room and match are distinct resources now, so navigation and hydration must not assume one route can own both.
+- Existing replay/history payloads must keep working while the router responsibility moves.
 - Replacing SQLite.
 - Large visual redesign outside what is required to separate generic room shell and Blokus game views.
 

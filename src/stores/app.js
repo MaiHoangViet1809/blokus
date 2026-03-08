@@ -8,6 +8,7 @@ const API_HEADERS = {
 const CLIENT_INSTANCE_STORAGE_KEY = "blokus-client-instance-id";
 const LEGACY_BROWSER_TOKEN_KEY = "blokus-device-token";
 const LEGACY_SESSION_TOKEN_KEY = "blokus-session-token";
+const ACTIVE_GAME_STORAGE_KEY = "board-platform-active-game";
 
 function makeClientInstanceId() {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -20,6 +21,7 @@ export const useAppStore = defineStore("app", {
   state: () => ({
     legacyBrowserToken: localStorage.getItem(LEGACY_BROWSER_TOKEN_KEY) || "",
     clientInstanceId: sessionStorage.getItem(CLIENT_INSTANCE_STORAGE_KEY) || "",
+    activeGameType: localStorage.getItem(ACTIVE_GAME_STORAGE_KEY) || "blokus",
     profiles: [],
     session: null,
     rooms: [],
@@ -77,6 +79,12 @@ export const useAppStore = defineStore("app", {
     },
     clearLegacySessionToken() {
       localStorage.removeItem(LEGACY_SESSION_TOKEN_KEY);
+    },
+    setActiveGameType(gameType) {
+      const normalized = String(gameType || "").trim() || "blokus";
+      this.activeGameType = normalized;
+      localStorage.setItem(ACTIVE_GAME_STORAGE_KEY, normalized);
+      return normalized;
     },
     async api(path, options = {}) {
       const response = await fetch(path, {
@@ -209,8 +217,9 @@ export const useAppStore = defineStore("app", {
         }
       });
     },
-    async fetchRooms() {
-      const data = await this.api("/api/rooms", { method: "GET" });
+    async fetchRooms(gameType = this.activeGameType) {
+      const query = gameType ? `?gameType=${encodeURIComponent(gameType)}` : "";
+      const data = await this.api(`/api/rooms${query}`, { method: "GET" });
       this.rooms = data.rooms || [];
       return data;
     },
@@ -230,6 +239,19 @@ export const useAppStore = defineStore("app", {
       this.match = data.match;
       this.gameView = data.gameView || null;
       this.replay = null;
+      if (data.room?.gameType) {
+        this.setActiveGameType(data.room.gameType);
+      }
+      return data;
+    },
+    async fetchMatch(matchId) {
+      const data = await this.api(`/api/matches/${matchId}/live`, { method: "GET" });
+      this.room = data.room || null;
+      this.match = data.match || null;
+      this.gameView = data.gameView || null;
+      if (data.room?.gameType) {
+        this.setActiveGameType(data.room.gameType);
+      }
       return data;
     },
     async fetchReplay(matchId) {
