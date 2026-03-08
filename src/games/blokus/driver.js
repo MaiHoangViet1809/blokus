@@ -356,7 +356,7 @@ export function createBlokusDriver() {
         },
         matchPlayers: players.map((player, index) => ({
           id: makeId("match_player"),
-          profileId: player.profile_id,
+          profile_id: player.profile_id,
           seatIndex: player.seat_index ?? index,
           colorIndex: player.chosen_color_index,
           hasMoved: 0,

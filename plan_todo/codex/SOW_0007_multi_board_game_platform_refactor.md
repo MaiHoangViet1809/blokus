@@ -579,6 +579,56 @@ Row 4
 - App-bar context must stay room-scoped, not Blokus-scoped.
 - Hover detail must not break viewport-fit constraints.
 - `last online` must come from a stable room snapshot field.
+
+---
+
+## Extension: Match Start Driver Contract Fix
+
+- **Status**: APPROVED
+- **Approved-By**: Viet
+
+### Summary
+- **Task**: Fix the driver/platform contract mismatch in match creation so `room:start` inserts valid `match_players.profile_id` values.
+- **Location**:
+  - `/Users/maihoangviet/Projects/blokus/server.js`
+  - `/Users/maihoangviet/Projects/blokus/src/games/blokus/driver.js`
+  - `/Users/maihoangviet/Projects/blokus/plan_todo/codex/SOW_0007_multi_board_game_platform_refactor.md`
+- **Why**: The platform and Blokus driver disagree on the `matchPlayers` field name for player identity, causing `SQLITE_CONSTRAINT_NOTNULL` when a match starts.
+
+### As-Is Diagram (ASCII)
+```text
+room:start
+  -> driver.createMatch()
+  -> matchPlayers[{ profileId, seatIndex, ... }]
+  -> server inserts player.profile_id
+  -> undefined written
+  -> sqlite NOT NULL constraint failure
+```
+
+### To-Be Diagram (ASCII)
+```text
+room:start
+  -> driver.createMatch()
+  -> matchPlayers contract matches platform expectation
+  -> server inserts valid profile_id values
+  -> match starts successfully
+```
+
+### Deliverables
+- Align `matchPlayers` identity fields between platform and Blokus driver.
+- Restore successful `room:start` inserts into `match_players`.
+
+### Done Criteria
+- Starting a match no longer raises `NOT NULL constraint failed: match_players.profile_id`.
+- `node --check server.js` passes.
+- `npm run build` passes.
+
+### Out-of-Scope
+- Broader driver API redesign.
+- Unrelated session/bootstrap bugs.
+
+### Cautions / Risks
+- The `matchPlayers` contract must stay consistent for future drivers.
 - Replacing SQLite.
 - Large visual redesign outside what is required to separate generic room shell and Blokus game views.
 
