@@ -722,6 +722,61 @@ Match-to-room flow
 - Replacing SQLite.
 - Large visual redesign outside what is required to separate generic room shell and Blokus game views.
 
+---
+
+## Extension: Single-Source Room Staging Controls
+
+- **Status**: APPROVED
+- **Approved-By**: Viet
+
+### Summary
+- **Task**: Remove duplicated staging controls so each room-staging action appears in exactly one place.
+- **Location**:
+  - `/Users/maihoangviet/Projects/blokus/src/views/RoomView.vue`
+  - `/Users/maihoangviet/Projects/blokus/plan_todo/codex/SOW_0007_multi_board_game_platform_refactor.md`
+- **Why**: The recent staging/control refactors left `Ready/Unready` exposed both in the room header and in the staging table, which makes the lobby harder to scan and violates the one-action-one-location rule.
+
+### As-Is Diagram (ASCII)
+```text
+Room header
+  -> [Ready] [Start] [Leave]
+
+Staging table row
+  -> [Ready] again for current player row
+
+Result:
+  same action appears in 2 places
+```
+
+### To-Be Diagram (ASCII)
+```text
+Room header
+  -> [Ready/Unready] [Start] [Leave] [Rematch]
+
+Staging table row
+  -> row-local actions only
+     [Take seat] for open slot
+     no duplicate ready toggle
+```
+
+### Deliverables
+- Keep `Ready/Unready` only in the room header control block.
+- Remove duplicated row-level `Ready/Unready` action from the staging table.
+- Keep row-level `Take seat` where applicable.
+
+### Done Criteria
+- In `/rooms/:roomCode`, `Ready/Unready` appears only once.
+- `Start`, `Leave`, and `Rematch` remain single-source controls.
+- Staging table still supports seat claiming.
+- `npm run build` passes.
+
+### Out-of-Scope
+- Broader staging-table redesign.
+- Live match route changes.
+
+### Cautions / Risks
+- Row actions must still make sense after removing the duplicate ready button.
+
 ### Proposed-By
 - Codex GPT-5
 

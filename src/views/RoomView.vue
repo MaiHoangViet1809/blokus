@@ -179,9 +179,7 @@ onMounted(async () => {
                       <td>
                         <div class="room-table-actions">
                           <button v-if="row.canClaimSeat && currentMember?.role !== 'player'" class="secondary" @click="claimSeat">Take seat</button>
-                          <button v-else-if="row.canToggleReady" class="secondary" @click="setReady(!row.player.isReady)">
-                            {{ row.player.isReady ? "Unready" : "Ready" }}
-                          </button>
+                          <span v-else-if="row.canToggleReady" class="muted">Use header controls</span>
                           <span v-else class="muted">Waiting</span>
                         </div>
                       </td>
