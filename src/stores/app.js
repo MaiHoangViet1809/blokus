@@ -172,8 +172,8 @@ export const useAppStore = defineStore("app", {
           }
         });
         this.socket.on("state:match", (payload) => {
-          if (this.room?.code === payload?.match?.roomCode) {
-            this.match = payload.match;
+          if (this.room?.code === payload?.roomCode) {
+            this.match = payload.match || null;
             this.gameView = payload.gameView || null;
           }
           if (payload?.match?.status === "finished") {
@@ -355,6 +355,12 @@ export const useAppStore = defineStore("app", {
     },
     async rematch() {
       return this.emit("match:rematch", { roomCode: this.room?.code });
+    },
+    async governMatch(actionType) {
+      return this.emit("match:governance", {
+        roomCode: this.room?.code,
+        actionType
+      });
     }
   }
 });

@@ -85,6 +85,7 @@ db.exec(`
     status text not null,
     turn_index integer not null,
     board_json text not null,
+    governance_json text not null default '{}',
     winner_profile_id text,
     created_at text not null,
     finished_at text
@@ -168,6 +169,10 @@ if (!columnExists("rooms", "abandoned_at")) {
 
 if (!columnExists("matches", "first_committed_at")) {
   db.exec("alter table matches add column first_committed_at text");
+}
+
+if (!columnExists("matches", "governance_json")) {
+  db.exec("alter table matches add column governance_json text not null default '{}'");
 }
 
 db.exec(`
@@ -333,6 +338,27 @@ function serializeBoard(board) {
 
 function parseBoard(boardJson) {
   return parseJson(boardJson, emptyBoard());
+}
+
+function parseGovernance(governanceJson) {
+  const parsed = parseJson(governanceJson, {});
+  return {
+    endVotes: Array.isArray(parsed.endVotes) ? parsed.endVotes : [],
+    rematchVotes: Array.isArray(parsed.rematchVotes) ? parsed.rematchVotes : []
+  };
+}
+
+function writeGovernance(matchId, governance) {
+  db.prepare("update matches set governance_json = ? where id = ?").run(JSON.stringify({
+    endVotes: governance.endVotes || [],
+    rematchVotes: governance.rematchVotes || []
+  }), matchId);
+}
+
+function toggleVote(votes, profileId) {
+  return votes.includes(profileId)
+    ? votes.filter((entry) => entry !== profileId)
+    : [...votes, profileId];
 }
 
 function totalRemainingCells(remainingPieces) {
@@ -999,6 +1025,9 @@ function buildMatchSnapshot(roomCode) {
   const match = getLatestMatch(room.id);
   if (!match) return null;
   const players = getOrderedMatchPlayers(match.id);
+  const governance = parseGovernance(match.governance_json);
+  const activeOnlinePlayerIds = activeEndVoteEligibleIds(room, match);
+  const rematchEligibleIds = rematchVoteEligibleIds(room);
   const winner = players.find((player) => player.profile_id === match.winner_profile_id);
   return {
     id: match.id,
@@ -1015,6 +1044,12 @@ function buildMatchSnapshot(roomCode) {
     createdAt: match.created_at,
     finishedAt: match.finished_at,
     moveCount: moveCount(match.id),
+    governance: {
+      endVotes: governance.endVotes,
+      rematchVotes: governance.rematchVotes,
+      endVoteEligibleCount: activeOnlinePlayerIds.length,
+      rematchVoteEligibleCount: rematchEligibleIds.length
+    },
     players: players.map((player) => ({
       profileId: player.profile_id,
       name: player.name,
@@ -1431,8 +1466,8 @@ function startMatch(roomCode, profileId) {
     abandonedAt: null
   });
   db.prepare(`
-    insert into matches (id, room_id, status, turn_index, board_json, winner_profile_id, created_at, finished_at, first_committed_at)
-    values (?, ?, ?, 0, ?, null, ?, null, null)
+    insert into matches (id, room_id, status, turn_index, board_json, governance_json, winner_profile_id, created_at, finished_at, first_committed_at)
+    values (?, ?, ?, 0, ?, '{}', null, ?, null, null)
   `).run(created.match.id, room.id, created.match.status, created.match.boardJson, created.match.createdAt);
   created.matchPlayers.forEach((player) => {
     db.prepare(`
@@ -1582,6 +1617,7 @@ function finishMatch(roomId) {
     set status = ?, winner_profile_id = ?, finished_at = ?
     where id = ?
   `).run(MATCH_STATUSES.FINISHED, winner?.profileId || null, nowIso(), match.id);
+  writeGovernance(match.id, { endVotes: [], rematchVotes: [] });
   setRoomPhase(roomId, ROOM_PHASES.FINISHED, {
     archivedAt: null,
     emptySince: null,
@@ -1715,11 +1751,7 @@ function passTurn(roomCode, profileId) {
   return syncMatchTurn(room.id);
 }
 
-function rematchRoom(roomCode, profileId) {
-  const room = getRoomByCode(roomCode);
-  if (!room) throw new Error("Room not found.");
-  if (room.host_profile_id !== profileId) throw new Error("Only the host can reset for a rematch.");
-  if (room.phase !== ROOM_PHASES.FINISHED) throw new Error("Room is not ready for rematch.");
+function prepareRoomForRematch(room) {
   setRoomPhase(room.id, ROOM_PHASES.PREPARE, {
     archivedAt: null,
     emptySince: null,
@@ -1732,6 +1764,107 @@ function rematchRoom(roomCode, profileId) {
     where room_id = ? and role = 'player'
   `).run(room.id);
   normalizeLobbySeats(room.id);
+}
+
+function activeEndVoteEligibleIds(room, match) {
+  const members = getRoomMembers(room.id);
+  return getOrderedMatchPlayers(match.id)
+    .filter((player) => player.end_state !== "abandoned")
+    .map((player) => {
+      const member = members.find((entry) => entry.profile_id === player.profile_id && entry.role === "player");
+      return member?.connection_state === "online" ? player.profile_id : null;
+    })
+    .filter(Boolean);
+}
+
+function rematchVoteEligibleIds(room) {
+  return getRoomMembers(room.id)
+    .filter((member) => member.role === "player" && member.connection_state === "online")
+    .map((member) => member.profile_id);
+}
+
+function handleMatchGovernance(roomCode, profileId, actionType) {
+  const room = getRoomByCode(roomCode);
+  if (!room) throw new Error("Room not found.");
+  const match = getLatestMatch(room.id);
+  if (!match) throw new Error("Match not found.");
+  const member = getRoomMembers(room.id).find((entry) => entry.profile_id === profileId && entry.role === "player");
+  if (!member) throw new Error("Only seated players can use match governance.");
+  const governance = parseGovernance(match.governance_json);
+
+  if (actionType === "surrender") {
+    if (![ROOM_PHASES.STARTING, ROOM_PHASES.IN_GAME, ROOM_PHASES.SUSPENDED].includes(room.phase)) {
+      throw new Error("Surrender is only available during a live match.");
+    }
+    const player = getOrderedMatchPlayers(match.id).find((entry) => entry.profile_id === profileId);
+    if (!player || player.end_state === "abandoned") {
+      throw new Error("You are not an active player in this match.");
+    }
+    db.prepare(`
+      update match_players
+      set passed = 1, disconnected = 1, end_state = 'abandoned'
+      where id = ?
+    `).run(player.id);
+    appendMove(match.id, profileId, "player_surrendered", {});
+    writeGovernance(match.id, { endVotes: [], rematchVotes: [] });
+    if (!hasFirstCommittedTurn(match)) {
+      markMatchCommitted(room.id, match.id);
+    }
+    return syncMatchTurn(room.id);
+  }
+
+  if (actionType === "vote_end_match") {
+    if (![ROOM_PHASES.STARTING, ROOM_PHASES.IN_GAME, ROOM_PHASES.SUSPENDED].includes(room.phase)) {
+      throw new Error("End voting is only available during a live match.");
+    }
+    const eligibleIds = activeEndVoteEligibleIds(room, match);
+    if (!eligibleIds.includes(profileId)) {
+      throw new Error("You are not eligible to vote on ending this match.");
+    }
+    governance.endVotes = toggleVote(governance.endVotes.filter((entry) => eligibleIds.includes(entry)), profileId);
+    writeGovernance(match.id, governance);
+    appendMove(match.id, profileId, "vote_end_match", {
+      active: governance.endVotes.includes(profileId),
+      votes: governance.endVotes.length,
+      eligible: eligibleIds.length
+    });
+    if (eligibleIds.length > 0 && eligibleIds.every((entry) => governance.endVotes.includes(entry))) {
+      return finishMatch(room.id);
+    }
+    return buildMatchSnapshot(roomCode);
+  }
+
+  if (actionType === "vote_rematch") {
+    if (room.phase !== ROOM_PHASES.FINISHED) {
+      throw new Error("Rematch voting is only available after the match finishes.");
+    }
+    const eligibleIds = rematchVoteEligibleIds(room);
+    if (!eligibleIds.includes(profileId)) {
+      throw new Error("You are not eligible to vote on a rematch.");
+    }
+    governance.rematchVotes = toggleVote(governance.rematchVotes.filter((entry) => eligibleIds.includes(entry)), profileId);
+    writeGovernance(match.id, governance);
+    appendMove(match.id, profileId, "vote_rematch", {
+      active: governance.rematchVotes.includes(profileId),
+      votes: governance.rematchVotes.length,
+      eligible: eligibleIds.length
+    });
+    if (eligibleIds.length > 0 && eligibleIds.every((entry) => governance.rematchVotes.includes(entry))) {
+      prepareRoomForRematch(room);
+      return buildMatchSnapshot(roomCode);
+    }
+    return buildMatchSnapshot(roomCode);
+  }
+
+  throw new Error("Unsupported governance action.");
+}
+
+function rematchRoom(roomCode, profileId) {
+  const room = getRoomByCode(roomCode);
+  if (!room) throw new Error("Room not found.");
+  if (room.host_profile_id !== profileId) throw new Error("Only the host can reset for a rematch.");
+  if (room.phase !== ROOM_PHASES.FINISHED) throw new Error("Room is not ready for rematch.");
+  prepareRoomForRematch(room);
   return buildRoomSnapshot(roomCode);
 }
 
@@ -1758,12 +1891,11 @@ async function emitRoomState(roomCode) {
       room,
       gameView
     });
-    if (match) {
-      socket.emit("state:match", {
-        match,
-        gameView
-      });
-    }
+    socket.emit("state:match", {
+      roomCode,
+      match,
+      gameView
+    });
   });
 }
 
@@ -2073,6 +2205,15 @@ io.on("connection", (socket) => {
       const room = rematchRoom(roomCode, session.profile_id);
       emitRoomState(roomCode);
       return { ...roomAndMatchPayload(roomCode, session.profile_id), room, match: null, gameView: buildGameView(roomCode, session.profile_id) };
+    });
+  });
+
+  socket.on("match:governance", ({ roomCode, actionType }, ack) => {
+    ackHandler(ack, () => {
+      const session = requireSession(socket);
+      const match = handleMatchGovernance(roomCode, session.profile_id, String(actionType || ""));
+      emitRoomState(roomCode);
+      return { ...roomAndMatchPayload(roomCode, session.profile_id), match };
     });
   });
 

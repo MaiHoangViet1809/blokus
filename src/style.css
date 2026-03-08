@@ -748,6 +748,20 @@ p {
   align-items: center;
 }
 
+.governance-bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: center;
+}
+
+.governance-copy {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
 .spectator-strip-panel {
   padding-block: 12px;
 }
@@ -879,6 +893,10 @@ p {
   }
 
   .match-header {
+    grid-template-columns: 1fr;
+  }
+
+  .governance-bar {
     grid-template-columns: 1fr;
   }
 

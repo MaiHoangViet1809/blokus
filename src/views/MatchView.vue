@@ -17,6 +17,27 @@ const interactiveProfileId = computed(() =>
   ["STARTING", "IN_GAME"].includes(store.room?.phase || "") ? (store.session?.profileId || "") : ""
 );
 const spectatorCount = computed(() => store.room?.members?.filter((member) => member.role === "spectator").length || 0);
+const governance = computed(() => store.match?.governance || {
+  endVotes: [],
+  rematchVotes: [],
+  endVoteEligibleCount: 0,
+  rematchVoteEligibleCount: 0
+});
+const canGovern = computed(() => store.currentMember?.role === "player");
+const hasEndVote = computed(() => governance.value.endVotes.includes(store.session?.profileId));
+const hasRematchVote = computed(() => governance.value.rematchVotes.includes(store.session?.profileId));
+const canVoteEnd = computed(() => ["STARTING", "IN_GAME", "SUSPENDED"].includes(store.room?.phase || ""));
+const canVoteRematch = computed(() => store.room?.phase === "FINISHED");
+const canSurrender = computed(() => ["STARTING", "IN_GAME", "SUSPENDED"].includes(store.room?.phase || ""));
+const reconnectStatus = computed(() => {
+  if (!store.room) return "No room";
+  if (store.room.phase === "SUSPENDED") {
+    return store.room.resumeDeadlineAt
+      ? `Suspended · resume before ${new Date(store.room.resumeDeadlineAt).toLocaleTimeString()}`
+      : "Suspended";
+  }
+  return store.connected ? "Live connection healthy" : "Realtime reconnecting";
+});
 
 async function hydrateMatch() {
   if (!store.hydrationDone) {
@@ -33,6 +54,18 @@ async function leaveRoom() {
 
 async function placeMove(move) {
   await store.placeMove(move);
+}
+
+async function surrenderMatch() {
+  await store.governMatch("surrender");
+}
+
+async function voteEndMatch() {
+  await store.governMatch("vote_end_match");
+}
+
+async function voteRematch() {
+  await store.governMatch("vote_rematch");
 }
 
 watch(() => store.room?.phase, async (phase) => {
@@ -61,6 +94,24 @@ onMounted(async () => {
         <button @click="leaveRoom">Leave</button>
       </div>
     </header>
+
+    <section class="panel governance-bar">
+      <div class="governance-copy">
+        <strong>Match controls</strong>
+        <span class="muted">{{ reconnectStatus }}</span>
+        <span class="muted">End votes {{ governance.endVotes.length }}/{{ governance.endVoteEligibleCount }}</span>
+        <span v-if="canVoteRematch" class="muted">Rematch votes {{ governance.rematchVotes.length }}/{{ governance.rematchVoteEligibleCount }}</span>
+      </div>
+      <div class="action-row">
+        <button v-if="canGovern && canSurrender" class="secondary" @click="surrenderMatch">Surrender</button>
+        <button v-if="canGovern && canVoteEnd" class="secondary" @click="voteEndMatch">
+          {{ hasEndVote ? "Retract End Vote" : "Vote End Match" }}
+        </button>
+        <button v-if="canGovern && canVoteRematch" @click="voteRematch">
+          {{ hasRematchVote ? "Retract Rematch Vote" : "Vote Rematch" }}
+        </button>
+      </div>
+    </section>
 
     <component
       :is="liveComponent"

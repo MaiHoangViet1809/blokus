@@ -629,6 +629,96 @@ room:start
 
 ### Cautions / Risks
 - The `matchPlayers` contract must stay consistent for future drivers.
+
+---
+
+## Extension: Match Governance and Match-to-Room Return Flow
+
+- **Status**: APPROVED
+- **Approved-By**: Viet
+
+### Summary
+- **Task**: Add a platform-owned governance bar to `/matches/:matchId` with leave, reconnect status, surrender, vote-end, and vote-rematch controls, and complete the route-back loop from match to room staging when the room returns to `PREPARE`.
+- **Location**:
+  - `/Users/maihoangviet/Projects/blokus/server.js`
+  - `/Users/maihoangviet/Projects/blokus/src/stores/app.js`
+  - `/Users/maihoangviet/Projects/blokus/src/views/MatchView.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/style.css`
+  - `/Users/maihoangviet/Projects/blokus/plan_todo/codex/SOW_0007_multi_board_game_platform_refactor.md`
+- **Why**: Live matches currently expose gameplay but not platform governance. The route-back to room exists only as a passive phase watcher and not as a complete user-facing match lifecycle.
+
+### As-Is Diagram (ASCII)
+```text
+/rooms/:roomCode
+  -> start
+  -> /matches/:matchId
+
+/matches/:matchId
+  -> Room staging
+  -> Replay
+  -> Leave
+
+Return flow:
+  if room.phase becomes PREPARE
+    -> client redirects back to /rooms/:roomCode
+
+Missing:
+  -> surrender
+  -> vote end
+  -> vote rematch
+  -> governance state in match payload
+```
+
+### To-Be Diagram (ASCII)
+```text
+/rooms/:roomCode
+  -> staging
+  -> start
+  -> /matches/:matchId
+
+/matches/:matchId
++--------------------------------------------------------------------------------+
+| Match header                                                                   |
++--------------------------------------------------------------------------------+
+| Governance Bar                                                                 |
+| [Leave] [Reconnect status] [Surrender] [Vote End] [Vote Rematch*]              |
+| governance state: vote counts / waiting / suspended / finished                 |
++--------------------------------------------------------------------------------+
+| Live gameplay                                                                  |
++--------------------------------------------------------------------------------+
+
+Match-to-room flow
+  -> finish / unanimous vote end / unanimous vote rematch
+  -> room returns to PREPARE
+  -> client redirects to /rooms/:roomCode
+```
+
+### Deliverables
+- Add a generic `match:governance` command path.
+- Persist governance vote state with the active match.
+- Expose governance state in `buildMatchSnapshot()`.
+- Add `surrender`, `vote_end_match`, and `vote_rematch` actions.
+- Add a governance bar to `/matches/:matchId`.
+- Preserve the route-back to `/rooms/:roomCode` once the room returns to `PREPARE`.
+
+### Done Criteria
+- `/matches/:matchId` shows governance controls and vote state.
+- Players can surrender from the live match route.
+- Players can vote to end an active match.
+- Players can vote rematch from the finished match route.
+- When rematch returns the room to `PREPARE`, the client reliably routes back to `/rooms/:roomCode`.
+- `node --check server.js` passes.
+- `npm run build` passes.
+
+### Out-of-Scope
+- In-place restart of an active live match.
+- Redesigning game-specific controls.
+- Replay redesign.
+
+### Cautions / Risks
+- Governance must remain platform-owned, not Blokus-specific.
+- Vote semantics must stay explicit and deterministic.
+- Route-back must not leave stale live match state on screen.
 - Replacing SQLite.
 - Large visual redesign outside what is required to separate generic room shell and Blokus game views.
 
