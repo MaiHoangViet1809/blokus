@@ -986,6 +986,7 @@ function buildRoomSnapshot(roomCode) {
       seatIndex: member.seat_index,
       isReady: !!member.is_ready,
       connectionState: member.connection_state,
+      disconnectedAt: member.disconnected_at || null,
       isHost: member.profile_id === freshRoom.host_profile_id
     }))
   };

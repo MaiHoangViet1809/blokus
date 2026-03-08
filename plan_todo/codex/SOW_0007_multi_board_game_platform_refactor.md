@@ -490,6 +490,95 @@ Problem:
 ### Cautions / Risks
 - The shell must not hard-code Blokus-only columns.
 - The table must remain usable within the fixed viewport.
+
+---
+
+## Extension: Room Staging Control Consolidation
+
+- **Status**: APPROVED
+- **Approved-By**: Viet
+
+### Summary
+- **Task**: Refine `/rooms/:roomCode` so the top app bar shows useful room/profile/game status, the room header centralizes staging controls, the launch control panel is removed, the staging table and room history share one `70/30` row, and spectators become a compact hoverable summary row.
+- **Location**:
+  - `/Users/maihoangviet/Projects/blokus/src/App.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/views/RoomView.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/style.css`
+  - `/Users/maihoangviet/Projects/blokus/server.js`
+  - `/Users/maihoangviet/Projects/blokus/plan_todo/codex/SOW_0007_multi_board_game_platform_refactor.md`
+- **Why**: The current room staging route spreads key controls across multiple areas and spends too much space on separate support panels. The room route should feel like a focused control screen.
+
+### As-Is Diagram (ASCII)
+```text
+Top App Bar
+  -> generic platform text
+  -> profile + connection only
+
+Room Header
+  -> room meta
+  -> leave only
+
+Main Area
+  -> staging table
+  -> launch control panel
+  -> recent matches panel
+  -> spectators panel
+```
+
+### To-Be Diagram (ASCII)
+```text
+Top App Bar
++--------------------------------------------------------------------------------+
+| Brand | current profile | current game | room phase/status | connection        |
++--------------------------------------------------------------------------------+
+
+Room Header
++--------------------------------------------------------------------------------+
+| XE4CXK                                                                          |
+| host-room                                                                       |
+| Game: blokus · Phase: PREPARE · Host: aaa                                       |
+| [Ready/Unready] [Start] [Leave] [Rematch] [role/status pills]                  |
++--------------------------------------------------------------------------------+
+
+Main Row
++-----------------------------------------------+--------------------------------+
+| staging table                                 | recent room matches            |
+| width: 70%                                    | width: 30%                     |
++-----------------------------------------------+--------------------------------+
+
+Row 4
++--------------------------------------------------------------------------------+
+| Spectators: 3 [hover for details]                                              |
+| hover -> name | status | last online                                           |
++--------------------------------------------------------------------------------+
+```
+
+### Deliverables
+- Upgrade the top app bar for room-staging routes.
+- Move staging controls into the room header block.
+- Remove the separate launch control panel.
+- Make the staging table and room history share one `70/30` row.
+- Add compact spectator summary with hover detail.
+- Extend room snapshot members with enough data for spectator last-online detail.
+
+### Done Criteria
+- `/rooms/:roomCode` app bar shows room/game/profile/status context.
+- The room header is the primary staging control area.
+- The launch control panel is gone.
+- The staging/history row uses a `70/30` split.
+- Spectators render as a compact hoverable row with `name`, `status`, and `last online`.
+- `node --check server.js` passes.
+- `npm run build` passes.
+
+### Out-of-Scope
+- Live match route redesign.
+- Replay route redesign.
+- Room lifecycle rule changes.
+
+### Cautions / Risks
+- App-bar context must stay room-scoped, not Blokus-scoped.
+- Hover detail must not break viewport-fit constraints.
+- `last online` must come from a stable room snapshot field.
 - Replacing SQLite.
 - Large visual redesign outside what is required to separate generic room shell and Blokus game views.
 

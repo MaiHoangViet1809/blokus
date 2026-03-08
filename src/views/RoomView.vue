@@ -17,6 +17,7 @@ const currentMember = computed(() => store.currentMember);
 const isPreparePhase = computed(() => ["PREPARE", "ABANDONED", "FINISHED"].includes(store.room?.phase || ""));
 const gameClient = computed(() => getGameClient(store.room?.gameType || "blokus"));
 const roomHistory = computed(() => store.room?.history || []);
+const spectatorMembers = computed(() => store.room?.members.filter((member) => member.role === "spectator") || []);
 const stagingTable = computed(() => {
   if (store.room?.phase !== "PREPARE" || !store.gameView) return null;
   return gameClient.value.buildStagingTableModel?.(store.gameView, store.session?.profileId || "") || null;
@@ -26,6 +27,20 @@ const canLaunch = computed(() =>
   && store.gameView.players.length >= 2
   && store.gameView.players.every((player) => player.isReady)
 );
+const canToggleReady = computed(() => store.room?.phase === "PREPARE" && currentMember.value?.role === "player");
+const currentReadyLabel = computed(() => currentMember.value?.isReady ? "Unready" : "Ready");
+const spectatorSummaryLabel = computed(() => `Spectators: ${spectatorMembers.value.length}`);
+
+function formatLastOnline(member) {
+  if (member.connectionState === "online") return "Online now";
+  if (!member.disconnectedAt) return "Unknown";
+  return new Date(member.disconnectedAt).toLocaleString([], {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit"
+  });
+}
 
 async function hydrateRoom() {
   if (!store.hydrationDone) {
@@ -90,13 +105,16 @@ onMounted(async () => {
 <template>
   <section v-if="store.room" class="route-shell room-view room-view--staging">
     <header class="room-header panel">
-      <div>
+      <div class="room-header-copy">
         <p class="eyebrow">{{ store.room.code }}</p>
         <h1>{{ store.room.title }}</h1>
         <p class="muted">Game: {{ store.room.gameType }} · Phase: {{ store.room.phase }} · Host: {{ store.room.hostName }}</p>
       </div>
-      <div class="action-row">
+      <div class="room-header-controls">
         <span class="phase-pill">{{ currentMember?.role || "Spectator" }}</span>
+        <span class="phase-pill">{{ store.room.phase }}</span>
+        <button v-if="canToggleReady" class="secondary" @click="setReady(!currentMember.isReady)">{{ currentReadyLabel }}</button>
+        <button v-if="isHost && store.room.phase === 'PREPARE'" :disabled="!canLaunch" @click="startRoom">Start</button>
         <button class="secondary" @click="leaveRoom">Leave</button>
         <button v-if="isHost && store.room.phase === 'FINISHED'" @click="store.rematch">Rematch lobby</button>
       </div>
@@ -172,37 +190,6 @@ onMounted(async () => {
                 </table>
               </div>
             </section>
-
-            <aside class="staging-side stack">
-              <section class="room-subsection stack">
-                <div class="section-head">
-                  <h3>Launch Control</h3>
-                  <span class="phase-pill">{{ store.gameView.players.length }}/{{ store.gameView.maxPlayers }}</span>
-                </div>
-                <p class="muted">Room staging is platform-owned. Game-specific setup stays in the extra columns.</p>
-                <p class="muted">
-                  {{ canLaunch ? "Room is ready to launch." : "Need 2+ ready players with valid game setup." }}
-                </p>
-                <button v-if="isHost" :disabled="!canLaunch" @click="startRoom">Start match</button>
-                <p v-else class="muted">Only the host can start the match.</p>
-              </section>
-
-              <section class="room-subsection stack">
-                <div class="section-head">
-                  <h3>Spectators</h3>
-                  <span class="phase-pill">{{ store.gameView.spectators.length }}</span>
-                </div>
-                <div class="panel-scroll list">
-                  <template v-if="store.gameView.spectators.length">
-                    <div v-for="member in store.gameView.spectators" :key="member.profileId" class="list-row static">
-                      <span>{{ member.name }}</span>
-                      <strong>{{ member.connectionState }}</strong>
-                    </div>
-                  </template>
-                  <p v-else class="muted">No spectators in this room.</p>
-                </div>
-              </section>
-            </aside>
           </div>
         </article>
 
@@ -272,6 +259,28 @@ onMounted(async () => {
         </div>
         <p v-else class="muted">Finished matches from this room will appear here.</p>
       </aside>
+    </section>
+
+    <section class="panel spectator-strip-panel">
+      <div class="spectator-strip">
+        <div class="spectator-strip-copy">
+          <strong>{{ spectatorSummaryLabel }}</strong>
+          <span class="muted">Hover the button to inspect spectator presence.</span>
+        </div>
+        <div class="spectator-hover">
+          <button class="secondary" :disabled="!spectatorMembers.length">View spectators</button>
+          <div class="spectator-hover-card">
+            <template v-if="spectatorMembers.length">
+              <div v-for="member in spectatorMembers" :key="member.id" class="spectator-hover-row">
+                <span>{{ member.name }}</span>
+                <span class="muted">{{ member.connectionState }}</span>
+                <span class="muted">{{ formatLastOnline(member) }}</span>
+              </div>
+            </template>
+            <p v-else class="muted">No spectators in this room.</p>
+          </div>
+        </div>
+      </div>
     </section>
   </section>
 
