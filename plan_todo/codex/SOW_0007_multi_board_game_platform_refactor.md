@@ -913,6 +913,68 @@ Bootstrap
   - browser container = shared browser identity
   - client instance = per-tab identity
 
+---
+
+## Extension: Match-Route App Bar Context and Replay Grid Clarity
+
+- **Status**: APPROVED
+- **Approved-By**: Viet
+
+### Summary
+- **Task**: Add match-route context to the global app bar and strengthen the Blokus replay board grid so space and boundaries are unambiguous.
+- **Location**:
+  - `/Users/maihoangviet/Projects/blokus/src/App.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/style.css`
+  - `/Users/maihoangviet/Projects/blokus/plan_todo/codex/SOW_0007_multi_board_game_platform_refactor.md`
+- **Why**: The platform now routes live play through `/matches/:matchId`, but the app shell still only surfaces room-route context. Replay also needs a clearer grid so viewers do not misread Blokus board space.
+
+### As-Is Diagram (ASCII)
+```text
+/matches/:matchId
+  -> app bar shows generic platform copy
+  -> match route lacks game context in top shell
+
+/matches/:matchId/replay
+  -> board cells render
+  -> grid/boundaries are visually weak
+```
+
+### To-Be Diagram (ASCII)
+```text
+/matches/:matchId
+  -> app bar shows:
+     game name
+     match/room title
+     phase/status
+     turn/replay context
+
+/matches/:matchId/replay
+  -> replay board shows:
+     explicit grid
+     clear board boundary
+     clearer empty-space readability
+```
+
+### Deliverables
+- Extend global app bar context handling for `/matches/*`.
+- Show game name and match context in the app bar on live and replay match routes.
+- Strengthen replay board visuals with clearer grid lines and a clearer board frame.
+
+### Done Criteria
+- `/matches/:matchId` app bar shows game-aware match context.
+- `/matches/:matchId/replay` app bar shows replay context.
+- Replay board has a visibly clear grid and boundary.
+- `npm run build` passes.
+
+### Out-of-Scope
+- Replay behavior redesign.
+- Route restructuring.
+- Game logic changes.
+
+### Cautions / Risks
+- The app bar must stay platform-owned, not Blokus-hardcoded.
+- Replay grid should become clearer without making occupied cells harder to read.
+
 ### Proposed-By
 - Codex GPT-5
 
