@@ -975,6 +975,68 @@ Bootstrap
 - The app bar must stay platform-owned, not Blokus-hardcoded.
 - Replay grid should become clearer without making occupied cells harder to read.
 
+---
+
+## Extension: Uppercase and Unique Profile Names
+
+- **Status**: APPROVED
+- **Approved-By**: Viet
+
+### Summary
+- **Task**: Normalize profile names to uppercase and enforce platform-wide uniqueness on that uppercase form.
+- **Location**:
+  - `/Users/maihoangviet/Projects/blokus/server.js`
+  - `/Users/maihoangviet/Projects/blokus/plan_todo/codex/SOW_0007_multi_board_game_platform_refactor.md`
+- **Why**: Duplicate visible names make rooms, matches, replay, and governance ambiguous. Converting names to uppercase gives one consistent display style and one clear uniqueness rule.
+
+### As-Is Diagram (ASCII)
+```text
+Create profile "alice"
+  -> inserted as "alice"
+
+Create profile "ALICE"
+  -> inserted again
+
+Result:
+  duplicate visible identity
+  inconsistent casing
+```
+
+### To-Be Diagram (ASCII)
+```text
+Create profile "alice"
+  -> normalized to "ALICE"
+  -> inserted
+
+Create profile "ALICE"
+  -> normalized to "ALICE"
+  -> rejected
+
+Result:
+  all profile names display in uppercase
+  uniqueness is enforced on uppercase names
+```
+
+### Deliverables
+- Normalize profile names to uppercase on the server before insert.
+- Enforce uniqueness on normalized profile names.
+- Return a clear API error when the normalized name already exists.
+
+### Done Criteria
+- Creating `"alice"` stores `"ALICE"`.
+- Creating `"ALICE"` after `"alice"` is rejected.
+- Existing unique profile creation still works.
+- `node --check server.js` passes.
+- `npm run build` passes.
+
+### Out-of-Scope
+- Profile rename flow.
+- Broader auth redesign.
+
+### Cautions / Risks
+- Existing duplicate local rows may block a direct unique index if both normalize to the same uppercase name.
+- The migration should avoid hard failure on already-dirty local databases.
+
 ### Proposed-By
 - Codex GPT-5
 

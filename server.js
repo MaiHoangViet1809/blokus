@@ -188,6 +188,25 @@ db.exec(`
 `);
 
 db.prepare(`
+  update profiles
+  set name = upper(trim(name))
+  where name != upper(trim(name))
+`).run();
+
+if (!db.prepare(`
+  select name
+  from profiles
+  group by name
+  having count(*) > 1
+  limit 1
+`).get()) {
+  db.exec(`
+    create unique index if not exists idx_profiles_name_unique
+    on profiles(name)
+  `);
+}
+
+db.prepare(`
   update room_members
   set chosen_color_index = seat_index
   where role = 'player' and chosen_color_index is null and seat_index is not null
@@ -251,6 +270,10 @@ function parseJson(value, fallback) {
   } catch {
     return fallback;
   }
+}
+
+function normalizeProfileName(value) {
+  return String(value || "").trim().slice(0, 24).toUpperCase();
 }
 
 function emptyBoard() {
@@ -2040,9 +2063,14 @@ app.get("/api/rooms/:roomCode", (req, res) => {
 
 app.post("/api/profiles", (req, res) => {
   const { browserContainer, clientInstance } = resolveViewer(req, res);
-  const name = String(req.body?.name || "").trim().slice(0, 24);
+  const name = normalizeProfileName(req.body?.name);
   if (!name) {
     res.status(400).json({ message: "Profile name is required." });
+    return;
+  }
+  const existingProfile = db.prepare("select id from profiles where name = ?").get(name);
+  if (existingProfile) {
+    res.status(409).json({ message: "Profile name already exists." });
     return;
   }
   db.prepare(`
