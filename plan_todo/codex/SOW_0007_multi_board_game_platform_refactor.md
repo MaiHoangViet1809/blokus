@@ -851,6 +851,68 @@ Git status
   - delete `/Users/maihoangviet/Projects/blokus/public/index.html`
   - delete `/Users/maihoangviet/Projects/blokus/public/style.css`
 
+---
+
+## Extension: Client Instance Bootstrap Collision Fix
+
+- **Status**: APPROVED
+- **Approved-By**: Viet
+
+### Summary
+- **Task**: Fix `client_instances.token` bootstrap collisions by making client-instance resolution token-authoritative instead of browser-container-scoped.
+- **Location**:
+  - `/Users/maihoangviet/Projects/blokus/server.js`
+  - `/Users/maihoangviet/Projects/blokus/plan_todo/codex/SOW_0007_multi_board_game_platform_refactor.md`
+- **Why**: `/api/bootstrap` can return `500` in the browser even though direct `curl` works. The root cause is a contract mismatch in the instance registry: `client_instances.token` is globally unique in the database, but lookup still scopes it by `browser_container_id`. When the browser cookie changes while `sessionStorage` keeps the old client-instance token, bootstrap attempts to insert a duplicate token and fails.
+
+### As-Is Diagram (ASCII)
+```text
+Browser tab
+  -> sessionStorage has client_instance_id = X
+  -> browser cookie changes / missing -> new browser_container
+
+Bootstrap
+  -> ensureBrowserContainer(new container)
+  -> ensureClientInstance(new container, token X)
+  -> lookup by (browser_container_id, token) misses
+  -> insert client_instances(token = X)
+  -> UNIQUE constraint failed: client_instances.token
+  -> /api/bootstrap returns 500
+```
+
+### To-Be Diagram (ASCII)
+```text
+Browser tab
+  -> sessionStorage has client_instance_id = X
+  -> browser cookie changes / missing -> new browser_container
+
+Bootstrap
+  -> resolve client instance by token X first
+  -> restore the owning browser container for that tab identity
+  -> no duplicate insert
+  -> /api/bootstrap returns JSON
+```
+
+### Deliverables
+- Make client-instance lookup token-authoritative.
+- Prevent duplicate insert attempts for an existing `client_instances.token`.
+- Preserve multi-tab behavior and refresh continuity.
+
+### Done Criteria
+- `/api/bootstrap` no longer fails with `UNIQUE constraint failed: client_instances.token`.
+- Browser refresh with an existing `sessionStorage` client instance id returns JSON successfully.
+- `node --check server.js` passes.
+- `npm run build` passes.
+
+### Out-of-Scope
+- Broader auth redesign.
+- Moving session identity into URLs.
+
+### Cautions / Risks
+- The fix must preserve the intended separation:
+  - browser container = shared browser identity
+  - client instance = per-tab identity
+
 ### Proposed-By
 - Codex GPT-5
 

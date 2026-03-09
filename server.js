@@ -399,6 +399,10 @@ function getBrowserContainerByToken(token) {
   return db.prepare("select * from browser_containers where token = ?").get(token) || null;
 }
 
+function getBrowserContainerById(id) {
+  return db.prepare("select * from browser_containers where id = ?").get(id) || null;
+}
+
 function ensureBrowserContainer(token) {
   const normalizedToken = readBrowserToken(token);
   let container = getBrowserContainerByToken(normalizedToken);
@@ -416,7 +420,15 @@ function ensureBrowserContainer(token) {
   return container;
 }
 
-function getClientInstanceByToken(browserContainerId, token) {
+function getClientInstanceByToken(token) {
+  return db.prepare(`
+    select *
+    from client_instances
+    where token = ?
+  `).get(token) || null;
+}
+
+function getClientInstanceForBrowser(browserContainerId, token) {
   return db.prepare(`
     select *
     from client_instances
@@ -425,18 +437,24 @@ function getClientInstanceByToken(browserContainerId, token) {
 }
 
 function ensureClientInstance(browserContainer, token) {
-  const normalizedToken = readBrowserToken(token);
-  let instance = getClientInstanceByToken(browserContainer.id, normalizedToken);
+  const normalizedToken = typeof token === "string" && token.trim()
+    ? token.trim()
+    : readBrowserToken(token);
+  let instance = getClientInstanceByToken(normalizedToken);
   if (!instance) {
     const timestamp = nowIso();
     db.prepare(`
       insert into client_instances (id, token, browser_container_id, active_profile_id, room_code, created_at, last_seen_at)
       values (?, ?, ?, null, null, ?, ?)
     `).run(makeId("client_instance"), normalizedToken, browserContainer.id, timestamp, timestamp);
-    instance = getClientInstanceByToken(browserContainer.id, normalizedToken);
+    instance = getClientInstanceForBrowser(browserContainer.id, normalizedToken);
   } else {
-    db.prepare("update client_instances set last_seen_at = ? where id = ?").run(nowIso(), instance.id);
-    instance = getClientInstanceByToken(browserContainer.id, normalizedToken);
+    db.prepare(`
+      update client_instances
+      set browser_container_id = ?, last_seen_at = ?
+      where id = ?
+    `).run(browserContainer.id, nowIso(), instance.id);
+    instance = getClientInstanceByToken(normalizedToken);
   }
   return instance;
 }
@@ -1242,11 +1260,17 @@ function sessionPayload(session) {
 function resolveViewer(req, res) {
   const cookies = parseCookieHeader(req.headers.cookie);
   const browserToken = cookies[BROWSER_COOKIE_NAME] || req.header("x-browser-token-fallback") || req.header("x-device-token");
-  const browserContainer = ensureBrowserContainer(browserToken);
+  const clientInstanceToken = req.header("x-client-instance-id");
+  const existingClientInstance = typeof clientInstanceToken === "string" && clientInstanceToken.trim()
+    ? getClientInstanceByToken(clientInstanceToken.trim())
+    : null;
+  const browserContainer = existingClientInstance
+    ? ensureBrowserContainer(getBrowserContainerById(existingClientInstance.browser_container_id)?.token)
+    : ensureBrowserContainer(browserToken);
   if (res) {
     setBrowserCookie(res, browserContainer.token);
   }
-  const clientInstance = ensureClientInstance(browserContainer, req.header("x-client-instance-id"));
+  const clientInstance = ensureClientInstance(browserContainer, clientInstanceToken);
   return {
     browserContainer,
     clientInstance,
@@ -2056,8 +2080,14 @@ io.use((socket, next) => {
   try {
     const cookies = parseCookieHeader(socket.request.headers.cookie);
     const browserToken = cookies[BROWSER_COOKIE_NAME] || socket.handshake.auth?.browserTokenFallback;
-    const browserContainer = ensureBrowserContainer(browserToken);
-    const clientInstance = ensureClientInstance(browserContainer, socket.handshake.auth?.clientInstanceId);
+    const clientInstanceToken = socket.handshake.auth?.clientInstanceId;
+    const existingClientInstance = typeof clientInstanceToken === "string" && clientInstanceToken.trim()
+      ? getClientInstanceByToken(clientInstanceToken.trim())
+      : null;
+    const browserContainer = existingClientInstance
+      ? ensureBrowserContainer(getBrowserContainerById(existingClientInstance.browser_container_id)?.token)
+      : ensureBrowserContainer(browserToken);
+    const clientInstance = ensureClientInstance(browserContainer, clientInstanceToken);
     socket.data.browserContainer = browserContainer;
     socket.data.clientInstance = clientInstance;
     socket.data.session = sessionForInstance(clientInstance.id);
