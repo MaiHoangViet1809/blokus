@@ -777,6 +777,80 @@ Staging table row
 ### Cautions / Risks
 - Row actions must still make sense after removing the duplicate ready button.
 
+---
+
+## Extension: Legacy Static Client Cleanup and Generated Artifact Ignore Rules
+
+- **Status**: APPROVED
+- **Approved-By**: Viet
+
+### Summary
+- **Task**: Remove the unused legacy static client files and ignore generated local artifacts from the new SPA/platform workflow.
+- **Location**:
+  - `/Users/maihoangviet/Projects/blokus/public/index.html`
+  - `/Users/maihoangviet/Projects/blokus/public/style.css`
+  - `/Users/maihoangviet/Projects/blokus/.gitignore`
+  - `/Users/maihoangviet/Projects/blokus/plan_todo/codex/SOW_0007_multi_board_game_platform_refactor.md`
+- **Why**: The repo now runs from the Vite SPA and `dist/` output, but legacy static client files are still present as unrelated diffs. Generated artifacts from build/runtime/debug are also still showing up in git status and should be ignored.
+
+### As-Is Diagram (ASCII)
+```text
+Current app
+  -> index.html
+  -> src/*
+  -> dist/ served by server
+
+Legacy files still present
+  -> public/index.html
+  -> public/style.css
+
+Git status noise
+  -> data/
+  -> dist/
+  -> .DS_Store
+  -> .playwright-cli/
+```
+
+### To-Be Diagram (ASCII)
+```text
+Current app
+  -> index.html
+  -> src/*
+  -> dist/ served by server
+
+Legacy static client removed
+  -> no unused public HTML/CSS leftovers
+
+Git status
+  -> source diffs only
+  -> generated artifacts ignored
+```
+
+### Deliverables
+- Delete unused legacy files:
+  - `public/index.html`
+  - `public/style.css`
+- Extend `.gitignore` for:
+  - `dist/`
+  - `data/`
+  - `.DS_Store`
+  - keep `.playwright-cli/`
+
+### Done Criteria
+- Legacy `public/` HTML/CSS files are removed.
+- Generated artifacts no longer appear as untracked noise after cleanup.
+- `npm run build` passes.
+
+### Out-of-Scope
+- Deleting `public/client.js`.
+- Broader repo cleanup.
+- Changing runtime server behavior.
+
+### Cautions / Risks
+- File-level destructive impact:
+  - delete `/Users/maihoangviet/Projects/blokus/public/index.html`
+  - delete `/Users/maihoangviet/Projects/blokus/public/style.css`
+
 ### Proposed-By
 - Codex GPT-5
 
