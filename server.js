@@ -1,7 +1,7 @@
 import express from "express";
 import http from "http";
 import { Server } from "socket.io";
-import Database from "better-sqlite3";
+import { DatabaseSync } from "node:sqlite";
 import { mkdirSync, existsSync } from "fs";
 import { dirname, join } from "path";
 import { fileURLToPath } from "url";
@@ -17,8 +17,8 @@ const distDir = join(__dirname, "dist");
 
 mkdirSync(dataDir, { recursive: true });
 
-const db = new Database(dbPath);
-db.pragma("journal_mode = WAL");
+const db = new DatabaseSync(dbPath);
+db.exec("pragma journal_mode = WAL");
 
 db.exec(`
   create table if not exists browser_containers (
