@@ -64,7 +64,7 @@ async function openGameLobby() {
 async function joinByCode() {
   const code = roomCode.value.trim().toUpperCase();
   if (!code) return;
-  const response = await store.joinRoom(code);
+  const response = await store.watchRoom(code);
   roomCode.value = "";
   if (response.match?.id && ["STARTING", "IN_GAME", "SUSPENDED"].includes(response.room?.phase || "")) {
     await router.push(`/matches/${response.match.id}`);
@@ -73,12 +73,8 @@ async function joinByCode() {
   await router.push(`/rooms/${code}`);
 }
 
-async function openRoom(room, mode) {
-  if (mode === "watch") {
-    await store.watchRoom(room.code);
-  } else {
-    await store.joinRoom(room.code);
-  }
+async function openRoom(room) {
+  await store.watchRoom(room.code);
   if (room.currentMatchId && ["STARTING", "IN_GAME", "SUSPENDED"].includes(room.phase)) {
     await router.push(`/matches/${room.currentMatchId}`);
     return;
@@ -193,8 +189,7 @@ onMounted(async () => {
               <td>{{ room.hostName || "Unknown" }}</td>
               <td>
                 <div class="room-table-actions">
-                  <button :disabled="!canUseRooms" @click="openRoom(room, 'join')">Join</button>
-                  <button class="secondary" :disabled="!canUseRooms" @click="openRoom(room, 'watch')">Watch</button>
+                  <button :disabled="!canUseRooms" @click="openRoom(room)">Join</button>
                 </div>
               </td>
             </tr>

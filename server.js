@@ -1432,6 +1432,14 @@ function joinRoomAs(session, roomCode, role, socket) {
       if (freshRoom.phase === ROOM_PHASES.PREPARE && member.role === "player") {
         member = ensurePrepareMemberColor(freshRoom.id, member.id);
       }
+      if (role === "spectator" && freshRoom.phase === ROOM_PHASES.PREPARE && member.role === "player") {
+        db.prepare(`
+          update room_members
+          set role = 'spectator', seat_index = null, chosen_color_index = null, is_ready = 0, connection_state = 'online', disconnected_at = null
+          where id = ?
+        `).run(member.id);
+        normalizeLobbySeats(freshRoom.id);
+      }
     }
   } else {
     let seatIndex = null;

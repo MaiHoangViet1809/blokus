@@ -490,6 +490,11 @@ p {
   align-items: center;
 }
 
+.room-control-bar {
+  grid-template-columns: 1fr;
+  align-items: center;
+}
+
 .room-header-copy {
   min-width: 0;
 }
@@ -497,8 +502,33 @@ p {
 .room-header-controls {
   display: flex;
   flex-wrap: wrap;
-  justify-content: flex-end;
+  justify-content: center;
   gap: 10px;
+}
+
+.room-control-btn {
+  min-width: 124px;
+  font-weight: 700;
+}
+
+.room-control-btn--start {
+  background: linear-gradient(135deg, rgba(255, 209, 102, 0.28), rgba(255, 209, 102, 0.12));
+  border-color: rgba(255, 209, 102, 0.36);
+}
+
+.room-control-btn--ready {
+  background: linear-gradient(135deg, rgba(88, 178, 255, 0.2), rgba(88, 178, 255, 0.08));
+  border-color: rgba(88, 178, 255, 0.34);
+}
+
+.room-control-btn--leave {
+  border-color: color-mix(in srgb, var(--danger) 45%, var(--line));
+  color: color-mix(in srgb, var(--danger) 70%, var(--text));
+}
+
+.room-control-btn--rematch {
+  background: linear-gradient(135deg, rgba(255, 209, 102, 0.24), rgba(88, 178, 255, 0.14));
+  border-color: rgba(255, 209, 102, 0.32);
 }
 
 .room-staging-layout {

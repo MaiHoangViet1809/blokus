@@ -1037,6 +1037,84 @@ Result:
 - Existing duplicate local rows may block a direct unique index if both normalize to the same uppercase name.
 - The migration should avoid hard failure on already-dirty local databases.
 
+---
+
+## Extension: Spectator-First Room Entry and Room Control Bar Cleanup
+
+- **Status**: APPROVED
+- **Approved-By**: Viet
+
+### Summary
+- **Task**: Refine room entry and room staging so lobby entry is spectator-first, seated players can leave their seat without leaving the room, and the second block on `/rooms/:roomCode` becomes a pure Room Control Bar.
+- **Location**:
+  - `/Users/maihoangviet/Projects/blokus/server.js`
+  - `/Users/maihoangviet/Projects/blokus/src/views/HomeView.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/views/RoomView.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/style.css`
+  - `/Users/maihoangviet/Projects/blokus/plan_todo/codex/SOW_0007_multi_board_game_platform_refactor.md`
+- **Why**: Room entry is still split between `Join` and `Watch`, seated players cannot easily return to spectator mode, and the second block on the room route duplicates metadata already shown in the app bar.
+
+### As-Is Diagram (ASCII)
+```text
+/ (platform lobby)
+  room table row
+    -> [Join] [Watch]
+
+/rooms/:roomCode
+  app bar
+    -> room/game/phase/host context
+
+  second block
+    -> room code / room title / game / phase / host
+    -> [player] [PREPARE] [Ready] [Start] [Leave]
+```
+
+### To-Be Diagram (ASCII)
+```text
+/ (platform lobby)
+  room table row
+    -> [Join]
+  Join
+    -> always enters as spectator/watch first
+
+/rooms/:roomCode
+  app bar
+    -> room/game/phase/host context
+
+  second block = Room Control Bar
+    -> [Ready/Unready] [Start] [Leave seat] [Leave room] [Rematch if applicable]
+
+Behavior
+  spectator
+    -> can Take seat
+  seated player
+    -> can Leave seat and remain spectator in the room
+```
+
+### Deliverables
+- Make main room table and join-by-code spectator-first.
+- Remove separate `Watch` action from the main room table.
+- Support player-to-spectator demotion in `PREPARE` without leaving the room.
+- Convert the second room block into a pure Room Control Bar.
+- Remove duplicated metadata and low-value pills from that block.
+
+### Done Criteria
+- Main room list shows only one room-row action.
+- Joining from the lobby enters as spectator by default.
+- A seated player can leave their seat and remain in the room as spectator.
+- The second room block contains controls only.
+- `node --check server.js` passes.
+- `npm run build` passes.
+
+### Out-of-Scope
+- Route changes.
+- Live match redesign.
+- New room lifecycle rules.
+
+### Cautions / Risks
+- Leaving seat must clear seat-specific staging state.
+- Spectator demotion must stay blocked once the match is live.
+
 ### Proposed-By
 - Codex GPT-5
 

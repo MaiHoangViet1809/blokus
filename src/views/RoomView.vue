@@ -28,6 +28,7 @@ const canLaunch = computed(() =>
   && store.gameView.players.every((player) => player.isReady)
 );
 const canToggleReady = computed(() => store.room?.phase === "PREPARE" && currentMember.value?.role === "player");
+const canLeaveSeat = computed(() => store.room?.phase === "PREPARE" && currentMember.value?.role === "player");
 const currentReadyLabel = computed(() => currentMember.value?.isReady ? "Unready" : "Ready");
 const spectatorSummaryLabel = computed(() => `Spectators: ${spectatorMembers.value.length}`);
 
@@ -70,6 +71,10 @@ async function setReady(ready) {
   await store.setReady(ready);
 }
 
+async function leaveSeat() {
+  await store.watchRoom(normalizedRoomCode.value);
+}
+
 async function startRoom() {
   const response = await store.startRoom();
   const matchId = response.match?.id || store.room?.currentMatchId;
@@ -104,19 +109,13 @@ onMounted(async () => {
 
 <template>
   <section v-if="store.room" class="route-shell room-view room-view--staging">
-    <header class="room-header panel">
-      <div class="room-header-copy">
-        <p class="eyebrow">{{ store.room.code }}</p>
-        <h1>{{ store.room.title }}</h1>
-        <p class="muted">Game: {{ store.room.gameType }} · Phase: {{ store.room.phase }} · Host: {{ store.room.hostName }}</p>
-      </div>
+    <header class="room-header room-control-bar panel">
       <div class="room-header-controls">
-        <span class="phase-pill">{{ currentMember?.role || "Spectator" }}</span>
-        <span class="phase-pill">{{ store.room.phase }}</span>
-        <button v-if="canToggleReady" class="secondary" @click="setReady(!currentMember.isReady)">{{ currentReadyLabel }}</button>
-        <button v-if="isHost && store.room.phase === 'PREPARE'" :disabled="!canLaunch" @click="startRoom">Start</button>
-        <button class="secondary" @click="leaveRoom">Leave</button>
-        <button v-if="isHost && store.room.phase === 'FINISHED'" @click="store.rematch">Rematch lobby</button>
+        <button v-if="canToggleReady" class="room-control-btn room-control-btn--ready" @click="setReady(!currentMember.isReady)">{{ currentReadyLabel }}</button>
+        <button v-if="isHost && store.room.phase === 'PREPARE'" class="room-control-btn room-control-btn--start" :disabled="!canLaunch" @click="startRoom">Start</button>
+        <button v-if="canLeaveSeat" class="room-control-btn room-control-btn--seat secondary" @click="leaveSeat">Leave seat</button>
+        <button class="room-control-btn room-control-btn--leave secondary" @click="leaveRoom">Leave room</button>
+        <button v-if="isHost && store.room.phase === 'FINISHED'" class="room-control-btn room-control-btn--rematch" @click="store.rematch">Rematch lobby</button>
       </div>
     </header>
 
