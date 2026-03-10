@@ -1,6 +1,6 @@
 <script setup>
 import { computed, ref, watch } from "vue";
-import { COLORS } from "../../lib/pieces";
+import { COLORS } from "./shared.js";
 
 const props = defineProps({
   replay: { type: Object, default: null }

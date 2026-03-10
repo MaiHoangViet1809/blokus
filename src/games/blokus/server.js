@@ -5,7 +5,7 @@ import {
   buildStartCorners,
   ORIENTATIONS as PIECE_ORIENTATIONS,
   PIECE_CELL_COUNTS
-} from "../../lib/pieces.js";
+} from "./shared.js";
 
 export const BLOKUS_GAME_TYPE = "blokus";
 export const BLOKUS_MAX_PLAYERS = 4;

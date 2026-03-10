@@ -1701,6 +1701,108 @@ Solo 1:1
 - server room summaries and legacy match helpers must stop assuming capacity 4 / board size 20
 - replay and board views must render from ruleset config, not fixed grid dimensions
 
+## Extension: Reorganize the Codebase into Lean Game Folders
+- **Status**: APPROVED
+- **Approved-By**: Viet
+- **Approved-On**: 2026-03-10
+- **Task**: Reorganize the project into platform-owned client/server folders and compact per-game folders so new games can be added with low-touch driver and view work.
+- **Location**:
+  - `/Users/maihoangviet/Projects/blokus/server.js`
+  - `/Users/maihoangviet/Projects/blokus/src/App.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/router.js`
+  - `/Users/maihoangviet/Projects/blokus/src/platform/client/`
+  - `/Users/maihoangviet/Projects/blokus/src/platform/server/`
+  - `/Users/maihoangviet/Projects/blokus/src/games/blokus/`
+  - `/Users/maihoangviet/Projects/blokus/plan_todo/codex/SOW_0007_multi_board_game_platform_refactor.md`
+
+### As-Is Diagram (ASCII)
+```text
+src/
+  games/
+    blokus/
+      driver.js
+      stagingModel.js
+      LiveView.vue
+      ReplayView.vue
+    clientRegistry.js
+    serverRegistry.js
+
+  views/
+    HomeView.vue
+    GameLobbyView.vue
+    RoomView.vue
+    MatchView.vue
+    MatchReplayView.vue
+
+server.js
+  -> identity/session
+  -> room lifecycle
+  -> match orchestration
+  -> persistence
+  -> transport
+```
+
+### To-Be Diagram (ASCII)
+```text
+src/
+  platform/
+    client/
+      registry.js
+      store.js
+      views/
+        HomeView.vue
+        GameLobbyView.vue
+        RoomView.vue
+        MatchView.vue
+        MatchReplayView.vue
+    server/
+      index.js
+      registry.js
+      rooms.js
+      matches.js
+      transport.js
+
+  games/
+    blokus/
+      index.js
+      server.js
+      create.js
+      staging.js
+      LiveView.vue
+      ReplayView.vue
+      shared.js
+      GameBoard.vue
+```
+
+### Deliverables
+- move platform client shell, store, and registries under `src/platform/client`
+- make top-level `server.js` a thin entrypoint into `src/platform/server/index.js`
+- move platform server registry and helper modules under `src/platform/server`
+- migrate Blokus into a compact game folder contract with create, staging, live, replay, server, and shared modules
+- update imports and routes to the new structure without changing current Blokus behavior
+
+### Done Criteria
+- build still passes after the structure move
+- `server.js` remains bootable as the project entrypoint
+- Blokus create, staging, live, replay, and solo/classic variants still resolve through the new structure
+- `node --check server.js` passes
+- `npm run build` passes
+
+### Out-of-Scope
+- implementing chess
+- dynamic plugin loading
+- redesigning routes or live match behavior
+
+### Proposed-By
+- Codex GPT-5
+
+### plan
+- multi-board-game-platform-refactor-v1
+
+### Cautions / Risks
+- move-heavy refactors are sensitive to import path regressions
+- platform server is only split to a pragmatic first layer in this extension; not every helper is extracted yet
+
 ## Extension: Remove Legacy Blokus Staging and Command Paths
 - **Status**: APPROVED
 - **Approved-By**: Viet

@@ -1,8 +1,8 @@
 <script setup>
 import { computed, onMounted, watch } from "vue";
 import { useRouter } from "vue-router";
-import { getGameClient } from "../games/clientRegistry";
-import { useAppStore } from "../stores/app";
+import { getGameClient } from "../registry";
+import { useAppStore } from "../store";
 
 const props = defineProps({
   matchId: { type: String, required: true }

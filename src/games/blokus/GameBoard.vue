@@ -1,6 +1,6 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { BOARD_SIZE, COLORS, PLAYER_COLORS, buildStartCorners, resolvePieceTransform } from "../lib/pieces";
+import { BOARD_SIZE, COLORS, PLAYER_COLORS, buildStartCorners, resolvePieceTransform } from "./shared.js";
 
 const props = defineProps({
   room: { type: Object, required: true },

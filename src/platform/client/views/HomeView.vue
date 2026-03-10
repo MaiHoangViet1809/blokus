@@ -1,8 +1,8 @@
 <script setup>
 import { computed, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { listGameClients } from "../games/clientRegistry";
-import { useAppStore } from "../stores/app";
+import { listGameClients } from "../registry";
+import { useAppStore } from "../store";
 
 const route = useRoute();
 const router = useRouter();

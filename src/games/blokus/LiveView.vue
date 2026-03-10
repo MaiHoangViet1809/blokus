@@ -1,7 +1,7 @@
 <script setup>
 import { computed, ref, watch } from "vue";
-import GameBoard from "../../components/GameBoard.vue";
-import { PIECES, PLAYER_COLORS, resolvePieceTransform } from "../../lib/pieces";
+import GameBoard from "./GameBoard.vue";
+import { PIECES, PLAYER_COLORS, resolvePieceTransform } from "./shared.js";
 
 const props = defineProps({
   room: { type: Object, required: true },

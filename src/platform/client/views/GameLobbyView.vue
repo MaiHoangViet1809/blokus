@@ -1,8 +1,8 @@
 <script setup>
 import { computed, ref } from "vue";
 import { useRouter } from "vue-router";
-import { getGameClient } from "../games/clientRegistry";
-import { useAppStore } from "../stores/app";
+import { getGameClient } from "../registry";
+import { useAppStore } from "../store";
 
 const props = defineProps({
   gameType: { type: String, default: "blokus" }
@@ -14,9 +14,10 @@ const store = useAppStore();
 const roomTitle = ref("");
 const isPublic = ref(true);
 const game = computed(() => getGameClient(props.gameType));
-const selectedRuleset = ref(game.value.modes?.[0]?.ruleset || "classic_4p");
+const createModel = computed(() => game.value.buildCreateModel?.() || { modes: [] });
+const selectedRuleset = ref(createModel.value.modes?.[0]?.ruleset || "classic_4p");
 const canCreateRoom = computed(() => !!store.activeProfile);
-const createConfig = computed(() => game.value.modes?.length ? { ruleset: selectedRuleset.value } : {});
+const createConfig = computed(() => createModel.value.modes?.length ? { ruleset: selectedRuleset.value } : {});
 
 async function createRoom() {
   if (!roomTitle.value.trim()) return;
@@ -54,9 +55,9 @@ async function createRoom() {
           </div>
 
           <input v-model="roomTitle" maxlength="32" placeholder="Room title" :disabled="!canCreateRoom" />
-          <div v-if="game.modes?.length" class="game-mode-list">
+          <div v-if="createModel.modes?.length" class="game-mode-list">
             <button
-              v-for="mode in game.modes"
+              v-for="mode in createModel.modes"
               :key="mode.ruleset"
               class="game-mode-card"
               :class="{ active: selectedRuleset === mode.ruleset }"
