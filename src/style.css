@@ -96,7 +96,6 @@ p {
   .stack,
   .list,
   .room-grid,
-  .board-layout,
   .board-panel,
   .rack-panel,
   .piece-grid,
@@ -564,15 +563,8 @@ p {
 }
 
 .gameplay-panel {
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(360px, 1fr) minmax(200px, 0.5fr) auto;
   gap: 10px;
-}
-
-.board-layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 236px;
-  gap: 12px;
-  align-items: stretch;
 }
 
 .board-panel {
@@ -580,14 +572,17 @@ p {
   grid-template-rows: minmax(0, 1fr);
   justify-items: center;
   overflow: hidden;
+  align-items: center;
 }
 
 .board-canvas {
-  width: min(100%, clamp(420px, 74dvh, 980px));
+  width: min(100%, calc(100dvh - 320px));
   aspect-ratio: 1;
   display: block;
   background: #040910;
-  border-radius: 16px;
+  border-radius: 0;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  min-width: 420px;
 }
 
 .rack-panel {
@@ -595,6 +590,18 @@ p {
   grid-template-rows: auto minmax(0, 1fr) auto;
   overflow: hidden;
   gap: 10px;
+}
+
+.board-stage {
+  height: 100%;
+}
+
+.match-main-row {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.9fr) minmax(420px, 1.8fr) minmax(260px, 0.95fr);
+  gap: 12px;
+  min-height: 0;
+  align-items: stretch;
 }
 
 .board-rack-head {
@@ -669,8 +676,11 @@ p {
 
 .mini-scoreboard {
   display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
   gap: 10px;
   padding: 12px 14px;
+  overflow: hidden;
+  height: 100%;
 }
 
 .mini-scoreboard__head {
@@ -683,6 +693,9 @@ p {
 .mini-scoreboard__list {
   display: grid;
   gap: 6px;
+  align-content: start;
+  overflow: auto;
+  padding-right: 2px;
 }
 
 .mini-scoreboard__row {
@@ -899,12 +912,9 @@ p {
     grid-template-columns: 1fr;
   }
 
-  .board-layout {
-    grid-template-columns: minmax(0, 1fr) 214px;
-  }
-
   .board-canvas {
-    width: min(100%, clamp(320px, 60dvh, 760px));
+    width: min(100%, calc(100dvh - 360px));
+    min-width: 320px;
   }
 }
 
@@ -937,13 +947,17 @@ p {
     white-space: normal;
   }
 
-  .board-layout {
-    grid-template-columns: minmax(0, 1fr) 176px;
-    gap: 12px;
+  .gameplay-panel {
+    grid-template-rows: auto minmax(300px, 1fr) minmax(220px, auto) auto;
+  }
+
+  .match-main-row {
+    grid-template-columns: minmax(220px, 0.9fr) minmax(320px, 1.55fr) minmax(220px, 0.95fr);
   }
 
   .board-canvas {
     width: 100%;
+    min-width: 0;
   }
 
   .player-strip {
@@ -1011,12 +1025,13 @@ p {
     align-items: stretch;
   }
 
-  .board-layout {
-    grid-template-columns: minmax(0, 1fr) 152px;
-  }
-
   .staging-color-picker {
     grid-template-columns: 1fr;
+  }
+
+  .match-main-row {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(180px, auto) minmax(280px, auto) minmax(180px, auto);
   }
 
   .piece-preview {

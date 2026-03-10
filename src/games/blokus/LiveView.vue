@@ -1,7 +1,7 @@
 <script setup>
-import { computed } from "vue";
+import { computed, ref, watch } from "vue";
 import GameBoard from "../../components/GameBoard.vue";
-import { PLAYER_COLORS } from "../../lib/pieces";
+import { PIECES, PLAYER_COLORS } from "../../lib/pieces";
 
 const props = defineProps({
   room: { type: Object, required: true },
@@ -40,9 +40,52 @@ const scoreboard = computed(() =>
     }))
 );
 
+const selectedPieceId = ref("mono");
+const rotation = ref(0);
+const flipped = ref(false);
+
+const currentPlayer = computed(() =>
+  props.gameView?.players?.find((player) => player.profileId === props.interactiveProfileId) || null
+);
+const currentTurnPlayer = computed(() => props.gameView?.players?.[props.gameView?.turnIndex] || null);
+const activeRackPlayer = computed(() => currentPlayer.value || currentTurnPlayer.value || null);
+const activeColorMeta = computed(() => PLAYER_COLORS[activeRackPlayer.value?.colorIndex || 0] || PLAYER_COLORS[0]);
+const availablePieceIds = computed(() => new Set(activeRackPlayer.value?.remainingPieces || []));
+const visiblePieces = computed(() => PIECES.map((piece) => ({
+  ...piece,
+  used: !availablePieceIds.value.has(piece.id)
+})));
+const canTransform = computed(() =>
+  !!props.interactiveProfileId
+  && props.gameView?.players?.[props.gameView.turnIndex]?.profileId === props.interactiveProfileId
+);
+
 function colorMeta(colorIndex) {
   return PLAYER_COLORS[colorIndex ?? 0] || PLAYER_COLORS[0];
 }
+
+function choosePiece(pieceId) {
+  selectedPieceId.value = pieceId;
+  rotation.value = 0;
+  flipped.value = false;
+}
+
+function rotate() {
+  rotation.value = (rotation.value + 1) % 4;
+}
+
+function flip() {
+  flipped.value = !flipped.value;
+}
+
+watch(availablePieceIds, (pieces) => {
+  if (!pieces.has(selectedPieceId.value)) {
+    const nextPiece = PIECES.find((piece) => pieces.has(piece.id));
+    selectedPieceId.value = nextPiece?.id || PIECES[0].id;
+    rotation.value = 0;
+    flipped.value = false;
+  }
+});
 </script>
 
 <template>
@@ -55,29 +98,72 @@ function colorMeta(colorIndex) {
       <span v-if="room.phase !== 'IN_GAME'" class="phase-pill">{{ room.phase }}</span>
     </div>
 
-    <GameBoard
-      :room="room"
-      :match="gameView"
-      :current-profile-id="interactiveProfileId"
-      @place="emit('place', $event)"
-    />
-
-    <div class="mini-scoreboard panel">
-      <div class="mini-scoreboard__head">
-        <strong>Scoreboard</strong>
-        <span class="muted">Lowest cells leads</span>
+    <div class="match-main-row">
+      <div class="mini-scoreboard panel">
+        <div class="mini-scoreboard__head">
+          <strong>Scoreboard</strong>
+          <span class="muted">Lowest cells leads</span>
+        </div>
+        <div class="mini-scoreboard__list">
+          <div
+            v-for="player in scoreboard"
+            :key="player.profileId"
+            class="mini-scoreboard__row"
+            :style="{ '--player-color': colorMeta(player.colorIndex).fill }"
+          >
+            <span class="mini-scoreboard__rank">#{{ player.rank }}</span>
+            <strong>{{ player.name }}</strong>
+            <span class="muted">{{ colorMeta(player.colorIndex).name }}</span>
+            <span class="mini-scoreboard__value">{{ player.remainingCells }} cells</span>
+          </div>
+        </div>
       </div>
-      <div class="mini-scoreboard__list">
-        <div
-          v-for="player in scoreboard"
-          :key="player.profileId"
-          class="mini-scoreboard__row"
-          :style="{ '--player-color': colorMeta(player.colorIndex).fill }"
-        >
-          <span class="mini-scoreboard__rank">#{{ player.rank }}</span>
-          <strong>{{ player.name }}</strong>
-          <span class="muted">{{ colorMeta(player.colorIndex).name }}</span>
-          <span class="mini-scoreboard__value">{{ player.remainingCells }} cells</span>
+
+      <GameBoard
+        class="board-stage"
+        :room="room"
+        :match="gameView"
+        :current-profile-id="interactiveProfileId"
+        :selected-piece-id="selectedPieceId"
+        :rotation="rotation"
+        :flipped="flipped"
+        @place="emit('place', $event)"
+        @rotate="rotate"
+      />
+
+      <div class="rack-panel panel">
+        <div class="board-rack-head">
+          <h3>Pieces</h3>
+          <span class="phase-pill">{{ activeRackPlayer?.remainingPieces?.length || 0 }} left</span>
+        </div>
+        <div class="piece-grid">
+          <button
+            v-for="piece in visiblePieces"
+            :key="piece.id"
+            class="piece-chip"
+            :class="{ active: piece.id === selectedPieceId, used: piece.used }"
+            :disabled="piece.used"
+            :style="{ '--piece-color': activeColorMeta.fill }"
+            @click="choosePiece(piece.id)"
+          >
+            <span
+              class="piece-preview"
+              :style="{ '--piece-cols': piece.previewWidth, '--piece-rows': piece.previewHeight }"
+              aria-hidden="true"
+            >
+              <span
+                v-for="(cell, index) in piece.cells"
+                :key="`${piece.id}-${index}`"
+                class="piece-preview-cell"
+                :style="{ gridColumn: `${cell[0] + 1}`, gridRow: `${cell[1] + 1}` }"
+              />
+            </span>
+            <span class="piece-label">{{ piece.label }}</span>
+          </button>
+        </div>
+        <div class="rack-actions">
+          <button class="secondary" :disabled="!canTransform" @click="rotate">Rotate</button>
+          <button class="secondary" :disabled="!canTransform" @click="flip">Flip</button>
         </div>
       </div>
     </div>

@@ -1204,3 +1204,60 @@ IN_GAME
 - seat-claim contract change touches both client and server
 - exact-seat claim must preserve spectator-first room entry
 - scoreboard ordering must follow lower remaining cells = leading
+
+## Extension: Board-Only Match Row with Scoreboard and Pieces Support Row
+- **Status**: APPROVED
+- **Approved-By**: Viet
+- **Approved-On**: 2026-03-10
+- **Task**: Re-layout the live Blokus match view so the board is isolated as the main square play surface, and the support row shows `Scoreboard` on the left and `Pieces` on the right with flexible width/height.
+- **Location**:
+  - `/Users/maihoangviet/Projects/blokus/src/games/blokus/LiveView.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/components/GameBoard.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/style.css`
+  - `/Users/maihoangviet/Projects/blokus/plan_todo/codex/SOW_0007_multi_board_game_platform_refactor.md`
+- **Why**: The live match view still stacks support panels inefficiently and keeps the pieces rack inside the board component. The board should be a strict square play surface with sharp corners, and the scoreboard and pieces should share the support row below it.
+
+### As-Is Diagram (ASCII)
+```text
+Live match
+  -> board + pieces inside GameBoard
+  -> scoreboard below board
+  -> board uses softened rounded corners
+```
+
+### To-Be Diagram (ASCII)
+```text
+Live match
+  -> row 2: board only
+  -> row 3: scoreboard | pieces
+  -> board remains square
+  -> board corners are sharp
+```
+
+### Deliverables
+- make `GameBoard.vue` board-only
+- move pieces/rack actions into `LiveView.vue`
+- place scoreboard left and pieces right in the support row
+- make both support panels stretch to available width/height
+- keep the board square with sharp corners and minimum readable size
+
+### Done Criteria
+- board is isolated from the pieces panel
+- scoreboard is left and pieces are right in the same row
+- board remains square and sharp-edged
+- `npm run build` passes
+
+### Out-of-Scope
+- gameplay rule changes
+- route changes
+- replay layout changes
+
+### Proposed-By
+- Codex GPT-5
+
+### plan
+- multi-board-game-platform-refactor-v1
+
+### Cautions / Risks
+- moving rack UI out of `GameBoard.vue` touches transform state ownership
+- support row must still fit the fixed-viewport layout

@@ -1,19 +1,19 @@
 <script setup>
 import { computed, onMounted, ref, watch } from "vue";
-import { BOARD_SIZE, COLORS, PIECES, PLAYER_COLORS, START_CORNERS, resolvePieceTransform } from "../lib/pieces";
+import { BOARD_SIZE, COLORS, PLAYER_COLORS, START_CORNERS, resolvePieceTransform } from "../lib/pieces";
 
 const props = defineProps({
   room: { type: Object, required: true },
   match: { type: Object, default: null },
-  currentProfileId: { type: String, default: "" }
+  currentProfileId: { type: String, default: "" },
+  selectedPieceId: { type: String, default: "mono" },
+  rotation: { type: Number, default: 0 },
+  flipped: { type: Boolean, default: false }
 });
 
-const emit = defineEmits(["place"]);
+const emit = defineEmits(["place", "rotate"]);
 
 const canvasRef = ref(null);
-const selectedPieceId = ref("mono");
-const rotation = ref(0);
-const flipped = ref(false);
 const hoverCell = ref({ x: -1, y: -1 });
 
 const currentPlayer = computed(() => {
@@ -34,11 +34,7 @@ const activeRackPlayer = computed(() => currentPlayer.value || currentTurnPlayer
 const highlightedCornerPlayer = computed(() => currentTurnPlayer.value || currentPlayer.value || null);
 const availablePieces = computed(() => new Set(activeRackPlayer.value?.remainingPieces || []));
 const activeColorMeta = computed(() => PLAYER_COLORS[activeRackPlayer.value?.colorIndex || 0] || PLAYER_COLORS[0]);
-const activePieceTransform = computed(() => resolvePieceTransform(selectedPieceId.value, rotation.value, flipped.value));
-const visiblePieces = computed(() => PIECES.map((piece) => ({
-  ...piece,
-  used: !availablePieces.value.has(piece.id)
-})));
+const activePieceTransform = computed(() => resolvePieceTransform(props.selectedPieceId, props.rotation, props.flipped));
 
 function clampCell(value) {
   return Math.max(0, Math.min(BOARD_SIZE - 1, value));
@@ -80,7 +76,7 @@ function draw() {
     ctx.strokeRect(cornerX * cellSize + 1, cornerY * cellSize + 1, cellSize - 2, cellSize - 2);
     ctx.restore();
   }
-  if (isMyTurn.value && hoverCell.value.x >= 0 && availablePieces.value.has(selectedPieceId.value)) {
+  if (isMyTurn.value && hoverCell.value.x >= 0 && availablePieces.value.has(props.selectedPieceId)) {
     const piece = activePieceTransform.value.cells;
     const color = activeColorMeta.value.fill;
     ctx.globalAlpha = 0.55;
@@ -104,18 +100,10 @@ function draw() {
   }
 }
 
-function rotate() {
-  rotation.value = (rotation.value + 1) % 4;
-}
-
-function flip() {
-  flipped.value = !flipped.value;
-}
-
 function place() {
   if (!isMyTurn.value || hoverCell.value.x < 0) return;
   emit("place", {
-    pieceId: selectedPieceId.value,
+    pieceId: props.selectedPieceId,
     orientationIndex: activePieceTransform.value.orientationIndex,
     x: hoverCell.value.x,
     y: hoverCell.value.y
@@ -124,72 +112,26 @@ function place() {
 
 watch(() => [
   props.match,
-  selectedPieceId.value,
-  rotation.value,
-  flipped.value,
+  props.selectedPieceId,
+  props.rotation,
+  props.flipped,
   hoverCell.value.x,
   hoverCell.value.y
 ], draw, { deep: true });
-watch(availablePieces, (pieces) => {
-  if (!pieces.has(selectedPieceId.value)) {
-    const nextPiece = PIECES.find((piece) => pieces.has(piece.id));
-    selectedPieceId.value = nextPiece?.id || PIECES[0].id;
-    rotation.value = 0;
-    flipped.value = false;
-  }
-});
 onMounted(draw);
 </script>
 
 <template>
-  <div class="board-layout">
-    <div class="board-panel">
-      <canvas
-        ref="canvasRef"
-        width="640"
-        height="640"
-        class="board-canvas"
-        @mousemove="hoverCell = pointerToCell($event)"
-        @mouseleave="hoverCell = { x: -1, y: -1 }"
-        @click="place"
-        @contextmenu.prevent="rotate"
-      />
-    </div>
-
-    <div class="rack-panel">
-      <div class="board-rack-head">
-        <h3>Pieces</h3>
-        <span class="phase-pill">{{ activeRackPlayer?.remainingPieces?.length || 0 }} left</span>
-      </div>
-      <div class="piece-grid">
-        <button
-          v-for="piece in visiblePieces"
-          :key="piece.id"
-          class="piece-chip"
-          :class="{ active: piece.id === selectedPieceId, used: piece.used }"
-          :disabled="piece.used"
-          :style="{ '--piece-color': activeColorMeta.fill }"
-          @click="selectedPieceId = piece.id; rotation = 0; flipped = false"
-        >
-          <span
-            class="piece-preview"
-            :style="{ '--piece-cols': piece.previewWidth, '--piece-rows': piece.previewHeight }"
-            aria-hidden="true"
-          >
-            <span
-              v-for="(cell, index) in piece.cells"
-              :key="`${piece.id}-${index}`"
-              class="piece-preview-cell"
-              :style="{ gridColumn: `${cell[0] + 1}`, gridRow: `${cell[1] + 1}` }"
-            />
-          </span>
-          <span class="piece-label">{{ piece.label }}</span>
-        </button>
-      </div>
-      <div class="rack-actions">
-        <button class="secondary" :disabled="!isMyTurn" @click="rotate">Rotate</button>
-        <button class="secondary" :disabled="!isMyTurn" @click="flip">Flip</button>
-      </div>
-    </div>
+  <div class="board-panel">
+    <canvas
+      ref="canvasRef"
+      width="640"
+      height="640"
+      class="board-canvas"
+      @mousemove="hoverCell = pointerToCell($event)"
+      @mouseleave="hoverCell = { x: -1, y: -1 }"
+      @click="place"
+      @contextmenu.prevent="emit('rotate')"
+    />
   </div>
 </template>
