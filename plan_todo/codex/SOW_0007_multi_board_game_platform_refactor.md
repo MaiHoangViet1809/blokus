@@ -1261,3 +1261,59 @@ Live match
 ### Cautions / Risks
 - moving rack UI out of `GameBoard.vue` touches transform state ownership
 - support row must still fit the fixed-viewport layout
+
+## Extension: Remove Match-Route Side Gutters and Compact the Meta Strip
+- **Status**: APPROVED
+- **Approved-By**: Viet
+- **Approved-On**: 2026-03-10
+- **Task**: Remove the large side gutters on `/matches/:matchId` and shrink the oversized bottom player/meta strip back to compact height.
+- **Location**:
+  - `/Users/maihoangviet/Projects/blokus/src/style.css`
+  - `/Users/maihoangviet/Projects/blokus/plan_todo/codex/SOW_0007_multi_board_game_platform_refactor.md`
+- **Why**: The live match route still inherits the generic shell width cap, and the gameplay panel still uses a stale extra grid row that makes the bottom strip much taller than intended.
+
+### As-Is Diagram (ASCII)
+```text
+viewport
+| gutter | live match shell | gutter |
+
+live match panel
+  -> header
+  -> gameplay row
+  -> oversized player/meta strip
+```
+
+### To-Be Diagram (ASCII)
+```text
+viewport
+| near-full-width live match shell |
+
+live match panel
+  -> header
+  -> gameplay row
+  -> compact player/meta strip
+```
+
+### Deliverables
+- relax the shell width cap for `.match-view`
+- remove the stale gameplay-panel extra row
+- keep the player/meta strip content-height only
+
+### Done Criteria
+- `/matches/:matchId` uses nearly full available width
+- the player/meta strip is compact again
+- `npm run build` passes
+
+### Out-of-Scope
+- broader app-wide shell width changes
+- match gameplay layout redesign beyond these two regressions
+
+### Proposed-By
+- Codex GPT-5
+
+### plan
+- multi-board-game-platform-refactor-v1
+
+### Cautions / Risks
+- match-route width override must not introduce horizontal overflow
+- compacting the footer row must not collapse the player/meta content

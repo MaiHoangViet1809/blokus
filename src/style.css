@@ -125,7 +125,8 @@ p {
   overflow: hidden;
 }
 
-.shell:has(.room-view) {
+.shell:has(.room-view),
+.shell:has(.match-view) {
   width: calc(100vw - 24px);
   max-width: none;
 }
@@ -563,7 +564,7 @@ p {
 }
 
 .gameplay-panel {
-  grid-template-rows: auto minmax(360px, 1fr) minmax(200px, 0.5fr) auto;
+  grid-template-rows: auto minmax(360px, 1fr) auto;
   gap: 10px;
 }
 
@@ -948,7 +949,7 @@ p {
   }
 
   .gameplay-panel {
-    grid-template-rows: auto minmax(300px, 1fr) minmax(220px, auto) auto;
+    grid-template-rows: auto minmax(300px, 1fr) auto;
   }
 
   .match-main-row {
