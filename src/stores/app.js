@@ -344,15 +344,6 @@ export const useAppStore = defineStore("app", {
         }
       });
     },
-    async passTurn() {
-      return this.emit("match:command", {
-        roomCode: this.room?.code,
-        command: {
-          commandType: "pass_turn",
-          commandPayload: {}
-        }
-      });
-    },
     async rematch() {
       return this.emit("match:rematch", { roomCode: this.room?.code });
     },

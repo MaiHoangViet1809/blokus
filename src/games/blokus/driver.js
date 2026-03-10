@@ -380,6 +380,19 @@ export function createBlokusDriver() {
         colors
       };
     },
+    applyRoomPatch(room, _members, clientInstanceId, patch, helpers) {
+      if (room.phase !== "PREPARE") {
+        throw new Error("Room is not in prepare phase.");
+      }
+      if (patch?.type !== "set_color") {
+        throw new Error("Unsupported room config patch.");
+      }
+      const colorIndex = patch.colorIndex;
+      if (!Number.isInteger(colorIndex) || colorIndex < 0 || colorIndex >= BLOKUS_MAX_PLAYERS) {
+        throw new Error("Invalid color choice.");
+      }
+      helpers.setPlayerColor(clientInstanceId, colorIndex);
+    },
     createMatch(room, members, makeId, nowIso) {
       const config = resolveBlokusConfig(parseJson(room.config_json, {}));
       const players = members.filter((member) => member.role === "player");

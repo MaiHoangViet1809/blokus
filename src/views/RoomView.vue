@@ -60,10 +60,10 @@ async function claimSeat(seatIndex) {
   await store.joinRoom(normalizedRoomCode.value, seatIndex);
 }
 
-async function chooseColor(colorIndex) {
+async function applySetupPatch(patch) {
   await store.emit("room:update-config", {
     roomCode: store.room?.code,
-    patch: { type: "set_color", colorIndex }
+    patch
   });
 }
 
@@ -166,7 +166,7 @@ onMounted(async () => {
                             :class="{ active: row.colorCell.selectedColorIndex === option.colorIndex, blocked: option.blocked }"
                             :style="{ '--seat-color': option.fill }"
                             :disabled="option.disabled"
-                            @click="chooseColor(option.colorIndex)"
+                            @click="applySetupPatch(option.patch)"
                           >
                             <span class="seat-color-dot" :style="{ '--seat-color': option.fill }" />
                             <span>{{ option.name }}</span>

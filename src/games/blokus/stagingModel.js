@@ -35,6 +35,7 @@ export function buildBlokusStagingTableModel(gameView, sessionProfileId) {
               selectedColorIndex: player.colorIndex,
               options: colors.map((entry) => ({
                 ...entry,
+                patch: { type: "set_color", colorIndex: entry.colorIndex },
                 blocked: colorTakenByOther(player, entry.colorIndex, players),
                 disabled: !isCurrentPlayer || colorTakenByOther(player, entry.colorIndex, players)
               }))

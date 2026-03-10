@@ -1599,6 +1599,19 @@ function setPlayerColor(roomCode, clientInstanceId, colorIndex) {
   return buildRoomSnapshot(roomCode);
 }
 
+function applyRoomSetupPatch(roomCode, clientInstanceId, patch) {
+  const room = getRoomByCode(roomCode);
+  if (!room) throw new Error("Room not found.");
+  const driver = roomDriver(room);
+  const members = getRoomMembers(room.id);
+  driver.applyRoomPatch?.(room, members, clientInstanceId, patch, {
+    setPlayerColor(targetClientInstanceId, colorIndex) {
+      setPlayerColor(roomCode, targetClientInstanceId, colorIndex);
+    }
+  });
+  return buildRoomSnapshot(roomCode);
+}
+
 function applyDriverMutation(room, match, result) {
   db.prepare(`
     update matches
@@ -1787,57 +1800,6 @@ function syncMatchTurn(roomId) {
   }
   db.prepare("update matches set turn_index = ? where id = ?").run(nextTurn, match.id);
   return buildMatchSnapshot(room.code);
-}
-
-function placeMove(roomCode, profileId, move) {
-  const room = getRoomByCode(roomCode);
-  if (!room || ![ROOM_PHASES.STARTING, ROOM_PHASES.IN_GAME].includes(room.phase)) throw new Error("Game is not active.");
-  const match = getActiveMatch(room.id);
-  if (!match) throw new Error("No active match.");
-  const players = getOrderedMatchPlayers(match.id);
-  const currentPlayer = players[match.turn_index];
-  if (!currentPlayer || currentPlayer.profile_id !== profileId) throw new Error("Not your turn.");
-  const board = parseBoard(match.board_json, normalizedRoomConfig(room).boardSize || BOARD_SIZE);
-  const playerState = {
-    colorIndex: currentPlayer.color_index,
-    hasMoved: currentPlayer.hasMoved,
-    remainingPieces: currentPlayer.remainingPieces
-  };
-  const verdict = isLegalPlacement(board, playerState, move, room);
-  if (!verdict.ok) throw new Error(verdict.reason);
-  placeCells(board, verdict.cells, currentPlayer.color_index + 1);
-  const remainingPieces = currentPlayer.remainingPieces.filter((pieceId) => pieceId !== move.pieceId);
-  db.prepare(`
-    update match_players
-    set has_moved = 1, passed = 0, disconnected = 0, remaining_pieces_json = ?, end_state = 'active'
-    where id = ?
-  `).run(JSON.stringify(remainingPieces), currentPlayer.id);
-  db.prepare("update matches set board_json = ? where id = ?").run(serializeBoard(board), match.id);
-  appendMove(match.id, profileId, "piece_placed", move);
-  markMatchCommitted(room.id, match.id);
-  return syncMatchTurn(room.id);
-}
-
-function passTurn(roomCode, profileId) {
-  const room = getRoomByCode(roomCode);
-  if (!room || ![ROOM_PHASES.STARTING, ROOM_PHASES.IN_GAME].includes(room.phase)) throw new Error("Game is not active.");
-  const match = getActiveMatch(room.id);
-  if (!match) throw new Error("No active match.");
-  const players = getOrderedMatchPlayers(match.id);
-  const currentPlayer = players[match.turn_index];
-  if (!currentPlayer || currentPlayer.profile_id !== profileId) throw new Error("Not your turn.");
-  const board = parseBoard(match.board_json, normalizedRoomConfig(room).boardSize || BOARD_SIZE);
-  if (hasAnyLegalMove(board, currentPlayer, room)) {
-    throw new Error("You still have a legal move and cannot pass.");
-  }
-  db.prepare(`
-    update match_players
-    set passed = 1, end_state = 'blocked'
-    where id = ?
-  `).run(currentPlayer.id);
-  appendMove(match.id, profileId, "turn_passed", {});
-  markMatchCommitted(room.id, match.id);
-  return syncMatchTurn(room.id);
 }
 
 function prepareRoomForRematch(room) {
@@ -2251,20 +2213,10 @@ io.on("connection", (socket) => {
     });
   });
 
-  socket.on("room:set-color", ({ roomCode, colorIndex }, ack) => {
-    ackHandler(ack, () => {
-      const session = requireSession(socket);
-      const room = setPlayerColor(roomCode, session.client_instance_id, colorIndex);
-      emitRoomState(roomCode);
-      return { ...roomAndMatchPayload(roomCode, session.profile_id), room };
-    });
-  });
-
   socket.on("room:update-config", ({ roomCode, patch }, ack) => {
     ackHandler(ack, () => {
       const session = requireSession(socket);
-      if (patch?.type !== "set_color") throw new Error("Unsupported room config patch.");
-      const room = setPlayerColor(roomCode, session.client_instance_id, patch.colorIndex);
+      const room = applyRoomSetupPatch(roomCode, session.client_instance_id, patch);
       emitRoomState(roomCode);
       return { ...roomAndMatchPayload(roomCode, session.profile_id), room };
     });
@@ -2283,18 +2235,6 @@ io.on("connection", (socket) => {
     ackHandler(ack, () => {
       const session = requireSession(socket);
       const match = handleMatchCommand(roomCode, session.profile_id, command);
-      emitRoomState(roomCode);
-      return { ...roomAndMatchPayload(roomCode, session.profile_id), match };
-    });
-  });
-
-  socket.on("match:place", ({ roomCode, move }, ack) => {
-    ackHandler(ack, () => {
-      const session = requireSession(socket);
-      const match = handleMatchCommand(roomCode, session.profile_id, {
-        commandType: "place_piece",
-        commandPayload: move
-      });
       emitRoomState(roomCode);
       return { ...roomAndMatchPayload(roomCode, session.profile_id), match };
     });

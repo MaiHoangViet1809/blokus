@@ -1700,3 +1700,86 @@ Solo 1:1
 ### Cautions / Risks
 - server room summaries and legacy match helpers must stop assuming capacity 4 / board size 20
 - replay and board views must render from ruleset config, not fixed grid dimensions
+
+## Extension: Remove Legacy Blokus Staging and Command Paths
+- **Status**: APPROVED
+- **Approved-By**: Viet
+- **Approved-On**: 2026-03-10
+- **Task**: Remove legacy Blokus-specific setup and command leftovers so the platform is closer to adding a new game by driver and views instead of editing core shells and stale paths.
+- **Location**:
+  - `/Users/maihoangviet/Projects/blokus/server.js`
+  - `/Users/maihoangviet/Projects/blokus/src/views/RoomView.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/stores/app.js`
+  - `/Users/maihoangviet/Projects/blokus/src/games/blokus/driver.js`
+  - `/Users/maihoangviet/Projects/blokus/src/games/blokus/stagingModel.js`
+  - `/Users/maihoangviet/Projects/blokus/src/games/blokus/SetupView.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/components/ReplayPanel.vue`
+  - `/Users/maihoangviet/Projects/blokus/plan_todo/codex/SOW_0007_multi_board_game_platform_refactor.md`
+
+### As-Is Diagram (ASCII)
+```text
+RoomView
+  -> staging table
+  -> hardcoded room:update-config patch: set_color
+
+server.js
+  -> generic room flow
+  -> but still owns setPlayerColor()
+  -> still exposes room:set-color
+  -> still keeps match:place alias
+  -> still keeps placeMove()/passTurn() legacy helpers
+
+Dead files
+  -> blokus/SetupView.vue
+  -> components/ReplayPanel.vue
+```
+
+### To-Be Diagram (ASCII)
+```text
+RoomView
+  -> generic setup patch dispatch only
+
+server.js
+  -> generic room:update-config
+  -> delegated to game driver setup mutation handler
+  -> no room:set-color legacy alias
+  -> no match:place legacy alias
+  -> no unused pre-driver match helpers
+
+Codebase
+  -> dead Blokus staging/replay wrapper files removed
+```
+
+### Deliverables
+- replace hardcoded `set_color` patch handling with driver-routed setup patch handling
+- remove legacy `room:set-color` socket path
+- remove legacy `match:place` socket alias
+- remove unused pre-driver helpers:
+  - `placeMove()`
+  - `passTurn()`
+- delete unused files:
+  - `/Users/maihoangviet/Projects/blokus/src/games/blokus/SetupView.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/components/ReplayPanel.vue`
+
+### Done Criteria
+- room setup updates no longer hardcode Blokus patch names in room shell or server transport
+- no stale `room:set-color` or `match:place` transport path remains
+- dead files listed above are removed
+- `node --check server.js` passes
+- `npm run build` passes
+
+### Out-of-Scope
+- dynamic plugin loading
+- refactoring static registries
+- implementing chess
+- large lobby or match UI redesign
+
+### Proposed-By
+- Codex GPT-5
+
+### plan
+- multi-board-game-platform-refactor-v1
+
+### Cautions / Risks
+- the setup patch contract should stay small and concrete
+- current Blokus color selection behavior must remain intact while patch routing moves behind the driver
