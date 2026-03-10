@@ -574,17 +574,17 @@ p {
   justify-items: center;
   overflow: hidden;
   align-items: center;
+  height: 100%;
 }
 
 .board-canvas {
-  width: min(100%, calc(100dvh - 320px));
   aspect-ratio: 1;
   display: block;
   background: #040910;
   border-radius: 0;
   border: 1px solid rgba(255, 255, 255, 0.12);
-  min-width: 0;
   max-width: 100%;
+  max-height: 100%;
 }
 
 .rack-panel {
@@ -914,10 +914,6 @@ p {
     grid-template-columns: 1fr;
   }
 
-  .board-canvas {
-    width: min(100%, calc(100dvh - 360px));
-    min-width: 0;
-  }
 }
 
 @media (max-width: 820px) {
@@ -955,11 +951,6 @@ p {
 
   .match-main-row {
     grid-template-columns: minmax(200px, 0.9fr) minmax(0, 1.55fr) minmax(200px, 0.95fr);
-  }
-
-  .board-canvas {
-    width: 100%;
-    min-width: 0;
   }
 
   .player-strip {

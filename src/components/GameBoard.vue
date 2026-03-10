@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { BOARD_SIZE, COLORS, PLAYER_COLORS, START_CORNERS, resolvePieceTransform } from "../lib/pieces";
 
 const props = defineProps({
@@ -13,8 +13,11 @@ const props = defineProps({
 
 const emit = defineEmits(["place", "rotate"]);
 
+const boardPanelRef = ref(null);
 const canvasRef = ref(null);
 const hoverCell = ref({ x: -1, y: -1 });
+const boardSide = ref(0);
+let resizeObserver = null;
 
 const currentPlayer = computed(() => {
   if (!props.match) return null;
@@ -51,7 +54,7 @@ function pointerToCell(event) {
 
 function draw() {
   const canvas = canvasRef.value;
-  if (!canvas) return;
+  if (!canvas || boardSide.value <= 0) return;
   const ctx = canvas.getContext("2d");
   const cellSize = canvas.width / BOARD_SIZE;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -100,6 +103,20 @@ function draw() {
   }
 }
 
+function resizeBoard() {
+  const panel = boardPanelRef.value;
+  const canvas = canvasRef.value;
+  if (!panel || !canvas) return;
+  const nextSide = Math.max(0, Math.floor(Math.min(panel.clientWidth, panel.clientHeight)));
+  if (!nextSide) return;
+  if (canvas.width !== nextSide || canvas.height !== nextSide) {
+    canvas.width = nextSide;
+    canvas.height = nextSide;
+  }
+  boardSide.value = nextSide;
+  draw();
+}
+
 function place() {
   if (!isMyTurn.value || hoverCell.value.x < 0) return;
   emit("place", {
@@ -118,16 +135,25 @@ watch(() => [
   hoverCell.value.x,
   hoverCell.value.y
 ], draw, { deep: true });
-onMounted(draw);
+onMounted(() => {
+  resizeBoard();
+  resizeObserver = new ResizeObserver(() => resizeBoard());
+  if (boardPanelRef.value) {
+    resizeObserver.observe(boardPanelRef.value);
+  }
+  draw();
+});
+onBeforeUnmount(() => {
+  resizeObserver?.disconnect();
+});
 </script>
 
 <template>
-  <div class="board-panel">
+  <div ref="boardPanelRef" class="board-panel">
     <canvas
       ref="canvasRef"
-      width="640"
-      height="640"
       class="board-canvas"
+      :style="{ width: `${boardSide}px`, height: `${boardSide}px` }"
       @mousemove="hoverCell = pointerToCell($event)"
       @mouseleave="hoverCell = { x: -1, y: -1 }"
       @click="place"

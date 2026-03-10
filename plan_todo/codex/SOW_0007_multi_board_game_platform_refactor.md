@@ -1363,3 +1363,54 @@ match row
 
 ### Cautions / Risks
 - the board must stay square while shrinking to fit the actual center column
+
+## Extension: Fit the Live Board by Container, Not Viewport
+- **Status**: APPROVED
+- **Approved-By**: Viet
+- **Approved-On**: 2026-03-10
+- **Task**: Fix the live Blokus board clipping bug on `/matches/:matchId` by sizing the square board from the actual center container instead of from `100dvh`.
+- **Location**:
+  - `/Users/maihoangviet/Projects/blokus/src/components/GameBoard.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/style.css`
+  - `/Users/maihoangviet/Projects/blokus/plan_todo/codex/SOW_0007_multi_board_game_platform_refactor.md`
+- **Why**: The board canvas was still sized from viewport height, not from the real middle-column container. That let the square exceed the row height and clip at the top/bottom.
+
+### As-Is Diagram (ASCII)
+```text
+match-main-row
+| scoreboard | board column                | pieces |
+|            | board size derived from dvh |        |
+|            | -> too tall for row         |        |
+|            | -> clipped top/bottom       |        |
+```
+
+### To-Be Diagram (ASCII)
+```text
+match-main-row
+| scoreboard | square board fits container | pieces |
+|            | side = min(width, height)   |        |
+|            | no clipping                 |        |
+```
+
+### Deliverables
+- remove viewport-based board sizing
+- size the board from the measured center container
+- keep the board square and fully contained
+
+### Done Criteria
+- board no longer clips in the live three-column layout
+- `node --check server.js` passes
+- `npm run build` passes
+
+### Out-of-Scope
+- gameplay rule changes
+- broader match layout redesign
+
+### Proposed-By
+- Codex GPT-5
+
+### plan
+- multi-board-game-platform-refactor-v1
+
+### Cautions / Risks
+- container measurement must react to resize without breaking hover/place alignment
