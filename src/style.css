@@ -623,18 +623,19 @@ p {
   overflow: auto;
   gap: 8px;
   padding-right: 2px;
+  justify-items: center;
 }
 
 .piece-chip {
-  display: grid;
-  grid-template-rows: minmax(0, 1fr) auto;
-  justify-items: center;
-  align-items: center;
-  gap: 6px;
-  padding: 10px 8px;
+  position: relative;
+  display: block;
+  width: 100%;
+  max-width: 124px;
+  padding: 8px;
   font-size: 0.72rem;
   aspect-ratio: 1;
   min-height: 0;
+  overflow: hidden;
 }
 
 .piece-chip.active {
@@ -647,26 +648,38 @@ p {
 }
 
 .piece-label {
-  font-size: 0.68rem;
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  bottom: 8px;
+  font-size: 0.62rem;
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
+  line-height: 1;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .piece-preview {
+  position: absolute;
+  top: 10px;
+  left: 50%;
   display: grid;
-  grid-template-columns: repeat(var(--piece-cols), 10px);
-  grid-template-rows: repeat(var(--piece-rows), 10px);
+  grid-template-columns: repeat(var(--piece-cols), 8px);
+  grid-template-rows: repeat(var(--piece-rows), 8px);
   gap: 2px;
   min-height: 0;
   align-content: center;
   justify-content: center;
-  align-self: center;
+  transform: translateX(-50%);
 }
 
 .piece-preview-cell {
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
   border-radius: 3px;
   background: var(--piece-color, rgba(88, 178, 255, 0.92));
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
@@ -1033,13 +1046,13 @@ p {
   }
 
   .piece-preview {
-    grid-template-columns: repeat(var(--piece-cols), 8px);
-    grid-template-rows: repeat(var(--piece-rows), 8px);
+    grid-template-columns: repeat(var(--piece-cols), 7px);
+    grid-template-rows: repeat(var(--piece-rows), 7px);
   }
 
   .piece-preview-cell {
-    width: 8px;
-    height: 8px;
+    width: 7px;
+    height: 7px;
   }
 
   .piece-grid {

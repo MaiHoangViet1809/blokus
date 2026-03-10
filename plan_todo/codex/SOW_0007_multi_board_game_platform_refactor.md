@@ -1464,3 +1464,59 @@ Pieces panel
 
 ### Cautions / Risks
 - selected preview must stay centered so transforms do not visually jump
+
+## Extension: Flexible Square Rack Tiles Within the Pieces Panel
+- **Status**: APPROVED
+- **Approved-By**: Viet
+- **Approved-On**: 2026-03-10
+- **Task**: Keep the live Blokus rack tiles square while making them flex within the rack container without growing so large that preview and label content crowd or overlap.
+- **Location**:
+  - `/Users/maihoangviet/Projects/blokus/src/games/blokus/LiveView.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/style.css`
+  - `/Users/maihoangviet/Projects/blokus/plan_todo/codex/SOW_0007_multi_board_game_platform_refactor.md`
+- **Why**: The square tiles introduced earlier still stretched too large inside the rack column, causing the preview and label to compete for limited vertical space and look visually broken.
+
+### As-Is Diagram (ASCII)
+```text
+Pieces panel
+  -> 2-column square tiles
+  -> tiles stretch too large
+  -> preview + label crowd inside tile
+  -> visual overlap / cramped layout
+```
+
+### To-Be Diagram (ASCII)
+```text
+Pieces panel container
+  -> 2-column responsive grid
+  -> square tiles stay compact
+  -> preview centered near top
+  -> label anchored at bottom
+  -> no overlap
+```
+
+### Deliverables
+- keep a 2-column desktop rack layout with square tiles
+- limit tile growth so they stay compact within the rack panel
+- reposition preview and label so content fits cleanly inside each square tile
+- preserve transform-synced selected preview behavior
+
+### Done Criteria
+- piece tiles remain square
+- piece tiles no longer visually overlap or crowd their own contents
+- selected tile still matches the transformed board preview after rotate/flip
+- `npm run build` passes
+
+### Out-of-Scope
+- route/layout changes outside the rack panel
+- server/API changes
+
+### Proposed-By
+- Codex GPT-5
+
+### plan
+- multi-board-game-platform-refactor-v1
+
+### Cautions / Risks
+- rack sizing changes must not break the 2-column desktop layout
+- preview reduction must still keep larger polyominoes legible
