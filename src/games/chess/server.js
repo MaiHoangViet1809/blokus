@@ -2,6 +2,7 @@ import {
   CHESS_GAME_TYPE,
   CHESS_RULESETS,
   PIECE_VALUES,
+  SIDE_OPTIONS,
   buildChessConfig,
   initialPieceCounts,
   makeInitialBoard,

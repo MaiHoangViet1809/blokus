@@ -119,3 +119,46 @@ src/games/chess/
     - insufficient material
   - Threefold repetition and fifty-move draw claims are out of scope for this first version.
   - Side choice happens in staging via `White` / `Black`.
+
+## Extension: Fix missing `SIDE_OPTIONS` import in chess room setup
+
+- **Status**: APPROVED
+- **Approved-By**: Viet
+- **Task**: Fix the missing `SIDE_OPTIONS` import in the chess server projection so chess room creation no longer crashes at runtime.
+- **Location**:
+  - `/Users/maihoangviet/Projects/blokus/src/games/chess/server.js`
+  - `/Users/maihoangviet/Projects/blokus/plan_todo/codex/finished/SOW_0009_standard_chess_v1.md`
+- **Why**: Chess room creation currently crashes because `projectRoomSetup()` references `SIDE_OPTIONS` without importing it.
+- **As-Is Diagram (ASCII)**:
+```text
+create chess room
+  -> buildGameView()
+  -> chess.projectRoomSetup()
+  -> uses SIDE_OPTIONS
+  -> SIDE_OPTIONS not imported
+  -> ReferenceError
+  -> room:create fails
+```
+- **To-Be Diagram (ASCII)**:
+```text
+create chess room
+  -> buildGameView()
+  -> chess.projectRoomSetup()
+  -> SIDE_OPTIONS imported correctly
+  -> setup projection succeeds
+  -> room:create returns normally
+```
+- **Deliverables**:
+  - add the missing import in `/Users/maihoangviet/Projects/blokus/src/games/chess/server.js`
+  - append this regression-fix extension to `/Users/maihoangviet/Projects/blokus/plan_todo/codex/finished/SOW_0009_standard_chess_v1.md`
+- **Done Criteria**:
+  - chess room creation no longer throws `ReferenceError: SIDE_OPTIONS is not defined`
+  - `node --check src/games/chess/server.js` passes
+  - `npm run build` passes
+- **Out-of-Scope**:
+  - broader chess capacity cleanup
+  - staging behavior changes
+- **Proposed-By**: Codex GPT-5
+- **plan**: chess-v1-standard-hvh
+- **Cautions / Risks**:
+  - keep the fix narrow; this is an import regression, not a logic redesign
