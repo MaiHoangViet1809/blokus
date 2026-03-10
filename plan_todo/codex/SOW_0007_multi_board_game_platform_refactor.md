@@ -1577,3 +1577,56 @@ smaller square tile
 ### Cautions / Risks
 - reducing tile size too far can hurt larger-piece legibility
 - centering must still keep transformed previews visually stable
+
+## Extension: Flex-Wrap Rack Tiles with Stable Square Footprints
+- **Status**: APPROVED
+- **Approved-By**: Viet
+- **Approved-On**: 2026-03-10
+- **Task**: Replace the live Blokus rack tile layout with a flex-wrap footprint model so square piece tiles no longer over-expand or feel visually overlapping.
+- **Location**:
+  - `/Users/maihoangviet/Projects/blokus/src/style.css`
+  - `/Users/maihoangviet/Projects/blokus/plan_todo/codex/SOW_0007_multi_board_game_platform_refactor.md`
+- **Why**: The rack was still using fluid grid columns, so tile width remained unstable and visually oversized. A flex-wrap footprint model gives each tile a stable square size and cleaner wrapping.
+
+### As-Is Diagram (ASCII)
+```text
+piece-grid
+  -> css grid
+  -> fluid 1fr columns
+  -> square tiles still grow too large
+  -> rack feels crowded / visually overlapping
+```
+
+### To-Be Diagram (ASCII)
+```text
+piece-grid
+  -> flex-wrap
+  -> each tile has stable square footprint
+  -> tiles wrap cleanly
+  -> no visual overlap feeling
+```
+
+### Deliverables
+- replace rack layout with flex-wrap
+- keep square tiles with centered previews
+- reduce tile footprint to a stable compact size
+
+### Done Criteria
+- rack tiles wrap cleanly without overlap
+- rack tiles remain square and centered
+- `npm run build` passes
+
+### Out-of-Scope
+- route changes
+- server/API changes
+- broader match layout redesign
+
+### Proposed-By
+- Codex GPT-5
+
+### plan
+- multi-board-game-platform-refactor-v1
+
+### Cautions / Risks
+- the chosen footprint must still keep larger pieces legible
+- desktop rack should still present at least two tiles per row in normal width

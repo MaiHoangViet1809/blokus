@@ -618,18 +618,20 @@ p {
 }
 
 .piece-grid {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  align-content: start;
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
   overflow: auto;
   gap: 8px;
   padding-right: 2px;
-  justify-items: center;
+  justify-content: center;
 }
 
 .piece-chip {
   display: grid;
   place-items: center;
-  width: min(100%, 100px);
+  flex: 0 0 84px;
+  width: 84px;
   padding: 6px;
   font-size: 0.72rem;
   aspect-ratio: 1;
@@ -1035,11 +1037,12 @@ p {
   }
 
   .piece-grid {
-    grid-template-columns: 1fr;
+    justify-content: center;
   }
 
   .piece-chip {
-    width: min(100%, 92px);
+    flex-basis: 78px;
+    width: 78px;
   }
 
   .color-picker {
