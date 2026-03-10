@@ -1,6 +1,6 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { BOARD_SIZE, COLORS, PLAYER_COLORS, START_CORNERS, resolvePieceTransform } from "../lib/pieces";
+import { BOARD_SIZE, COLORS, PLAYER_COLORS, buildStartCorners, resolvePieceTransform } from "../lib/pieces";
 
 const props = defineProps({
   room: { type: Object, required: true },
@@ -36,19 +36,22 @@ const currentTurnPlayer = computed(() => {
 const activeRackPlayer = computed(() => currentPlayer.value || currentTurnPlayer.value || null);
 const highlightedCornerPlayer = computed(() => currentTurnPlayer.value || currentPlayer.value || null);
 const availablePieces = computed(() => new Set(activeRackPlayer.value?.remainingPieces || []));
-const activeColorMeta = computed(() => PLAYER_COLORS[activeRackPlayer.value?.colorIndex || 0] || PLAYER_COLORS[0]);
+const boardSize = computed(() => props.match?.boardSize || BOARD_SIZE);
+const boardColors = computed(() => props.match?.colors || PLAYER_COLORS);
+const startCorners = computed(() => props.match?.startCorners || buildStartCorners(boardSize.value));
+const activeColorMeta = computed(() => boardColors.value[activeRackPlayer.value?.colorIndex || 0] || boardColors.value[0] || PLAYER_COLORS[0]);
 const activePieceTransform = computed(() => resolvePieceTransform(props.selectedPieceId, props.rotation, props.flipped));
 
 function clampCell(value) {
-  return Math.max(0, Math.min(BOARD_SIZE - 1, value));
+  return Math.max(0, Math.min(boardSize.value - 1, value));
 }
 
 function pointerToCell(event) {
   const canvas = canvasRef.value;
   const rect = canvas.getBoundingClientRect();
   return {
-    x: clampCell(Math.floor(((event.clientX - rect.left) / rect.width) * BOARD_SIZE)),
-    y: clampCell(Math.floor(((event.clientY - rect.top) / rect.height) * BOARD_SIZE))
+    x: clampCell(Math.floor(((event.clientX - rect.left) / rect.width) * boardSize.value)),
+    y: clampCell(Math.floor(((event.clientY - rect.top) / rect.height) * boardSize.value))
   };
 }
 
@@ -56,11 +59,12 @@ function draw() {
   const canvas = canvasRef.value;
   if (!canvas || boardSide.value <= 0) return;
   const ctx = canvas.getContext("2d");
-  const cellSize = canvas.width / BOARD_SIZE;
+  const size = boardSize.value;
+  const cellSize = canvas.width / size;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-  const board = props.match?.board || Array.from({ length: BOARD_SIZE }, () => Array(BOARD_SIZE).fill(0));
-  for (let y = 0; y < BOARD_SIZE; y += 1) {
-    for (let x = 0; x < BOARD_SIZE; x += 1) {
+  const board = props.match?.board || Array.from({ length: size }, () => Array(size).fill(0));
+  for (let y = 0; y < size; y += 1) {
+    for (let x = 0; x < size; x += 1) {
       ctx.fillStyle = COLORS[board[y][x]] || COLORS[0];
       ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
       ctx.strokeStyle = "rgba(255,255,255,0.08)";
@@ -68,9 +72,9 @@ function draw() {
     }
   }
   for (const player of props.match?.players || []) {
-    const colorMeta = PLAYER_COLORS[player.colorIndex];
+    const colorMeta = boardColors.value[player.colorIndex];
     if (!colorMeta) continue;
-    const [cornerX, cornerY] = START_CORNERS[player.colorIndex];
+    const [cornerX, cornerY] = startCorners.value[player.colorIndex];
     ctx.save();
     ctx.fillStyle = `${colorMeta.fill}99`;
     ctx.fillRect(cornerX * cellSize, cornerY * cellSize, cellSize, cellSize);
@@ -87,16 +91,16 @@ function draw() {
     for (const [dx, dy] of piece) {
       const x = hoverCell.value.x + dx;
       const y = hoverCell.value.y + dy;
-      if (x >= 0 && y >= 0 && x < BOARD_SIZE && y < BOARD_SIZE) {
+      if (x >= 0 && y >= 0 && x < size && y < size) {
         ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
       }
     }
     ctx.globalAlpha = 1;
   }
   if (highlightedCornerPlayer.value && !highlightedCornerPlayer.value.hasMoved) {
-    const [cornerX, cornerY] = START_CORNERS[highlightedCornerPlayer.value.colorIndex];
+    const [cornerX, cornerY] = startCorners.value[highlightedCornerPlayer.value.colorIndex];
     ctx.save();
-    ctx.strokeStyle = PLAYER_COLORS[highlightedCornerPlayer.value.colorIndex]?.fill || activeColorMeta.value.fill;
+    ctx.strokeStyle = boardColors.value[highlightedCornerPlayer.value.colorIndex]?.fill || activeColorMeta.value.fill;
     ctx.lineWidth = 4;
     ctx.strokeRect(cornerX * cellSize + 1, cornerY * cellSize + 1, cellSize - 2, cellSize - 2);
     ctx.restore();

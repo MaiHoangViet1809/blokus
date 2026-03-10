@@ -31,6 +31,7 @@ watch(() => props.replay?.id, () => {
           v-for="(row, rowIndex) in frame?.board || []"
           :key="`row-${rowIndex}`"
           class="replay-row"
+          :style="{ '--replay-cols': replay.boardSize || frame?.board?.[0]?.length || 20 }"
         >
           <span
             v-for="(cell, cellIndex) in row"

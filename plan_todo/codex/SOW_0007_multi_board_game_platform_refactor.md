@@ -1630,3 +1630,73 @@ piece-grid
 ### Cautions / Risks
 - the chosen footprint must still keep larger pieces legible
 - desktop rack should still present at least two tiles per row in normal width
+
+## Extension: Blokus `solo_1v1` 14x14 Variant
+- **Status**: APPROVED
+- **Approved-By**: Viet
+- **Approved-On**: 2026-03-10
+- **Task**: Add a `solo_1v1` Blokus ruleset with a 14x14 board, two-player capacity, and a mode selector in the Blokus create flow.
+- **Location**:
+  - `/Users/maihoangviet/Projects/blokus/server.js`
+  - `/Users/maihoangviet/Projects/blokus/src/lib/pieces.js`
+  - `/Users/maihoangviet/Projects/blokus/src/games/blokus/driver.js`
+  - `/Users/maihoangviet/Projects/blokus/src/games/blokus/stagingModel.js`
+  - `/Users/maihoangviet/Projects/blokus/src/games/blokus/LiveView.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/games/blokus/ReplayView.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/games/clientRegistry.js`
+  - `/Users/maihoangviet/Projects/blokus/src/views/GameLobbyView.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/views/HomeView.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/components/GameBoard.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/style.css`
+  - `/Users/maihoangviet/Projects/blokus/plan_todo/codex/SOW_0007_multi_board_game_platform_refactor.md`
+
+### As-Is Diagram (ASCII)
+```text
+Create Blokus room
+  -> one implicit mode only
+  -> 20x20 board
+  -> capacity 4
+  -> room list only shows "blokus"
+```
+
+### To-Be Diagram (ASCII)
+```text
+Create Blokus room
+  -> choose mode:
+     [Classic 4P] [Solo 1:1]
+
+Solo 1:1
+  -> board 14x14
+  -> capacity 2
+  -> exactly 2 seated players
+  -> same 4 color/corner identities
+```
+
+### Deliverables
+- make Blokus ruleset-driven with `classic_4p` and `solo_1v1`
+- add a Blokus mode selector in `/games/blokus`
+- expose mode labels in lobby room summaries
+- render live/replay boards from dynamic `boardSize`
+
+### Done Criteria
+- solo rooms create with capacity 2 and board size 14
+- classic rooms remain 20x20 with capacity 4
+- room list shows the Blokus mode label
+- live and replay views no longer hardcode 20x20
+- `node --check server.js` passes
+- `npm run build` passes
+
+### Out-of-Scope
+- reduced duel piece set
+- new game type
+- color/corner model redesign
+
+### Proposed-By
+- Codex GPT-5
+
+### plan
+- multi-board-game-platform-refactor-v1
+
+### Cautions / Risks
+- server room summaries and legacy match helpers must stop assuming capacity 4 / board size 20
+- replay and board views must render from ruleset config, not fixed grid dimensions

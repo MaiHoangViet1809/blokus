@@ -41,11 +41,11 @@ export function buildBlokusStagingTableModel(gameView, sessionProfileId) {
             }
           : {
               type: "hint",
-              text: colors[seatIndex]?.name || "-"
+              text: "Choose after seat"
             },
         cornerCell: {
           type: "text",
-          text: player?.cornerLabel || colors[seatIndex]?.cornerLabel || "-"
+          text: player?.cornerLabel || "Choose by color"
         }
       };
     })

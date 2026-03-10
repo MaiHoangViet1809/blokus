@@ -6,7 +6,7 @@ import { mkdirSync, existsSync } from "fs";
 import { dirname, join } from "path";
 import { fileURLToPath } from "url";
 import { randomBytes } from "crypto";
-import { ALL_PIECE_IDS, BOARD_SIZE, ORIENTATIONS as PIECE_ORIENTATIONS, PIECE_CELL_COUNTS, START_CORNERS } from "./src/lib/pieces.js";
+import { ALL_PIECE_IDS, BOARD_SIZE, buildStartCorners, ORIENTATIONS as PIECE_ORIENTATIONS, PIECE_CELL_COUNTS } from "./src/lib/pieces.js";
 import { getGameDriver } from "./src/games/serverRegistry.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -272,16 +272,29 @@ function parseJson(value, fallback) {
   }
 }
 
+function normalizedRoomConfig(room) {
+  if (!room) return {};
+  return roomDriver(room).buildRoomConfig(parseRoomConfig(room));
+}
+
+function roomCapacity(room) {
+  return normalizedRoomConfig(room).maxPlayers || MAX_PLAYERS;
+}
+
+function roomModeLabel(room) {
+  return normalizedRoomConfig(room).modeLabel || null;
+}
+
 function normalizeProfileName(value) {
   return String(value || "").trim().slice(0, 24).toUpperCase();
 }
 
-function emptyBoard() {
-  return Array.from({ length: BOARD_SIZE }, () => Array(BOARD_SIZE).fill(0));
+function emptyBoard(boardSize = BOARD_SIZE) {
+  return Array.from({ length: boardSize }, () => Array(boardSize).fill(0));
 }
 
-function inBounds(x, y) {
-  return x >= 0 && y >= 0 && x < BOARD_SIZE && y < BOARD_SIZE;
+function inBounds(x, y, boardSize = BOARD_SIZE) {
+  return x >= 0 && y >= 0 && x < boardSize && y < boardSize;
 }
 
 function buildAbsCells(pieceId, orientationIndex, anchorX, anchorY) {
@@ -294,56 +307,59 @@ function wouldOverlap(board, cellsAbs) {
   return cellsAbs.some(([x, y]) => board[y][x] !== 0);
 }
 
-function touchesEdgeSameColor(board, cellsAbs, colorValue) {
+function touchesEdgeSameColor(board, cellsAbs, colorValue, boardSize = BOARD_SIZE) {
   const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
   for (const [x, y] of cellsAbs) {
     for (const [dx, dy] of dirs) {
       const nx = x + dx;
       const ny = y + dy;
-      if (inBounds(nx, ny) && board[ny][nx] === colorValue) return true;
+      if (inBounds(nx, ny, boardSize) && board[ny][nx] === colorValue) return true;
     }
   }
   return false;
 }
 
-function touchesCornerSameColor(board, cellsAbs, colorValue) {
+function touchesCornerSameColor(board, cellsAbs, colorValue, boardSize = BOARD_SIZE) {
   const diagonals = [[1, 1], [1, -1], [-1, 1], [-1, -1]];
   for (const [x, y] of cellsAbs) {
     for (const [dx, dy] of diagonals) {
       const nx = x + dx;
       const ny = y + dy;
-      if (inBounds(nx, ny) && board[ny][nx] === colorValue) return true;
+      if (inBounds(nx, ny, boardSize) && board[ny][nx] === colorValue) return true;
     }
   }
   return false;
 }
 
-function coversStartCorner(cellsAbs, colorIndex) {
-  const [cx, cy] = START_CORNERS[colorIndex];
+function coversStartCorner(cellsAbs, colorIndex, startCorners) {
+  const [cx, cy] = startCorners[colorIndex];
   return cellsAbs.some(([x, y]) => x === cx && y === cy);
 }
 
-function isLegalPlacement(board, player, move) {
+function isLegalPlacement(board, player, move, room) {
+  const config = normalizedRoomConfig(room);
+  const boardSize = config.boardSize || BOARD_SIZE;
+  const startCorners = buildStartCorners(boardSize);
   if (!player.remainingPieces.includes(move.pieceId)) {
     return { ok: false, reason: "Piece already used." };
   }
   const abs = buildAbsCells(move.pieceId, move.orientationIndex, move.x, move.y);
   if (!abs) return { ok: false, reason: "Invalid piece or orientation." };
   for (const [x, y] of abs) {
-    if (!inBounds(x, y)) return { ok: false, reason: "Out of bounds." };
+    if (!inBounds(x, y, boardSize)) return { ok: false, reason: "Out of bounds." };
   }
   if (wouldOverlap(board, abs)) return { ok: false, reason: "Overlap." };
   const colorValue = player.colorIndex + 1;
   if (!player.hasMoved) {
-    if (!coversStartCorner(abs, player.colorIndex)) {
+    if (!coversStartCorner(abs, player.colorIndex, startCorners)) {
       return { ok: false, reason: "First move must cover your starting corner." };
     }
     return { ok: true, cells: abs };
   }
-  if (touchesEdgeSameColor(board, abs, colorValue)) {
+  if (touchesEdgeSameColor(board, abs, colorValue, boardSize)) {
     return { ok: false, reason: "Cannot touch your own pieces by edge." };
   }
-  if (!touchesCornerSameColor(board, abs, colorValue)) {
+  if (!touchesCornerSameColor(board, abs, colorValue, boardSize)) {
     return { ok: false, reason: "Must touch your own pieces by corner." };
   }
   return { ok: true, cells: abs };
@@ -359,8 +375,8 @@ function serializeBoard(board) {
   return JSON.stringify(board);
 }
 
-function parseBoard(boardJson) {
-  return parseJson(boardJson, emptyBoard());
+function parseBoard(boardJson, boardSize = BOARD_SIZE) {
+  return parseJson(boardJson, emptyBoard(boardSize));
 }
 
 function parseGovernance(governanceJson) {
@@ -963,7 +979,7 @@ function cleanupExpiredMembers(roomId) {
       const driver = roomDriver(room);
       const players = getOrderedMatchPlayers(activeMatch.id);
       const events = [];
-      const result = driver.onReclaimExpired(activeMatch, players, lease.profile_id, nowIso, (profileId, eventType, payload) => {
+      const result = driver.onReclaimExpired(room, activeMatch, players, lease.profile_id, nowIso, (profileId, eventType, payload) => {
         events.push({ profileId, eventType, payload });
       });
       result.events = events;
@@ -999,6 +1015,7 @@ function buildRoomSummary(room) {
   cleanupExpiredMembers(room.id);
   const freshRoom = db.prepare("select * from rooms where id = ?").get(room.id);
   if (!freshRoom || freshRoom.phase === ROOM_PHASES.ARCHIVED) return null;
+  const config = normalizedRoomConfig(freshRoom);
   const members = getRoomMembers(freshRoom.id);
   const host = members.find((member) => member.profile_id === freshRoom.host_profile_id);
   const currentMatch = getLatestMatch(freshRoom.id);
@@ -1008,10 +1025,11 @@ function buildRoomSummary(room) {
     gameType: freshRoom.game_type || "blokus",
     phase: freshRoom.phase,
     isPublic: !!freshRoom.is_public,
-    config: parseRoomConfig(freshRoom),
+    config,
+    modeLabel: roomModeLabel(freshRoom),
     hostProfileId: freshRoom.host_profile_id,
     hostName: host?.name || null,
-    capacity: MAX_PLAYERS,
+    capacity: roomCapacity(freshRoom),
     currentMatchId: currentMatch?.id || null,
     currentMatchStatus: currentMatch?.status || null,
     resumeDeadlineAt: freshRoom.phase === ROOM_PHASES.SUSPENDED ? ttlDeadline(freshRoom.suspended_at, GRACE_MS) : null,
@@ -1028,6 +1046,7 @@ function buildRoomSnapshot(roomCode) {
   }
   const freshRoom = getRoomByCode(roomCode);
   if (!freshRoom) return null;
+  const config = normalizedRoomConfig(freshRoom);
   const members = getRoomMembers(freshRoom.id);
   const host = members.find((member) => member.profile_id === freshRoom.host_profile_id);
   const currentMatch = getLatestMatch(freshRoom.id);
@@ -1037,7 +1056,9 @@ function buildRoomSnapshot(roomCode) {
     gameType: freshRoom.game_type || "blokus",
     phase: freshRoom.phase,
     isPublic: !!freshRoom.is_public,
-    config: parseRoomConfig(freshRoom),
+    config,
+    modeLabel: roomModeLabel(freshRoom),
+    capacity: roomCapacity(freshRoom),
     hostProfileId: freshRoom.host_profile_id,
     hostName: host?.name || null,
     currentMatchId: getLatestMatch(freshRoom.id)?.id || null,
@@ -1362,7 +1383,7 @@ function removeMembership(roomCode, clientInstanceId, explicitLeave) {
       const driver = roomDriver(room);
       const players = getOrderedMatchPlayers(currentMatch.id);
       const events = [];
-      const result = driver.onReclaimExpired(currentMatch, players, member.profile_id, nowIso, (profileId, eventType, payload) => {
+      const result = driver.onReclaimExpired(room, currentMatch, players, member.profile_id, nowIso, (profileId, eventType, payload) => {
         events.push({ profileId, eventType, payload });
       });
       result.events = events;
@@ -1413,7 +1434,7 @@ function joinRoomAs(session, roomCode, role, socket, requestedSeatIndex = null) 
       if (!Number.isInteger(requestedSeatIndex)) {
         throw new Error("Pick a seat before joining as a player.");
       }
-      if (requestedSeatIndex < 0 || requestedSeatIndex >= MAX_PLAYERS) {
+      if (requestedSeatIndex < 0 || requestedSeatIndex >= roomCapacity(freshRoom)) {
         throw new Error("Seat does not exist.");
       }
       const seatTaken = db.prepare(`
@@ -1456,7 +1477,7 @@ function joinRoomAs(session, roomCode, role, socket, requestedSeatIndex = null) 
       if (!Number.isInteger(requestedSeatIndex)) {
         throw new Error("Pick a seat before joining as a player.");
       }
-      if (requestedSeatIndex < 0 || requestedSeatIndex >= MAX_PLAYERS) {
+      if (requestedSeatIndex < 0 || requestedSeatIndex >= roomCapacity(freshRoom)) {
         throw new Error("Seat does not exist.");
       }
       const seatTaken = db.prepare(`
@@ -1499,9 +1520,9 @@ function createRoomForSession(session, title, isPublic, socket, gameType = "blok
   const roomId = makeId("room");
   const roomCode = ensureRoomCodeUnique();
   const timestamp = nowIso();
-  const normalizedConfig = roomConfig && typeof roomConfig === "object"
-    ? roomConfig
-    : driver.buildRoomConfig();
+  const normalizedConfig = driver.buildRoomConfig(
+    roomConfig && typeof roomConfig === "object" ? roomConfig : {}
+  );
   db.prepare(`
     insert into rooms (id, code, title, is_public, host_profile_id, phase, game_type, config_json, created_at, archived_at, empty_since, suspended_at, abandoned_at)
     values (?, ?, ?, ?, ?, ?, ?, ?, ?, null, null, null, null)
@@ -1645,13 +1666,14 @@ function handleMatchCommand(roomCode, profileId, command) {
   return applyDriverMutation(room, match, result);
 }
 
-function hasAnyLegalMove(board, player) {
+function hasAnyLegalMove(board, player, room) {
+  const boardSize = normalizedRoomConfig(room).boardSize || BOARD_SIZE;
   for (const pieceId of player.remainingPieces) {
     const orientations = PIECE_ORIENTATIONS[pieceId] || [];
     for (let orientationIndex = 0; orientationIndex < orientations.length; orientationIndex += 1) {
-      for (let y = 0; y < BOARD_SIZE; y += 1) {
-        for (let x = 0; x < BOARD_SIZE; x += 1) {
-          const verdict = isLegalPlacement(board, player, { pieceId, orientationIndex, x, y });
+      for (let y = 0; y < boardSize; y += 1) {
+        for (let x = 0; x < boardSize; x += 1) {
+          const verdict = isLegalPlacement(board, player, { pieceId, orientationIndex, x, y }, room);
           if (verdict.ok) return true;
         }
       }
@@ -1715,7 +1737,7 @@ function syncMatchTurn(roomId) {
   const room = db.prepare("select * from rooms where id = ?").get(roomId);
   const match = getActiveMatch(roomId);
   if (!room || !match) return null;
-  const board = parseBoard(match.board_json);
+  const board = parseBoard(match.board_json, normalizedRoomConfig(room).boardSize || BOARD_SIZE);
   let players = getOrderedMatchPlayers(match.id);
   for (const player of players) {
     if (player.end_state === "abandoned") continue;
@@ -1727,7 +1749,7 @@ function syncMatchTurn(roomId) {
       `).run(player.id);
       continue;
     }
-    if (!hasAnyLegalMove(board, player)) {
+    if (!hasAnyLegalMove(board, player, room)) {
       if (!player.passed && player.end_state !== "abandoned") {
         appendMove(match.id, player.profile_id, "turn_passed", {
           automatic: true,
@@ -1775,13 +1797,13 @@ function placeMove(roomCode, profileId, move) {
   const players = getOrderedMatchPlayers(match.id);
   const currentPlayer = players[match.turn_index];
   if (!currentPlayer || currentPlayer.profile_id !== profileId) throw new Error("Not your turn.");
-  const board = parseBoard(match.board_json);
+  const board = parseBoard(match.board_json, normalizedRoomConfig(room).boardSize || BOARD_SIZE);
   const playerState = {
     colorIndex: currentPlayer.color_index,
     hasMoved: currentPlayer.hasMoved,
     remainingPieces: currentPlayer.remainingPieces
   };
-  const verdict = isLegalPlacement(board, playerState, move);
+  const verdict = isLegalPlacement(board, playerState, move, room);
   if (!verdict.ok) throw new Error(verdict.reason);
   placeCells(board, verdict.cells, currentPlayer.color_index + 1);
   const remainingPieces = currentPlayer.remainingPieces.filter((pieceId) => pieceId !== move.pieceId);
@@ -1804,8 +1826,8 @@ function passTurn(roomCode, profileId) {
   const players = getOrderedMatchPlayers(match.id);
   const currentPlayer = players[match.turn_index];
   if (!currentPlayer || currentPlayer.profile_id !== profileId) throw new Error("Not your turn.");
-  const board = parseBoard(match.board_json);
-  if (hasAnyLegalMove(board, currentPlayer)) {
+  const board = parseBoard(match.board_json, normalizedRoomConfig(room).boardSize || BOARD_SIZE);
+  if (hasAnyLegalMove(board, currentPlayer, room)) {
     throw new Error("You still have a legal move and cannot pass.");
   }
   db.prepare(`

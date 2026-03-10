@@ -173,6 +173,7 @@ onMounted(async () => {
               <th>Code</th>
               <th>Title</th>
               <th>Game</th>
+              <th>Mode</th>
               <th>Phase</th>
               <th>Seats</th>
               <th>Host</th>
@@ -184,6 +185,7 @@ onMounted(async () => {
               <td><strong>{{ room.code }}</strong></td>
               <td>{{ room.title }}</td>
               <td>{{ room.gameType }}</td>
+              <td>{{ room.modeLabel || room.config?.modeLabel || "Default" }}</td>
               <td><span class="phase-pill">{{ room.phase }}</span></td>
               <td>{{ room.playerCount }}/{{ room.capacity || 4 }}</td>
               <td>{{ room.hostName || "Unknown" }}</td>

@@ -14,11 +14,18 @@ const store = useAppStore();
 const roomTitle = ref("");
 const isPublic = ref(true);
 const game = computed(() => getGameClient(props.gameType));
+const selectedRuleset = ref(game.value.modes?.[0]?.ruleset || "classic_4p");
 const canCreateRoom = computed(() => !!store.activeProfile);
+const createConfig = computed(() => game.value.modes?.length ? { ruleset: selectedRuleset.value } : {});
 
 async function createRoom() {
   if (!roomTitle.value.trim()) return;
-  const room = await store.createRoom(roomTitle.value.trim(), isPublic.value, props.gameType);
+  const room = await store.createRoom(
+    roomTitle.value.trim(),
+    isPublic.value,
+    props.gameType,
+    createConfig.value
+  );
   roomTitle.value = "";
   await router.push(`/rooms/${room.code}`);
 }
@@ -47,6 +54,19 @@ async function createRoom() {
           </div>
 
           <input v-model="roomTitle" maxlength="32" placeholder="Room title" :disabled="!canCreateRoom" />
+          <div v-if="game.modes?.length" class="game-mode-list">
+            <button
+              v-for="mode in game.modes"
+              :key="mode.ruleset"
+              class="game-mode-card"
+              :class="{ active: selectedRuleset === mode.ruleset }"
+              type="button"
+              @click="selectedRuleset = mode.ruleset"
+            >
+              <strong>{{ mode.label }}</strong>
+              <span class="muted">{{ mode.description }}</span>
+            </button>
+          </div>
           <label class="toggle-row">
             <input v-model="isPublic" type="checkbox" :disabled="!canCreateRoom" />
             <span>Visible in the public {{ game.title }} table</span>

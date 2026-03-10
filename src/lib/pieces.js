@@ -8,19 +8,27 @@ export const COLORS = {
   4: "#ffa502"
 };
 
-export const START_CORNERS = [
-  [0, 0],
-  [BOARD_SIZE - 1, 0],
-  [BOARD_SIZE - 1, BOARD_SIZE - 1],
-  [0, BOARD_SIZE - 1]
-];
+export function buildStartCorners(boardSize = BOARD_SIZE) {
+  return [
+    [0, 0],
+    [boardSize - 1, 0],
+    [boardSize - 1, boardSize - 1],
+    [0, boardSize - 1]
+  ];
+}
 
-export const PLAYER_COLORS = [
-  { colorIndex: 0, name: "Blue", fill: COLORS[1], shortCorner: "TL", cornerLabel: "Top-left", start: START_CORNERS[0] },
-  { colorIndex: 1, name: "Red", fill: COLORS[2], shortCorner: "TR", cornerLabel: "Top-right", start: START_CORNERS[1] },
-  { colorIndex: 2, name: "Green", fill: COLORS[3], shortCorner: "BR", cornerLabel: "Bottom-right", start: START_CORNERS[2] },
-  { colorIndex: 3, name: "Orange", fill: COLORS[4], shortCorner: "BL", cornerLabel: "Bottom-left", start: START_CORNERS[3] }
-];
+export function buildPlayerColors(boardSize = BOARD_SIZE) {
+  const startCorners = buildStartCorners(boardSize);
+  return [
+    { colorIndex: 0, name: "Blue", fill: COLORS[1], shortCorner: "TL", cornerLabel: "Top-left", start: startCorners[0] },
+    { colorIndex: 1, name: "Red", fill: COLORS[2], shortCorner: "TR", cornerLabel: "Top-right", start: startCorners[1] },
+    { colorIndex: 2, name: "Green", fill: COLORS[3], shortCorner: "BR", cornerLabel: "Bottom-right", start: startCorners[2] },
+    { colorIndex: 3, name: "Orange", fill: COLORS[4], shortCorner: "BL", cornerLabel: "Bottom-left", start: startCorners[3] }
+  ];
+}
+
+export const START_CORNERS = buildStartCorners();
+export const PLAYER_COLORS = buildPlayerColors();
 
 const BASE_PIECES = [
   { id: "mono", label: "Mono", cells: [[0, 0]] },

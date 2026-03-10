@@ -49,7 +49,8 @@ const currentPlayer = computed(() =>
 );
 const currentTurnPlayer = computed(() => props.gameView?.players?.[props.gameView?.turnIndex] || null);
 const activeRackPlayer = computed(() => currentPlayer.value || currentTurnPlayer.value || null);
-const activeColorMeta = computed(() => PLAYER_COLORS[activeRackPlayer.value?.colorIndex || 0] || PLAYER_COLORS[0]);
+const colorPalette = computed(() => props.gameView?.colors || PLAYER_COLORS);
+const activeColorMeta = computed(() => colorPalette.value[activeRackPlayer.value?.colorIndex || 0] || colorPalette.value[0] || PLAYER_COLORS[0]);
 const availablePieceIds = computed(() => new Set(activeRackPlayer.value?.remainingPieces || []));
 const visiblePieces = computed(() => PIECES.map((piece) => ({
   ...piece,
@@ -75,7 +76,7 @@ const canTransform = computed(() =>
 );
 
 function colorMeta(colorIndex) {
-  return PLAYER_COLORS[colorIndex ?? 0] || PLAYER_COLORS[0];
+  return colorPalette.value[colorIndex ?? 0] || colorPalette.value[0] || PLAYER_COLORS[0];
 }
 
 function choosePiece(pieceId) {
