@@ -1,4 +1,4 @@
-import blokusManifest from "../../games/blokus/index.js";
+import blokusManifest from "../../games/blokus/client.js";
 
 const REGISTRY = {
   [blokusManifest.gameType]: blokusManifest

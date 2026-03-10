@@ -1803,6 +1803,79 @@ src/
 - move-heavy refactors are sensitive to import path regressions
 - platform server is only split to a pragmatic first layer in this extension; not every helper is extracted yet
 
+## Extension: Split Game Manifests by Runtime Boundary
+- **Status**: APPROVED
+- **Approved-By**: Viet
+- **Approved-On**: 2026-03-10
+- **Task**: Fix the post-refactor boot failure by separating client game manifests from server runtime entrypoints so Node never imports `.vue` files.
+- **Location**:
+  - `/Users/maihoangviet/Projects/blokus/src/games/blokus/index.js`
+  - `/Users/maihoangviet/Projects/blokus/src/games/blokus/client.js`
+  - `/Users/maihoangviet/Projects/blokus/src/platform/client/registry.js`
+  - `/Users/maihoangviet/Projects/blokus/src/platform/server/registry.js`
+  - `/Users/maihoangviet/Projects/blokus/plan_todo/codex/SOW_0007_multi_board_game_platform_refactor.md`
+
+### As-Is Diagram (ASCII)
+```text
+src/games/blokus/index.js
+  -> imports LiveView.vue
+  -> imports ReplayView.vue
+  -> exports manifest
+
+platform client registry
+  -> imports blokus/index.js
+  -> OK under Vite
+
+platform server registry
+  -> imports blokus/index.js
+  -> Node tries to load .vue
+  -> boot fails
+```
+
+### To-Be Diagram (ASCII)
+```text
+src/games/blokus/client.js
+  -> imports LiveView.vue
+  -> imports ReplayView.vue
+  -> exports client manifest
+
+src/games/blokus/index.js
+  -> exports base manifest only
+  -> no .vue imports
+
+platform client registry
+  -> imports blokus/client.js
+
+platform server registry
+  -> imports blokus/index.js and blokus/server.js
+```
+
+### Deliverables
+- split the Blokus manifest into runtime-safe entrypoints
+- keep `.vue` imports only in the client manifest
+- keep the server registry on server-safe modules only
+
+### Done Criteria
+- `node server.js` boots successfully
+- `node --check server.js` passes
+- `npm run build` passes
+- client registry still resolves Blokus create/staging/live/replay correctly
+- server registry no longer imports `.vue` transitively
+
+### Out-of-Scope
+- further platform structure redesign
+- implementing chess
+- route changes
+
+### Proposed-By
+- Codex GPT-5
+
+### plan
+- multi-board-game-platform-refactor-v1
+
+### Cautions / Risks
+- client and server manifests must stay aligned enough that adding a new game remains low-touch
+
 ## Extension: Remove Legacy Blokus Staging and Command Paths
 - **Status**: APPROVED
 - **Approved-By**: Viet
