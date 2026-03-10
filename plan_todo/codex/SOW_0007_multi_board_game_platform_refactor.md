@@ -1126,3 +1126,81 @@ Behavior
 - Existing replay/history and live room routes must not regress while payloads are split.
 - The driver contract must be generic enough for hidden-info and simultaneous-phase games without over-engineering a plugin system now.
 - Reconnect lease data must remain platform-owned and not drift back into game-specific state.
+
+## Extension: Deterministic Seat Claims and Live Blokus Scoreboard
+- **Status**: APPROVED
+- **Approved-By**: Viet
+- **Approved-On**: 2026-03-10
+- **Task**: Make `Take seat` claim the exact clicked staging row and add a live Blokus mini scoreboard ranked by remaining tile cells.
+- **Location**:
+  - `/Users/maihoangviet/Projects/blokus/server.js`
+  - `/Users/maihoangviet/Projects/blokus/src/stores/app.js`
+  - `/Users/maihoangviet/Projects/blokus/src/views/RoomView.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/games/blokus/driver.js`
+  - `/Users/maihoangviet/Projects/blokus/src/games/blokus/LiveView.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/style.css`
+  - `/Users/maihoangviet/Projects/blokus/plan_todo/codex/SOW_0007_multi_board_game_platform_refactor.md`
+- **Why**: Generic player joins lose seat intent and create an avoidable race in staging. Live Blokus also needs a clear leader indicator based on remaining tile cells, not piece count.
+
+### As-Is Diagram (ASCII)
+```text
+PREPARE staging
+  open row clicked
+  -> claimSeat()
+  -> room:join(roomCode)
+  -> no seatIndex in request
+  -> server promotes spectator to generic player seat
+  -> viewers receive room update, but clicked-seat intent is lost
+
+IN_GAME
+  player strip shows remaining piece count
+  -> not actual lead metric
+```
+
+### To-Be Diagram (ASCII)
+```text
+PREPARE staging
+  open row clicked
+  -> claimSeat(seatIndex)
+  -> room:join(roomCode, seatIndex)
+  -> server claims that exact seat or rejects with "seat already taken"
+  -> emit refreshed room + setup view
+  -> all viewers see the same seat outcome immediately
+
+IN_GAME
+  mini scoreboard
+    -> player
+    -> color
+    -> remaining tile cells
+    -> rank
+  sorted by remaining tile cells ascending
+```
+
+### Deliverables
+- extend `room:join` with optional `seatIndex`
+- make staging `Take seat` pass the clicked row’s seat index
+- reject stale seat claims with a clear conflict error
+- expose `remainingCells` in Blokus live player projections
+- add a compact live scoreboard ranked by remaining tile cells ascending
+
+### Done Criteria
+- exact-seat claims succeed or fail deterministically
+- all room viewers see seat changes immediately
+- live Blokus shows a compact scoreboard using remaining cells
+- `node --check server.js` passes
+- `npm run build` passes
+
+### Out-of-Scope
+- changing overall room layout
+- changing Blokus scoring rules
+
+### Proposed-By
+- Codex GPT-5
+
+### plan
+- multi-board-game-platform-refactor-v1
+
+### Cautions / Risks
+- seat-claim contract change touches both client and server
+- exact-seat claim must preserve spectator-first room entry
+- scoreboard ordering must follow lower remaining cells = leading

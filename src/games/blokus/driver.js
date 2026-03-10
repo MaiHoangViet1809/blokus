@@ -153,6 +153,7 @@ function projectMatchPlayers(players) {
     passed: !!player.passed,
     disconnected: !!player.disconnected,
     remainingCount: player.remainingPieces.length,
+    remainingCells: totalRemainingCells(player.remainingPieces),
     remainingPieces: player.remainingPieces,
     endState: player.end_state,
     score: player.score

@@ -56,8 +56,8 @@ async function leaveRoom() {
   await router.push("/");
 }
 
-async function claimSeat() {
-  await store.joinRoom(normalizedRoomCode.value);
+async function claimSeat(seatIndex) {
+  await store.joinRoom(normalizedRoomCode.value, seatIndex);
 }
 
 async function chooseColor(colorIndex) {
@@ -177,7 +177,7 @@ onMounted(async () => {
                       <td>{{ row.cornerCell.text }}</td>
                       <td>
                         <div class="room-table-actions">
-                          <button v-if="row.canClaimSeat && currentMember?.role !== 'player'" class="secondary" @click="claimSeat">Take seat</button>
+                          <button v-if="row.canClaimSeat && currentMember?.role !== 'player'" class="secondary" @click="claimSeat(row.seatIndex)">Take seat</button>
                           <span v-else-if="row.canToggleReady" class="muted">Use header controls</span>
                           <span v-else class="muted">Waiting</span>
                         </div>

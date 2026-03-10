@@ -26,6 +26,20 @@ const matchHeading = computed(() => {
   return "Active Match";
 });
 
+const scoreboard = computed(() =>
+  [...(props.gameView?.players || [])]
+    .sort((left, right) => {
+      if (left.remainingCells !== right.remainingCells) {
+        return left.remainingCells - right.remainingCells;
+      }
+      return left.seatIndex - right.seatIndex;
+    })
+    .map((player, index) => ({
+      ...player,
+      rank: index + 1
+    }))
+);
+
 function colorMeta(colorIndex) {
   return PLAYER_COLORS[colorIndex ?? 0] || PLAYER_COLORS[0];
 }
@@ -48,6 +62,26 @@ function colorMeta(colorIndex) {
       @place="emit('place', $event)"
     />
 
+    <div class="mini-scoreboard panel">
+      <div class="mini-scoreboard__head">
+        <strong>Scoreboard</strong>
+        <span class="muted">Lowest cells leads</span>
+      </div>
+      <div class="mini-scoreboard__list">
+        <div
+          v-for="player in scoreboard"
+          :key="player.profileId"
+          class="mini-scoreboard__row"
+          :style="{ '--player-color': colorMeta(player.colorIndex).fill }"
+        >
+          <span class="mini-scoreboard__rank">#{{ player.rank }}</span>
+          <strong>{{ player.name }}</strong>
+          <span class="muted">{{ colorMeta(player.colorIndex).name }}</span>
+          <span class="mini-scoreboard__value">{{ player.remainingCells }} cells</span>
+        </div>
+      </div>
+    </div>
+
     <div class="player-strip" :class="{ 'player-strip--compact': ['STARTING', 'IN_GAME', 'SUSPENDED'].includes(room.phase) }">
       <div
         v-for="player in gameView.players"
@@ -58,7 +92,7 @@ function colorMeta(colorIndex) {
       >
         <strong>{{ player.name }}</strong>
         <span class="muted">{{ colorMeta(player.colorIndex).name }}</span>
-        <span class="muted">{{ player.remainingCount }}</span>
+        <span class="muted">{{ player.remainingCells }} cells</span>
         <span class="muted">{{ player.endState }}</span>
       </div>
       <div class="player-strip-item player-strip-item--meta">

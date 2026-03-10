@@ -667,6 +667,43 @@ p {
   gap: 8px;
 }
 
+.mini-scoreboard {
+  display: grid;
+  gap: 10px;
+  padding: 12px 14px;
+}
+
+.mini-scoreboard__head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.mini-scoreboard__list {
+  display: grid;
+  gap: 6px;
+}
+
+.mini-scoreboard__row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: rgba(14, 26, 42, 0.88);
+  border: 1px solid var(--line);
+  box-shadow: inset 4px 0 0 var(--player-color, transparent);
+}
+
+.mini-scoreboard__rank,
+.mini-scoreboard__value {
+  font-weight: 700;
+  color: var(--text);
+  white-space: nowrap;
+}
+
 .player-strip {
   display: grid;
   grid-auto-flow: column;

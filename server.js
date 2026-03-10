@@ -1377,7 +1377,7 @@ function removeMembership(roomCode, clientInstanceId, explicitLeave) {
   reconcileRoomLifecycle(room.id);
 }
 
-function joinRoomAs(session, roomCode, role, socket) {
+function joinRoomAs(session, roomCode, role, socket, requestedSeatIndex = null) {
   const room = getRoomByCode(roomCode);
   if (!room || room.phase === ROOM_PHASES.ARCHIVED) {
     throw new Error("Room does not exist.");
@@ -1410,17 +1410,23 @@ function joinRoomAs(session, roomCode, role, socket) {
       throw new Error("You can only spectate once a match has started.");
     }
     if (role === "player" && member.role === "spectator") {
-      const seatCount = db.prepare(`
-        select count(*) as count
+      if (!Number.isInteger(requestedSeatIndex)) {
+        throw new Error("Pick a seat before joining as a player.");
+      }
+      if (requestedSeatIndex < 0 || requestedSeatIndex >= MAX_PLAYERS) {
+        throw new Error("Seat does not exist.");
+      }
+      const seatTaken = db.prepare(`
+        select id
         from room_members
-        where room_id = ? and role = 'player'
-      `).get(freshRoom.id).count;
-      if (seatCount >= MAX_PLAYERS) throw new Error("No player seats available.");
+        where room_id = ? and role = 'player' and seat_index = ?
+      `).get(freshRoom.id, requestedSeatIndex);
+      if (seatTaken) throw new Error("Seat already taken.");
       db.prepare(`
         update room_members
         set role = 'player', seat_index = ?, connection_state = 'online', disconnected_at = null
         where id = ?
-      `).run(seatCount, member.id);
+      `).run(requestedSeatIndex, member.id);
       member = db.prepare("select * from room_members where id = ?").get(member.id);
       member = ensurePrepareMemberColor(freshRoom.id, member.id);
     } else {
@@ -1447,13 +1453,19 @@ function joinRoomAs(session, roomCode, role, socket) {
       if (freshRoom.phase !== ROOM_PHASES.PREPARE) {
         throw new Error("Player seats are only available before the match starts.");
       }
-      const seatCount = db.prepare(`
-        select count(*) as count
+      if (!Number.isInteger(requestedSeatIndex)) {
+        throw new Error("Pick a seat before joining as a player.");
+      }
+      if (requestedSeatIndex < 0 || requestedSeatIndex >= MAX_PLAYERS) {
+        throw new Error("Seat does not exist.");
+      }
+      const seatTaken = db.prepare(`
+        select id
         from room_members
-        where room_id = ? and role = 'player'
-      `).get(freshRoom.id).count;
-      if (seatCount >= MAX_PLAYERS) throw new Error("No player seats available.");
-      seatIndex = seatCount;
+        where room_id = ? and role = 'player' and seat_index = ?
+      `).get(freshRoom.id, requestedSeatIndex);
+      if (seatTaken) throw new Error("Seat already taken.");
+      seatIndex = requestedSeatIndex;
     }
     db.prepare(`
       insert into room_members (
@@ -2166,10 +2178,11 @@ io.on("connection", (socket) => {
     });
   });
 
-  socket.on("room:join", ({ roomCode }, ack) => {
+  socket.on("room:join", ({ roomCode, seatIndex }, ack) => {
     ackHandler(ack, () => {
       const session = requireSession(socket);
-      const room = joinRoomAs(session, String(roomCode || "").toUpperCase(), "player", socket);
+      const parsedSeatIndex = Number.isInteger(seatIndex) ? seatIndex : null;
+      const room = joinRoomAs(session, String(roomCode || "").toUpperCase(), "player", socket, parsedSeatIndex);
       socket.data.session = sessionForInstance(session.client_instance_id);
       emitRoomState(room.code);
       return roomAndMatchPayload(room.code, session.profile_id);

@@ -314,8 +314,8 @@ export const useAppStore = defineStore("app", {
       const response = await this.emit("room:create", { title, isPublic, gameType, config });
       return response.room;
     },
-    async joinRoom(roomCode) {
-      return this.emit("room:join", { roomCode });
+    async joinRoom(roomCode, seatIndex = null) {
+      return this.emit("room:join", { roomCode, seatIndex });
     },
     async watchRoom(roomCode) {
       return this.emit("room:watch", { roomCode });
