@@ -1317,3 +1317,49 @@ live match panel
 ### Cautions / Risks
 - match-route width override must not introduce horizontal overflow
 - compacting the footer row must not collapse the player/meta content
+
+## Extension: Prevent Board Clipping in the Three-Column Match Layout
+- **Status**: APPROVED
+- **Approved-By**: Viet
+- **Approved-On**: 2026-03-10
+- **Task**: Fix the live Blokus three-column match layout so the center square board never clips at the edges.
+- **Location**:
+  - `/Users/maihoangviet/Projects/blokus/src/style.css`
+  - `/Users/maihoangviet/Projects/blokus/plan_todo/codex/SOW_0007_multi_board_game_platform_refactor.md`
+- **Why**: The current center board track and canvas rules still force a minimum size that can exceed the available middle-column width, which causes the board to clip.
+
+### As-Is Diagram (ASCII)
+```text
+match row
+| scoreboard | [ board too wide ] | pieces |
+|            | [ clipped ]        |        |
+```
+
+### To-Be Diagram (ASCII)
+```text
+match row
+| scoreboard | [ square board fits ] | pieces |
+|            | [ no clipping ]       |        |
+```
+
+### Deliverables
+- relax the center grid track minimum
+- remove the hard board canvas minimum that causes clipping
+- keep the board square and fully contained in the center column
+
+### Done Criteria
+- board no longer clips in the three-column desktop layout
+- `npm run build` passes
+
+### Out-of-Scope
+- gameplay rule changes
+- wider live match layout redesign
+
+### Proposed-By
+- Codex GPT-5
+
+### plan
+- multi-board-game-platform-refactor-v1
+
+### Cautions / Risks
+- the board must stay square while shrinking to fit the actual center column

@@ -583,7 +583,8 @@ p {
   background: #040910;
   border-radius: 0;
   border: 1px solid rgba(255, 255, 255, 0.12);
-  min-width: 420px;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .rack-panel {
@@ -599,7 +600,7 @@ p {
 
 .match-main-row {
   display: grid;
-  grid-template-columns: minmax(260px, 0.9fr) minmax(420px, 1.8fr) minmax(260px, 0.95fr);
+  grid-template-columns: minmax(240px, 0.9fr) minmax(0, 1.8fr) minmax(240px, 0.95fr);
   gap: 12px;
   min-height: 0;
   align-items: stretch;
@@ -915,7 +916,7 @@ p {
 
   .board-canvas {
     width: min(100%, calc(100dvh - 360px));
-    min-width: 320px;
+    min-width: 0;
   }
 }
 
@@ -953,7 +954,7 @@ p {
   }
 
   .match-main-row {
-    grid-template-columns: minmax(220px, 0.9fr) minmax(320px, 1.55fr) minmax(220px, 0.95fr);
+    grid-template-columns: minmax(200px, 0.9fr) minmax(0, 1.55fr) minmax(200px, 0.95fr);
   }
 
   .board-canvas {
