@@ -14,15 +14,27 @@ const emit = defineEmits(["place"]);
 
 const selectedSquare = ref(null);
 const pendingPromotion = ref(null);
-const boardSquares = computed(() =>
-  (props.gameView.board || []).flatMap((row, y) =>
-    row.map((piece, x) => ({ x, y, piece }))
-  )
-);
-
 const currentTurnPlayer = computed(() => props.gameView.players?.[props.gameView.turnIndex] || null);
 const activeViewer = computed(() => props.gameView.players?.find((player) => player.profileId === props.interactiveProfileId) || null);
 const viewerCanMove = computed(() => activeViewer.value?.profileId === currentTurnPlayer.value?.profileId);
+const isBlackPerspective = computed(() => activeViewer.value?.colorIndex === 1);
+const displayFiles = computed(() => isBlackPerspective.value ? [...FILE_LABELS].reverse() : FILE_LABELS);
+const displayRanks = computed(() => isBlackPerspective.value ? [...RANK_LABELS].reverse() : RANK_LABELS);
+const boardSquares = computed(() =>
+  Array.from({ length: 8 }, (_, displayY) =>
+    Array.from({ length: 8 }, (_, displayX) => {
+      const x = isBlackPerspective.value ? 7 - displayX : displayX;
+      const y = isBlackPerspective.value ? 7 - displayY : displayY;
+      return {
+        x,
+        y,
+        displayX,
+        displayY,
+        piece: props.gameView.board?.[y]?.[x] || null
+      };
+    })
+  ).flat()
+);
 const legalMovesByFrom = computed(() => props.gameView.legalMovesByFrom || {});
 const selectedKey = computed(() => selectedSquare.value ? `${selectedSquare.value.x},${selectedSquare.value.y}` : "");
 const selectedTargets = computed(() => legalMovesByFrom.value[selectedKey.value] || []);
@@ -150,32 +162,45 @@ watch(() => props.gameView.lastMove, () => {
       </section>
 
       <section class="panel board-panel chess-board-panel">
-        <div class="chess-board">
-          <button
-            v-for="square in boardSquares"
-            :key="`${square.x}-${square.y}`"
-            class="chess-square"
-            :class="{
-              'chess-square--light': (square.x + square.y) % 2 === 0,
-              'chess-square--dark': (square.x + square.y) % 2 === 1,
-              'chess-square--selected': sameSquare(selectedSquare, square),
-              'chess-square--target': selectedTargetMap.has(`${square.x},${square.y}`),
-              'chess-square--last': gameView.lastMove && (sameSquare(gameView.lastMove.from, square) || sameSquare(gameView.lastMove.to, square))
-            }"
-            :title="labelForSquare(square.x, square.y)"
-            type="button"
-            @click="selectOrMove(square.x, square.y)"
-          >
-            <span v-if="square.y === 7" class="chess-file-label">{{ FILE_LABELS[square.x] }}</span>
-            <span v-if="square.x === 0" class="chess-rank-label">{{ RANK_LABELS[square.y] }}</span>
-            <span
-              v-if="square.piece"
-              class="chess-piece"
-              :class="{ 'chess-piece--black': square.piece[0] === 'b', 'chess-piece--white': square.piece[0] === 'w' }"
-            >
-              {{ PIECE_GLYPHS[square.piece] }}
-            </span>
-          </button>
+        <div class="chess-board-shell">
+          <div class="chess-ranks">
+            <span v-for="rank in displayRanks" :key="`rank-${rank}`" class="chess-rank-marker">{{ rank }}</span>
+          </div>
+          <div class="chess-board-frame">
+            <div class="chess-board">
+              <button
+                v-for="square in boardSquares"
+                :key="`${square.displayX}-${square.displayY}`"
+                class="chess-square"
+                :class="{
+                  'chess-square--light': (square.x + square.y) % 2 === 0,
+                  'chess-square--dark': (square.x + square.y) % 2 === 1,
+                  'chess-square--selected': sameSquare(selectedSquare, square),
+                  'chess-square--target': selectedTargetMap.has(`${square.x},${square.y}`),
+                  'chess-square--last': gameView.lastMove && (sameSquare(gameView.lastMove.from, square) || sameSquare(gameView.lastMove.to, square)),
+                  'chess-square--last-destination': gameView.lastMove && sameSquare(gameView.lastMove.to, square)
+                }"
+                :title="labelForSquare(square.x, square.y)"
+                type="button"
+                @click="selectOrMove(square.x, square.y)"
+              >
+                <span
+                  v-if="square.piece"
+                  class="chess-piece"
+                  :class="{
+                    'chess-piece--black': square.piece[0] === 'b',
+                    'chess-piece--white': square.piece[0] === 'w',
+                    'chess-piece--arrived': gameView.lastMove && sameSquare(gameView.lastMove.to, square)
+                  }"
+                >
+                  {{ PIECE_GLYPHS[square.piece] }}
+                </span>
+              </button>
+            </div>
+            <div class="chess-files">
+              <span v-for="file in displayFiles" :key="`file-${file}`" class="chess-file-marker">{{ file.toUpperCase() }}</span>
+            </div>
+          </div>
         </div>
 
         <div v-if="pendingPromotion" class="chess-promotion">

@@ -162,3 +162,60 @@ create chess room
 - **plan**: chess-v1-standard-hvh
 - **Cautions / Risks**:
   - keep the fix narrow; this is an import regression, not a logic redesign
+
+## Extension: Polish Chess Board Presentation and Orientation
+
+- **Status**: APPROVED
+- **Approved-By**: Viet
+- **Task**: Improve the live chess presentation so pieces are larger and visually centered, board coordinates are clearer and outside the board edge, move feedback has animation, and board orientation flips correctly for the black player.
+- **Location**:
+  - `/Users/maihoangviet/Projects/blokus/src/games/chess/LiveView.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/games/chess/ReplayView.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/style.css`
+  - `/Users/maihoangviet/Projects/blokus/plan_todo/codex/finished/SOW_0009_standard_chess_v1.md`
+- **Why**: Chess is playable, but its presentation is still below the expected quality bar. Pieces are visually too small, glyph centering is weak, coordinates are not clearly outside the board frame, there is no move animation feedback, and both players currently view the board from the same orientation.
+- **As-Is Diagram (ASCII)**:
+```text
+Live chess board
+  -> same orientation for white and black
+  -> labels inside squares
+  -> pieces use small unicode glyphs
+  -> glyphs look slightly off-center
+  -> move feedback is static only
+```
+- **To-Be Diagram (ASCII)**:
+```text
+Live chess board
+  -> white sees white at bottom
+  -> black sees black at bottom
+  -> A-H and 1-8 shown clearly along board edge/outside frame
+  -> pieces larger and visually centered
+  -> move feedback includes lightweight animation
+```
+- **Deliverables**:
+  - Flip live board orientation based on the viewing player side:
+    - white perspective -> white at bottom
+    - black perspective -> black at bottom
+  - Keep replay orientation stable and readable with a consistent default.
+  - Move coordinate labels out of the square interior and present them clearly along the board edge.
+  - Increase chess piece visual size and improve visual centering inside each square.
+  - Add lightweight move animation/feedback for chess piece movement.
+  - Preserve current move legality, promotion, replay, and governance behavior.
+- **Done Criteria**:
+  - white player sees white pieces at the bottom
+  - black player sees black pieces at the bottom
+  - board coordinates are clearer and no longer embedded inside squares
+  - chess pieces appear larger and visually centered
+  - moves show visible animation/feedback
+  - `npm run build` passes
+- **Out-of-Scope**:
+  - replacing unicode glyphs with SVG assets
+  - chess clocks
+  - engine analysis
+  - changing move rules
+- **Proposed-By**: Codex GPT-5
+- **plan**: chess-v1-standard-hvh
+- **Cautions / Risks**:
+  - orientation flip must preserve click/move coordinate correctness
+  - replay orientation should stay predictable even without a player-specific perspective
+  - glyph-based chess pieces have visual-centering limits compared with SVG assets, so centering will be best-effort within the current glyph approach

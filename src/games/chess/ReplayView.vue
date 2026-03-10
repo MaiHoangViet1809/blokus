@@ -10,9 +10,13 @@ const currentStep = ref(0);
 const maxStep = computed(() => Math.max(0, (props.replay?.frames?.length || 1) - 1));
 const frame = computed(() => props.replay?.frames?.[currentStep.value] || null);
 const replaySquares = computed(() =>
-  (frame.value?.board || []).flatMap((row, y) =>
-    row.map((piece, x) => ({ x, y, piece }))
-  )
+  Array.from({ length: 8 }, (_, y) =>
+    Array.from({ length: 8 }, (_, x) => ({
+      x,
+      y,
+      piece: frame.value?.board?.[y]?.[x] || null
+    }))
+  ).flat()
 );
 
 watch(() => props.replay?.id, () => {
@@ -31,29 +35,42 @@ watch(() => props.replay?.id, () => {
     </div>
 
     <div class="chess-replay-layout">
-      <div class="chess-board chess-board--replay">
-        <button
-          v-for="square in replaySquares"
-          :key="`replay-${square.x}-${square.y}`"
-          class="chess-square"
-          :class="{
-            'chess-square--light': (square.x + square.y) % 2 === 0,
-            'chess-square--dark': (square.x + square.y) % 2 === 1,
-            'chess-square--last': frame?.payload && ((frame.payload.from?.x === square.x && frame.payload.from?.y === square.y) || (frame.payload.to?.x === square.x && frame.payload.to?.y === square.y))
-          }"
-          type="button"
-          disabled
-        >
-          <span v-if="square.y === 7" class="chess-file-label">{{ FILE_LABELS[square.x] }}</span>
-          <span v-if="square.x === 0" class="chess-rank-label">{{ RANK_LABELS[square.y] }}</span>
-          <span
-            v-if="square.piece"
-            class="chess-piece"
-            :class="{ 'chess-piece--black': square.piece[0] === 'b', 'chess-piece--white': square.piece[0] === 'w' }"
-          >
-            {{ PIECE_GLYPHS[square.piece] }}
-          </span>
-        </button>
+      <div class="chess-board-shell chess-board-shell--replay">
+        <div class="chess-ranks">
+          <span v-for="rank in RANK_LABELS" :key="`replay-rank-${rank}`" class="chess-rank-marker">{{ rank }}</span>
+        </div>
+        <div class="chess-board-frame">
+          <div class="chess-board chess-board--replay">
+            <button
+              v-for="square in replaySquares"
+              :key="`replay-${square.x}-${square.y}`"
+              class="chess-square"
+              :class="{
+                'chess-square--light': (square.x + square.y) % 2 === 0,
+                'chess-square--dark': (square.x + square.y) % 2 === 1,
+                'chess-square--last': frame?.payload && ((frame.payload.from?.x === square.x && frame.payload.from?.y === square.y) || (frame.payload.to?.x === square.x && frame.payload.to?.y === square.y)),
+                'chess-square--last-destination': frame?.payload && frame.payload.to?.x === square.x && frame.payload.to?.y === square.y
+              }"
+              type="button"
+              disabled
+            >
+              <span
+                v-if="square.piece"
+                class="chess-piece"
+                :class="{
+                  'chess-piece--black': square.piece[0] === 'b',
+                  'chess-piece--white': square.piece[0] === 'w',
+                  'chess-piece--arrived': frame?.payload && frame.payload.to?.x === square.x && frame.payload.to?.y === square.y
+                }"
+              >
+                {{ PIECE_GLYPHS[square.piece] }}
+              </span>
+            </button>
+          </div>
+          <div class="chess-files">
+            <span v-for="file in FILE_LABELS" :key="`replay-file-${file}`" class="chess-file-marker">{{ file.toUpperCase() }}</span>
+          </div>
+        </div>
       </div>
 
       <div class="stack">
