@@ -921,6 +921,153 @@ p {
   align-items: center;
 }
 
+.chess-live-panel {
+  grid-template-rows: auto minmax(360px, 1fr) auto;
+}
+
+.chess-match-row {
+  grid-template-columns: minmax(220px, 0.85fr) minmax(0, 1.6fr) minmax(220px, 0.9fr);
+}
+
+.chess-status-panel,
+.chess-capture-panel {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+  height: 100%;
+}
+
+.chess-status-copy {
+  display: grid;
+  gap: 6px;
+}
+
+.chess-capture-group {
+  display: grid;
+  gap: 6px;
+}
+
+.chess-capture-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.chess-piece--capture {
+  font-size: 1.3rem;
+}
+
+.chess-board-panel {
+  padding: 12px;
+  position: relative;
+}
+
+.chess-board {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  aspect-ratio: 1;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: #081119;
+}
+
+.chess-board--replay {
+  width: min(100%, 520px);
+  height: auto;
+}
+
+.chess-square {
+  position: relative;
+  display: grid;
+  place-items: center;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  min-width: 0;
+  min-height: 0;
+  aspect-ratio: 1;
+  background: transparent;
+}
+
+.chess-square:hover {
+  transform: none;
+}
+
+.chess-square--light {
+  background: #d9e2f1;
+}
+
+.chess-square--dark {
+  background: #54657f;
+}
+
+.chess-square--selected {
+  box-shadow: inset 0 0 0 3px rgba(255, 209, 102, 0.75);
+}
+
+.chess-square--target {
+  box-shadow: inset 0 0 0 3px rgba(88, 178, 255, 0.6);
+}
+
+.chess-square--last {
+  filter: brightness(1.12);
+}
+
+.chess-piece {
+  font-size: clamp(1.5rem, 2.2vw, 2.45rem);
+  line-height: 1;
+  user-select: none;
+}
+
+.chess-piece--white {
+  color: #ffffff;
+  text-shadow: 0 0 0.5px #0f172a, 0 1px 2px rgba(0, 0, 0, 0.55);
+}
+
+.chess-piece--black {
+  color: #0f172a;
+  text-shadow: 0 1px 1px rgba(255, 255, 255, 0.18);
+}
+
+.chess-file-label,
+.chess-rank-label {
+  position: absolute;
+  font-size: 0.66rem;
+  font-weight: 700;
+  color: rgba(15, 23, 42, 0.75);
+}
+
+.chess-file-label {
+  right: 4px;
+  bottom: 2px;
+}
+
+.chess-rank-label {
+  left: 4px;
+  top: 2px;
+}
+
+.chess-promotion {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+}
+
+.chess-replay-panel {
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.chess-replay-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 520px) minmax(0, 1fr);
+  gap: 18px;
+  min-height: 0;
+}
+
 @media (max-width: 1180px) {
   .platform-lobby-grid,
   .room-staging-layout {
@@ -968,6 +1115,11 @@ p {
 
   .match-main-row {
     grid-template-columns: minmax(200px, 0.9fr) minmax(0, 1.55fr) minmax(200px, 0.95fr);
+  }
+
+  .chess-match-row,
+  .chess-replay-layout {
+    grid-template-columns: 1fr;
   }
 
   .player-strip {

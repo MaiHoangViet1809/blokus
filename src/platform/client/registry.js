@@ -1,7 +1,9 @@
 import blokusManifest from "../../games/blokus/client.js";
+import chessManifest from "../../games/chess/client.js";
 
 const REGISTRY = {
-  [blokusManifest.gameType]: blokusManifest
+  [blokusManifest.gameType]: blokusManifest,
+  [chessManifest.gameType]: chessManifest
 };
 
 export function getGameClient(gameType) {

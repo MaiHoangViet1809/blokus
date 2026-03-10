@@ -160,7 +160,7 @@ onMounted(async () => {
     <article class="panel platform-room-table-panel">
       <div class="section-head">
         <div>
-          <h2>{{ selectedGame.title }} Rooms</h2>
+          <h2>Rooms</h2>
           <p class="muted">{{ filteredRooms.length }} rooms visible for the selected game.</p>
         </div>
         <button class="secondary" @click="refreshRooms">Refresh</button>
@@ -198,7 +198,7 @@ onMounted(async () => {
           </tbody>
         </table>
       </div>
-      <p v-else class="muted">No public rooms for {{ selectedGame.title }} right now.</p>
+      <p v-else class="muted">No public rooms for the selected game right now.</p>
     </article>
   </section>
 </template>
