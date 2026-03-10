@@ -1520,3 +1520,60 @@ Pieces panel container
 ### Cautions / Risks
 - rack sizing changes must not break the 2-column desktop layout
 - preview reduction must still keep larger polyominoes legible
+
+## Extension: Smaller Square Rack Tiles with Centered Shape-Only Preview
+- **Status**: APPROVED
+- **Approved-By**: Viet
+- **Approved-On**: 2026-03-10
+- **Task**: Make the live Blokus rack tiles smaller, remove visible text labels from the tiles, and center the shape thumbnail inside each square tile.
+- **Location**:
+  - `/Users/maihoangviet/Projects/blokus/src/games/blokus/LiveView.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/style.css`
+  - `/Users/maihoangviet/Projects/blokus/plan_todo/codex/SOW_0007_multi_board_game_platform_refactor.md`
+- **Why**: The rack was still rendering oversized square tiles with the thumbnail pushed upward and a visible label competing for space, which made the shape-driven rack harder to scan and use.
+
+### As-Is Diagram (ASCII)
+```text
+square tile
+  -> tile too large
+  -> preview pushed upward
+  -> label shown
+  -> shape does not sit in the visual center
+```
+
+### To-Be Diagram (ASCII)
+```text
+smaller square tile
+  -> no visible label
+  -> centered shape preview
+  -> tile about 4/5 previous size
+  -> shape-driven scanning only
+```
+
+### Deliverables
+- reduce desktop rack tile size
+- remove visible labels from piece tiles
+- center shape previews inside each square tile
+- preserve transform-synced selected preview behavior
+
+### Done Criteria
+- rack tiles are visibly smaller
+- no visible piece label appears in the tile
+- the shape preview is visually centered
+- selected tile still matches board preview after rotate/flip
+- `npm run build` passes
+
+### Out-of-Scope
+- route changes
+- server/API changes
+- broader match layout redesign
+
+### Proposed-By
+- Codex GPT-5
+
+### plan
+- multi-board-game-platform-refactor-v1
+
+### Cautions / Risks
+- reducing tile size too far can hurt larger-piece legibility
+- centering must still keep transformed previews visually stable

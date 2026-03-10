@@ -627,11 +627,10 @@ p {
 }
 
 .piece-chip {
-  position: relative;
-  display: block;
-  width: 100%;
-  max-width: 124px;
-  padding: 8px;
+  display: grid;
+  place-items: center;
+  width: min(100%, 100px);
+  padding: 6px;
   font-size: 0.72rem;
   aspect-ratio: 1;
   min-height: 0;
@@ -647,26 +646,7 @@ p {
   opacity: 0.42;
 }
 
-.piece-label {
-  position: absolute;
-  left: 6px;
-  right: 6px;
-  bottom: 8px;
-  font-size: 0.62rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  line-height: 1;
-  text-align: center;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
 .piece-preview {
-  position: absolute;
-  top: 10px;
-  left: 50%;
   display: grid;
   grid-template-columns: repeat(var(--piece-cols), 8px);
   grid-template-rows: repeat(var(--piece-rows), 8px);
@@ -674,7 +654,6 @@ p {
   min-height: 0;
   align-content: center;
   justify-content: center;
-  transform: translateX(-50%);
 }
 
 .piece-preview-cell {
@@ -1057,6 +1036,10 @@ p {
 
   .piece-grid {
     grid-template-columns: 1fr;
+  }
+
+  .piece-chip {
+    width: min(100%, 92px);
   }
 
   .color-picker {

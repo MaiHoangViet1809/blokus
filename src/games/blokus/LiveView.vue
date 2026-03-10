@@ -157,6 +157,7 @@ watch(availablePieceIds, (pieces) => {
             class="piece-chip"
             :class="{ active: piece.id === selectedPieceId, used: piece.used }"
             :disabled="piece.used"
+            :aria-label="piece.label"
             :style="{ '--piece-color': activeColorMeta.fill }"
             @click="choosePiece(piece.id)"
           >
@@ -172,7 +173,6 @@ watch(availablePieceIds, (pieces) => {
                 :style="{ gridColumn: `${cell[0] + 1}`, gridRow: `${cell[1] + 1}` }"
               />
             </span>
-            <span class="piece-label">{{ piece.label }}</span>
           </button>
         </div>
         <div class="rack-actions">
