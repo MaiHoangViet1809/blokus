@@ -627,10 +627,14 @@ p {
 
 .piece-chip {
   display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
   justify-items: center;
+  align-items: center;
   gap: 6px;
   padding: 10px 8px;
   font-size: 0.72rem;
+  aspect-ratio: 1;
+  min-height: 0;
 }
 
 .piece-chip.active {
@@ -654,9 +658,10 @@ p {
   grid-template-columns: repeat(var(--piece-cols), 10px);
   grid-template-rows: repeat(var(--piece-rows), 10px);
   gap: 2px;
-  min-height: calc(var(--piece-rows) * 10px + (var(--piece-rows) - 1) * 2px);
+  min-height: 0;
   align-content: center;
   justify-content: center;
+  align-self: center;
 }
 
 .piece-preview-cell {

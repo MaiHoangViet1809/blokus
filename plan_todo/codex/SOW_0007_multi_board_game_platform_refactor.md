@@ -1414,3 +1414,53 @@ match-main-row
 
 ### Cautions / Risks
 - container measurement must react to resize without breaking hover/place alignment
+
+## Extension: Square Piece Tiles and Transform-Synced Rack Preview
+- **Status**: APPROVED
+- **Approved-By**: Viet
+- **Approved-On**: 2026-03-10
+- **Task**: Make every live Blokus piece tile square and keep the selected rack preview synchronized with rotate/flip state.
+- **Location**:
+  - `/Users/maihoangviet/Projects/blokus/src/games/blokus/LiveView.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/style.css`
+  - `/Users/maihoangviet/Projects/blokus/plan_todo/codex/SOW_0007_multi_board_game_platform_refactor.md`
+- **Why**: The rack currently uses content-sized tiles and canonical piece cells only, so the selected thumbnail can diverge from the transformed board shadow after rotate/flip.
+
+### As-Is Diagram (ASCII)
+```text
+Pieces panel
+  -> rectangular content-sized tiles
+  -> selected thumbnail stays in base orientation
+  -> board shadow uses rotated/flipped shape
+```
+
+### To-Be Diagram (ASCII)
+```text
+Pieces panel
+  -> every piece sits in a square tile
+  -> selected thumbnail follows rotate/flip
+  -> selected thumbnail matches board shadow
+```
+
+### Deliverables
+- make piece tiles square
+- render selected rack preview from transformed cells
+- keep non-selected tiles canonical
+
+### Done Criteria
+- all piece tiles remain square
+- selected piece preview matches board shadow after rotate/flip
+- `npm run build` passes
+
+### Out-of-Scope
+- route changes
+- gameplay rule changes
+
+### Proposed-By
+- Codex GPT-5
+
+### plan
+- multi-board-game-platform-refactor-v1
+
+### Cautions / Risks
+- selected preview must stay centered so transforms do not visually jump

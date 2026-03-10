@@ -1,7 +1,7 @@
 <script setup>
 import { computed, ref, watch } from "vue";
 import GameBoard from "../../components/GameBoard.vue";
-import { PIECES, PLAYER_COLORS } from "../../lib/pieces";
+import { PIECES, PLAYER_COLORS, resolvePieceTransform } from "../../lib/pieces";
 
 const props = defineProps({
   room: { type: Object, required: true },
@@ -53,8 +53,22 @@ const activeColorMeta = computed(() => PLAYER_COLORS[activeRackPlayer.value?.col
 const availablePieceIds = computed(() => new Set(activeRackPlayer.value?.remainingPieces || []));
 const visiblePieces = computed(() => PIECES.map((piece) => ({
   ...piece,
+  previewCells: piece.cells,
+  previewWidth: piece.previewWidth,
+  previewHeight: piece.previewHeight,
   used: !availablePieceIds.value.has(piece.id)
-})));
+})).map((piece) => {
+  if (piece.id !== selectedPieceId.value) return piece;
+  const transformed = resolvePieceTransform(piece.id, rotation.value, flipped.value);
+  const maxX = Math.max(...transformed.cells.map(([x]) => x), 0);
+  const maxY = Math.max(...transformed.cells.map(([, y]) => y), 0);
+  return {
+    ...piece,
+    previewCells: transformed.cells,
+    previewWidth: maxX + 1,
+    previewHeight: maxY + 1
+  };
+}));
 const canTransform = computed(() =>
   !!props.interactiveProfileId
   && props.gameView?.players?.[props.gameView.turnIndex]?.profileId === props.interactiveProfileId
@@ -152,7 +166,7 @@ watch(availablePieceIds, (pieces) => {
               aria-hidden="true"
             >
               <span
-                v-for="(cell, index) in piece.cells"
+                v-for="(cell, index) in piece.previewCells"
                 :key="`${piece.id}-${index}`"
                 class="piece-preview-cell"
                 :style="{ gridColumn: `${cell[0] + 1}`, gridRow: `${cell[1] + 1}` }"
