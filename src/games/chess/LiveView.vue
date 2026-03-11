@@ -1,6 +1,6 @@
 <script setup>
-import { computed, onMounted, ref, watch } from "vue";
-import { buildMoveRowsFromFrames, FILE_LABELS, pieceSvgMarkup, RANK_LABELS } from "./shared.js";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { buildMoveRowsFromFrames, FILE_LABELS, pieceSvgAsset, RANK_LABELS } from "./shared.js";
 
 const props = defineProps({
   room: { type: Object, required: true },
@@ -15,6 +15,11 @@ const emit = defineEmits(["place"]);
 const selectedSquare = ref(null);
 const pendingPromotion = ref(null);
 const replayFrames = ref([]);
+const boardShellRef = ref(null);
+const boardRanksRef = ref(null);
+const boardFilesRef = ref(null);
+const boardSide = ref(0);
+let boardResizeObserver = null;
 
 const currentTurnPlayer = computed(() => props.gameView.players?.[props.gameView.turnIndex] || null);
 const activeViewer = computed(() => props.gameView.players?.find((player) => player.profileId === props.interactiveProfileId) || null);
@@ -57,6 +62,10 @@ const sideSummary = computed(() =>
 const moveRows = computed(() => buildMoveRowsFromFrames(replayFrames.value));
 const latestMoveStep = computed(() => replayFrames.value.at(-1)?.step || null);
 const currentSideCard = computed(() => sideSummary.value.find((player) => player.profileId === currentTurnPlayer.value?.profileId) || null);
+const boardFrameStyle = computed(() => boardSide.value ? { width: `${boardSide.value}px` } : {});
+const boardStyle = computed(() => boardSide.value ? { width: `${boardSide.value}px`, height: `${boardSide.value}px` } : {});
+const boardFilesStyle = computed(() => boardSide.value ? { width: `${boardSide.value}px` } : {});
+const boardRanksStyle = computed(() => boardSide.value ? { height: `${boardSide.value}px` } : {});
 
 function sameSquare(left, right) {
   return !!left && !!right && left.x === right.x && left.y === right.y;
@@ -85,6 +94,33 @@ async function loadMoveHistory() {
   if (!response.ok) return;
   const data = await response.json();
   replayFrames.value = data?.replay?.frames || [];
+}
+
+function syncBoardSide() {
+  const shell = boardShellRef.value;
+  const ranks = boardRanksRef.value;
+  const files = boardFilesRef.value;
+  if (!shell || !ranks || !files) return;
+  const shellStyle = window.getComputedStyle(shell);
+  const columnGap = Number.parseFloat(shellStyle.columnGap || shellStyle.gap || "0") || 0;
+  const frame = shell.querySelector(".chess-board-frame");
+  const frameStyle = frame ? window.getComputedStyle(frame) : null;
+  const rowGap = frameStyle ? (Number.parseFloat(frameStyle.rowGap || frameStyle.gap || "0") || 0) : 0;
+  const availableWidth = shell.clientWidth - ranks.clientWidth - columnGap;
+  const availableHeight = shell.clientHeight - files.clientHeight - rowGap;
+  boardSide.value = Math.max(0, Math.floor(Math.min(availableWidth, availableHeight)));
+}
+
+function bindBoardResize() {
+  if (!boardShellRef.value || !boardRanksRef.value || !boardFilesRef.value) return;
+  boardResizeObserver?.disconnect();
+  boardResizeObserver = new ResizeObserver(() => {
+    syncBoardSide();
+  });
+  boardResizeObserver.observe(boardShellRef.value);
+  boardResizeObserver.observe(boardRanksRef.value);
+  boardResizeObserver.observe(boardFilesRef.value);
+  syncBoardSide();
 }
 
 function selectOrMove(x, y) {
@@ -149,6 +185,11 @@ watch(() => props.match?.id, () => {
 
 onMounted(() => {
   loadMoveHistory().catch(() => {});
+  bindBoardResize();
+});
+
+onBeforeUnmount(() => {
+  boardResizeObserver?.disconnect();
 });
 </script>
 
@@ -195,12 +236,12 @@ onMounted(() => {
       </section>
 
       <section class="panel board-panel chess-board-panel">
-        <div class="chess-board-shell">
-          <div class="chess-ranks">
+        <div ref="boardShellRef" class="chess-board-shell">
+          <div ref="boardRanksRef" class="chess-ranks" :style="boardRanksStyle">
             <span v-for="rank in displayRanks" :key="`rank-${rank}`" class="chess-rank-marker">{{ rank }}</span>
           </div>
-          <div class="chess-board-frame">
-            <div class="chess-board">
+          <div class="chess-board-frame" :style="boardFrameStyle">
+            <div class="chess-board" :style="boardStyle">
               <button
                 v-for="square in boardSquares"
                 :key="`${square.displayX}-${square.displayY}`"
@@ -224,12 +265,12 @@ onMounted(() => {
                     'chess-piece--black': square.piece[0] === 'b',
                     'chess-piece--white': square.piece[0] === 'w',
                     'chess-piece--arrived': gameView.lastMove && sameSquare(gameView.lastMove.to, square)
-                  }"
-                  v-html="pieceSvgMarkup(square.piece)"
-                />
+                  }">
+                  <img class="chess-piece__img" :src="pieceSvgAsset(square.piece)" alt="" decoding="async">
+                </span>
               </button>
             </div>
-            <div class="chess-files">
+            <div ref="boardFilesRef" class="chess-files" :style="boardFilesStyle">
               <span v-for="file in displayFiles" :key="`file-${file}`" class="chess-file-marker">{{ file.toUpperCase() }}</span>
             </div>
           </div>
@@ -274,9 +315,9 @@ onMounted(() => {
               <span
                 v-for="(piece, index) in player.captured"
                 :key="`${player.profileId}-${piece}-${index}`"
-                class="chess-piece chess-piece--capture"
-                v-html="pieceSvgMarkup(piece)"
-              />
+                class="chess-piece chess-piece--capture">
+                <img class="chess-piece__img" :src="pieceSvgAsset(piece)" alt="" decoding="async">
+              </span>
               <span v-if="!player.captured.length" class="muted">None</span>
             </div>
           </div>

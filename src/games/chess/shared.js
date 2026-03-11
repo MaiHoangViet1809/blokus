@@ -32,21 +32,6 @@ export const SIDE_OPTIONS = [
 export const FILE_LABELS = ["a", "b", "c", "d", "e", "f", "g", "h"];
 export const RANK_LABELS = ["8", "7", "6", "5", "4", "3", "2", "1"];
 
-export const PIECE_GLYPHS = {
-  wp: "♙",
-  wn: "♘",
-  wb: "♗",
-  wr: "♖",
-  wq: "♕",
-  wk: "♔",
-  bp: "♟",
-  bn: "♞",
-  bb: "♝",
-  br: "♜",
-  bq: "♛",
-  bk: "♚"
-};
-
 export const PIECE_VALUES = {
   p: 1,
   n: 3,
@@ -56,47 +41,19 @@ export const PIECE_VALUES = {
   k: 0
 };
 
-const PIECE_SVG_TEMPLATES = {
-  p: `
-    <circle cx="32" cy="18" r="7" />
-    <path d="M24 30c0-6 4.5-10 8-10s8 4 8 10c0 3-1.2 5.6-3.4 8.4H42v6H22v-6h5.4C25.2 35.6 24 33 24 30Z" />
-    <rect x="18" y="47" width="28" height="5" rx="2.2" />
-    <rect x="14" y="54" width="36" height="5" rx="2.5" />
-  `,
-  r: `
-    <path d="M18 14h6v6h4v-6h8v6h4v-6h6v10H18Z" />
-    <path d="M22 26h20v15H22Z" />
-    <path d="M20 43h24v5H20Z" />
-    <path d="M16 51h32v8H16Z" />
-  `,
-  n: `
-    <path d="M22 54h24v5H22Z" />
-    <path d="M24 49h18l2 5H20Z" />
-    <path d="M22 46c0-10 4-17 11-23l4-3 5 3-3 6 3 4-2 14H22Z" />
-    <circle cx="36" cy="28" r="1.8" fill="rgba(0,0,0,0.28)" />
-  `,
-  b: `
-    <path d="M31 12h2l3 4-3 4h-2l-3-4Z" />
-    <path d="M26 28c0-4 2.6-7 6-7s6 3 6 7c0 2.8-1.2 5.4-3.4 8.4H40v6H24v-6h5.4C27.2 33.4 26 30.8 26 28Z" />
-    <path d="M30 18l4 7-4 7-4-7Z" />
-    <rect x="18" y="47" width="28" height="5" rx="2.2" />
-    <rect x="14" y="54" width="36" height="5" rx="2.5" />
-  `,
-  q: `
-    <circle cx="20" cy="18" r="3.2" />
-    <circle cx="32" cy="14" r="3.2" />
-    <circle cx="44" cy="18" r="3.2" />
-    <path d="M20 22l4 14h16l4-14-8 6-4-8-4 8Z" />
-    <path d="M24 38h16l3 8H21Z" />
-    <rect x="18" y="47" width="28" height="5" rx="2.2" />
-    <rect x="14" y="54" width="36" height="5" rx="2.5" />
-  `,
-  k: `
-    <path d="M30 10h4v6h6v4h-6v6h-4v-6h-6v-4h6Z" />
-    <path d="M26 28c0-4 2.6-7 6-7s6 3 6 7c0 2.8-1.2 5.4-3.4 8.4H40v6H24v-6h5.4C27.2 33.4 26 30.8 26 28Z" />
-    <rect x="18" y="47" width="28" height="5" rx="2.2" />
-    <rect x="14" y="54" width="36" height="5" rx="2.5" />
-  `
+const PIECE_SVG_ASSETS = {
+  wp: new URL("./assets/Chess_plt45.svg", import.meta.url).href,
+  wn: new URL("./assets/Chess_nlt45.svg", import.meta.url).href,
+  wb: new URL("./assets/Chess_blt45.svg", import.meta.url).href,
+  wr: new URL("./assets/Chess_rlt45.svg", import.meta.url).href,
+  wq: new URL("./assets/Chess_qlt45.svg", import.meta.url).href,
+  wk: new URL("./assets/Chess_klt45.svg", import.meta.url).href,
+  bp: new URL("./assets/Chess_pdt45.svg", import.meta.url).href,
+  bn: new URL("./assets/Chess_ndt45.svg", import.meta.url).href,
+  bb: new URL("./assets/Chess_bdt45.svg", import.meta.url).href,
+  br: new URL("./assets/Chess_rdt45.svg", import.meta.url).href,
+  bq: new URL("./assets/Chess_qdt45.svg", import.meta.url).href,
+  bk: new URL("./assets/Chess_kdt45.svg", import.meta.url).href
 };
 
 export function buildChessConfig(config = {}) {
@@ -148,15 +105,8 @@ export function squareName(x, y) {
   return `${FILE_LABELS[x]}${CHESS_BOARD_SIZE - y}`;
 }
 
-export function pieceSvgMarkup(piece) {
-  if (!piece) return "";
-  const template = PIECE_SVG_TEMPLATES[piece[1]];
-  if (!template) return "";
-  return `
-    <svg viewBox="0 0 64 64" aria-hidden="true" focusable="false">
-      <g class="piece-svg__shape">${template}</g>
-    </svg>
-  `;
+export function pieceSvgAsset(piece) {
+  return piece ? (PIECE_SVG_ASSETS[piece] || "") : "";
 }
 
 function pieceLetter(piece) {

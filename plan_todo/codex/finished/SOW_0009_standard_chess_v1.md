@@ -271,3 +271,53 @@ polished chess live view
 - **Cautions / Risks**:
   - svg piece treatment must stay lightweight and local to the repo
   - live move list is powered from replay frames in the current contract, so styling changes should not assume extra server payload shape
+
+## Extension: Licensed Classic Staunton Pieces and Container-Fit Board
+
+- **Status**: APPROVED
+- **Approved-By**: Viet
+- **Task**: Replace the current rough custom chess pieces with a licensed classic Staunton SVG set and make the chess board fit its real container so it stays square, centered, and unclipped in live and replay.
+- **Location**:
+  - `/Users/maihoangviet/Projects/blokus/src/games/chess/shared.js`
+  - `/Users/maihoangviet/Projects/blokus/src/games/chess/LiveView.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/games/chess/ReplayView.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/style.css`
+  - `/Users/maihoangviet/Projects/blokus/src/games/chess/assets/`
+  - `/Users/maihoangviet/Projects/blokus/plan_todo/codex/finished/SOW_0009_standard_chess_v1.md`
+- **Why**: The previous custom SVG set still looked rough, and the board fit remained too dependent on CSS-only layout assumptions. A licensed classic Staunton set matches the target visual direction better, and container-driven sizing removes clipping/asymmetry.
+- **As-Is Diagram (ASCII)**:
+```text
+Live / Replay chess
+  -> custom inline SVG pieces
+  -> piece quality still rough
+  -> board can feel off-center / clipped at edges
+```
+- **To-Be Diagram (ASCII)**:
+```text
+Live / Replay chess
+  -> classic Staunton SVG pieces
+  -> premium traditional chess look
+  -> board size = min(real container width, real container height)
+  -> square, centered, no clipping
+```
+- **Deliverables**:
+  - add a local licensed classic Staunton SVG set under `src/games/chess/assets/`
+  - replace inline piece templates with asset-based mapping
+  - use the same piece set in live and replay
+  - fit the board from the real container dimensions instead of loose viewport/CSS assumptions
+  - keep current move list, captures, promotion, and orientation behavior intact
+- **Done Criteria**:
+  - chess pieces use the local Staunton set
+  - board does not clip on any side in live or replay
+  - board remains square and centered
+  - `npm run build` passes
+- **Out-of-Scope**:
+  - copying chess.com assets
+  - chess rule changes
+  - route changes
+  - clocks/analysis
+- **Proposed-By**: Codex GPT-5
+- **plan**: chess-v1-standard-hvh
+- **Cautions / Risks**:
+  - asset license must stay explicit and safe
+  - board fit must be container-driven, not another viewport constant

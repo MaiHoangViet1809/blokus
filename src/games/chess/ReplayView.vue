@@ -1,16 +1,25 @@
 <script setup>
-import { computed, ref, watch } from "vue";
-import { buildMoveRowsFromFrames, FILE_LABELS, pieceSvgMarkup, RANK_LABELS } from "./shared.js";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { buildMoveRowsFromFrames, FILE_LABELS, pieceSvgAsset, RANK_LABELS } from "./shared.js";
 
 const props = defineProps({
   replay: { type: Object, default: null }
 });
 
 const currentStep = ref(0);
+const boardShellRef = ref(null);
+const boardRanksRef = ref(null);
+const boardFilesRef = ref(null);
+const boardSide = ref(0);
+let boardResizeObserver = null;
 
 const maxStep = computed(() => Math.max(0, (props.replay?.frames?.length || 1) - 1));
 const frame = computed(() => props.replay?.frames?.[currentStep.value] || null);
 const moveRows = computed(() => buildMoveRowsFromFrames(props.replay?.frames || []));
+const boardFrameStyle = computed(() => boardSide.value ? { width: `${boardSide.value}px` } : {});
+const boardStyle = computed(() => boardSide.value ? { width: `${boardSide.value}px`, height: `${boardSide.value}px` } : {});
+const boardFilesStyle = computed(() => boardSide.value ? { width: `${boardSide.value}px` } : {});
+const boardRanksStyle = computed(() => boardSide.value ? { height: `${boardSide.value}px` } : {});
 const replaySquares = computed(() =>
   Array.from({ length: 8 }, (_, y) =>
     Array.from({ length: 8 }, (_, x) => ({
@@ -28,6 +37,41 @@ watch(() => props.replay?.id, () => {
 function jumpToStep(step) {
   currentStep.value = Math.max(0, Math.min(maxStep.value, step));
 }
+
+function syncBoardSide() {
+  const shell = boardShellRef.value;
+  const ranks = boardRanksRef.value;
+  const files = boardFilesRef.value;
+  if (!shell || !ranks || !files) return;
+  const shellStyle = window.getComputedStyle(shell);
+  const columnGap = Number.parseFloat(shellStyle.columnGap || shellStyle.gap || "0") || 0;
+  const frameNode = shell.querySelector(".chess-board-frame");
+  const frameStyle = frameNode ? window.getComputedStyle(frameNode) : null;
+  const rowGap = frameStyle ? (Number.parseFloat(frameStyle.rowGap || frameStyle.gap || "0") || 0) : 0;
+  const availableWidth = shell.clientWidth - ranks.clientWidth - columnGap;
+  const availableHeight = shell.clientHeight - files.clientHeight - rowGap;
+  boardSide.value = Math.max(0, Math.floor(Math.min(availableWidth, availableHeight)));
+}
+
+function bindBoardResize() {
+  if (!boardShellRef.value || !boardRanksRef.value || !boardFilesRef.value) return;
+  boardResizeObserver?.disconnect();
+  boardResizeObserver = new ResizeObserver(() => {
+    syncBoardSide();
+  });
+  boardResizeObserver.observe(boardShellRef.value);
+  boardResizeObserver.observe(boardRanksRef.value);
+  boardResizeObserver.observe(boardFilesRef.value);
+  syncBoardSide();
+}
+
+onMounted(() => {
+  bindBoardResize();
+});
+
+onBeforeUnmount(() => {
+  boardResizeObserver?.disconnect();
+});
 </script>
 
 <template>
@@ -71,12 +115,12 @@ function jumpToStep(step) {
       </section>
 
       <section class="panel board-panel chess-board-panel">
-        <div class="chess-board-shell">
-          <div class="chess-ranks">
+        <div ref="boardShellRef" class="chess-board-shell">
+          <div ref="boardRanksRef" class="chess-ranks" :style="boardRanksStyle">
             <span v-for="rank in RANK_LABELS" :key="`replay-rank-${rank}`" class="chess-rank-marker">{{ rank }}</span>
           </div>
-          <div class="chess-board-frame">
-            <div class="chess-board chess-board--replay">
+          <div class="chess-board-frame" :style="boardFrameStyle">
+            <div class="chess-board chess-board--replay" :style="boardStyle">
               <button
                 v-for="square in replaySquares"
                 :key="`replay-${square.x}-${square.y}`"
@@ -97,12 +141,12 @@ function jumpToStep(step) {
                     'chess-piece--black': square.piece[0] === 'b',
                     'chess-piece--white': square.piece[0] === 'w',
                     'chess-piece--arrived': frame?.payload && frame.payload.to?.x === square.x && frame.payload.to?.y === square.y
-                  }"
-                  v-html="pieceSvgMarkup(square.piece)"
-                />
+                  }">
+                  <img class="chess-piece__img" :src="pieceSvgAsset(square.piece)" alt="" decoding="async">
+                </span>
               </button>
             </div>
-            <div class="chess-files">
+            <div ref="boardFilesRef" class="chess-files" :style="boardFilesStyle">
               <span v-for="file in FILE_LABELS" :key="`replay-file-${file}`" class="chess-file-marker">{{ file.toUpperCase() }}</span>
             </div>
           </div>
