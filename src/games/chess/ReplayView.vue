@@ -1,14 +1,16 @@
 <script setup>
 import { computed, ref, watch } from "vue";
-import { FILE_LABELS, PIECE_GLYPHS, RANK_LABELS } from "./shared.js";
+import { buildMoveRowsFromFrames, FILE_LABELS, pieceSvgMarkup, RANK_LABELS } from "./shared.js";
 
 const props = defineProps({
   replay: { type: Object, default: null }
 });
 
 const currentStep = ref(0);
+
 const maxStep = computed(() => Math.max(0, (props.replay?.frames?.length || 1) - 1));
 const frame = computed(() => props.replay?.frames?.[currentStep.value] || null);
+const moveRows = computed(() => buildMoveRowsFromFrames(props.replay?.frames || []));
 const replaySquares = computed(() =>
   Array.from({ length: 8 }, (_, y) =>
     Array.from({ length: 8 }, (_, x) => ({
@@ -22,6 +24,10 @@ const replaySquares = computed(() =>
 watch(() => props.replay?.id, () => {
   currentStep.value = 0;
 });
+
+function jumpToStep(step) {
+  currentStep.value = Math.max(0, Math.min(maxStep.value, step));
+}
 </script>
 
 <template>
@@ -35,66 +41,116 @@ watch(() => props.replay?.id, () => {
     </div>
 
     <div class="chess-replay-layout">
-      <div class="chess-board-shell chess-board-shell--replay">
-        <div class="chess-ranks">
-          <span v-for="rank in RANK_LABELS" :key="`replay-rank-${rank}`" class="chess-rank-marker">{{ rank }}</span>
+      <section class="panel chess-status-panel chess-status-panel--replay">
+        <div class="chess-side-identity">
+          <div
+            v-for="player in replay.players"
+            :key="player.profileId"
+            class="chess-side-card"
+            :class="{ 'chess-side-card--active': frame?.activeColorIndex === player.colorIndex }"
+            :style="{ '--player-color': player.colorFill, '--player-text': player.textFill || '#fff' }"
+          >
+            <div class="chess-side-card__head">
+              <strong>{{ player.name }}</strong>
+              <span class="phase-pill">{{ player.colorIndex === 0 ? "White" : "Black" }}</span>
+            </div>
+            <div class="chess-side-card__meta">
+              <span>{{ player.endState }}</span>
+              <span>{{ player.score }}</span>
+            </div>
+          </div>
         </div>
-        <div class="chess-board-frame">
-          <div class="chess-board chess-board--replay">
-            <button
-              v-for="square in replaySquares"
-              :key="`replay-${square.x}-${square.y}`"
-              class="chess-square"
-              :class="{
-                'chess-square--light': (square.x + square.y) % 2 === 0,
-                'chess-square--dark': (square.x + square.y) % 2 === 1,
-                'chess-square--last': frame?.payload && ((frame.payload.from?.x === square.x && frame.payload.from?.y === square.y) || (frame.payload.to?.x === square.x && frame.payload.to?.y === square.y)),
-                'chess-square--last-destination': frame?.payload && frame.payload.to?.x === square.x && frame.payload.to?.y === square.y
-              }"
-              type="button"
-              disabled
-            >
-              <span
-                v-if="square.piece"
-                class="chess-piece"
+
+        <div class="chess-status-copy">
+          <p class="chess-turn-line">
+            <strong>{{ frame?.label || "Opening position" }}</strong>
+            <span>Step {{ currentStep }} / {{ maxStep }}</span>
+          </p>
+          <p class="muted">Move list synced to replay frame.</p>
+        </div>
+      </section>
+
+      <section class="panel board-panel chess-board-panel">
+        <div class="chess-board-shell">
+          <div class="chess-ranks">
+            <span v-for="rank in RANK_LABELS" :key="`replay-rank-${rank}`" class="chess-rank-marker">{{ rank }}</span>
+          </div>
+          <div class="chess-board-frame">
+            <div class="chess-board chess-board--replay">
+              <button
+                v-for="square in replaySquares"
+                :key="`replay-${square.x}-${square.y}`"
+                class="chess-square"
                 :class="{
-                  'chess-piece--black': square.piece[0] === 'b',
-                  'chess-piece--white': square.piece[0] === 'w',
-                  'chess-piece--arrived': frame?.payload && frame.payload.to?.x === square.x && frame.payload.to?.y === square.y
+                  'chess-square--light': (square.x + square.y) % 2 === 0,
+                  'chess-square--dark': (square.x + square.y) % 2 === 1,
+                  'chess-square--last': frame?.payload && ((frame.payload.from?.x === square.x && frame.payload.from?.y === square.y) || (frame.payload.to?.x === square.x && frame.payload.to?.y === square.y)),
+                  'chess-square--last-destination': frame?.payload && frame.payload.to?.x === square.x && frame.payload.to?.y === square.y
                 }"
+                type="button"
+                disabled
               >
-                {{ PIECE_GLYPHS[square.piece] }}
-              </span>
+                <span
+                  v-if="square.piece"
+                  class="chess-piece"
+                  :class="{
+                    'chess-piece--black': square.piece[0] === 'b',
+                    'chess-piece--white': square.piece[0] === 'w',
+                    'chess-piece--arrived': frame?.payload && frame.payload.to?.x === square.x && frame.payload.to?.y === square.y
+                  }"
+                  v-html="pieceSvgMarkup(square.piece)"
+                />
+              </button>
+            </div>
+            <div class="chess-files">
+              <span v-for="file in FILE_LABELS" :key="`replay-file-${file}`" class="chess-file-marker">{{ file.toUpperCase() }}</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel chess-side-panel">
+        <div class="board-rack-head">
+          <h3>Moves</h3>
+          <span class="phase-pill">{{ moveRows.length }} turns</span>
+        </div>
+        <div class="chess-move-list">
+          <div v-for="row in moveRows" :key="`replay-move-row-${row.moveNumber}`" class="chess-move-row">
+            <span class="chess-move-number">{{ row.moveNumber }}.</span>
+            <button
+              v-if="row.white"
+              type="button"
+              class="chess-move-chip"
+              :class="{ active: row.white.frameStep === currentStep }"
+              @click="jumpToStep(row.white.frameStep)"
+            >
+              {{ row.white.label }}
+            </button>
+            <button
+              v-if="row.black"
+              type="button"
+              class="chess-move-chip"
+              :class="{ active: row.black.frameStep === currentStep }"
+              @click="jumpToStep(row.black.frameStep)"
+            >
+              {{ row.black.label }}
             </button>
           </div>
-          <div class="chess-files">
-            <span v-for="file in FILE_LABELS" :key="`replay-file-${file}`" class="chess-file-marker">{{ file.toUpperCase() }}</span>
-          </div>
         </div>
-      </div>
 
-      <div class="stack">
-        <p class="muted">Step {{ currentStep }} / {{ maxStep }}</p>
-        <h3>{{ frame?.label || "Replay frame" }}</h3>
-        <div class="action-row">
-          <button class="secondary" :disabled="currentStep === 0" @click="currentStep -= 1">Prev</button>
-          <button class="secondary" :disabled="currentStep >= maxStep" @click="currentStep += 1">Next</button>
-        </div>
-        <input
-          v-model.number="currentStep"
-          type="range"
-          min="0"
-          :max="maxStep"
-        />
-        <div class="score-strip">
-          <div v-for="player in replay.players" :key="player.profileId" class="score-card">
-            <h3>{{ player.name }}</h3>
-            <p class="muted">{{ player.colorIndex === 0 ? "White" : "Black" }}</p>
-            <p class="muted">Score: {{ player.score }}</p>
-            <p class="muted">State: {{ player.endState }}</p>
+        <div class="chess-replay-controls">
+          <div class="action-row">
+            <button class="secondary" :disabled="currentStep === 0" @click="currentStep -= 1">Prev</button>
+            <button class="secondary" :disabled="currentStep >= maxStep" @click="currentStep += 1">Next</button>
           </div>
+          <input
+            v-model.number="currentStep"
+            type="range"
+            min="0"
+            :max="maxStep"
+          />
         </div>
-      </div>
+      </section>
     </div>
   </section>
 </template>

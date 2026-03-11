@@ -219,3 +219,55 @@ Live chess board
   - orientation flip must preserve click/move coordinate correctness
   - replay orientation should stay predictable even without a player-specific perspective
   - glyph-based chess pieces have visual-centering limits compared with SVG assets, so centering will be best-effort within the current glyph approach
+
+## Extension: Chess.com-Inspired Chess UI Polish
+
+- **Status**: APPROVED
+- **Approved-By**: Viet
+- **Task**: Rework the current chess live and replay presentation to adopt a chess.com-inspired visual language while preserving the platform's main three-column match layout.
+- **Location**:
+  - `/Users/maihoangviet/Projects/blokus/src/games/chess/LiveView.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/games/chess/ReplayView.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/games/chess/shared.js`
+  - `/Users/maihoangviet/Projects/blokus/src/style.css`
+  - `/Users/maihoangviet/Projects/blokus/plan_todo/codex/finished/SOW_0009_standard_chess_v1.md`
+- **Why**: Chess is playable, but the current live and replay views still feel like generic board-game screens. The goal is to move closer to a chess.com-like product feel with SVG pieces, a denser move rail, warmer board styling, and a more dominant center board.
+- **As-Is Diagram (ASCII)**:
+```text
+current chess live view
++------------------------------------------------------------------+
+| status panel        | board                    | captured pieces  |
+| generic dark cards  | clean but still app-like | generic panel    |
+| unicode pieces      | board not yet premium    | info is flat      |
++------------------------------------------------------------------+
+```
+- **To-Be Diagram (ASCII)**:
+```text
+polished chess live view
++------------------------------------------------------------------+
+| compact side rail | dominant premium board | moves + captures    |
+| svg pieces        | warmer palette/frame   | denser product rail |
++------------------------------------------------------------------+
+```
+- **Deliverables**:
+  - replace unicode glyphs with an SVG piece set
+  - add a live move list using simple SAN-style notation
+  - merge captures + move list into the right rail
+  - restyle live/replay boards with a warmer, denser chess presentation
+  - keep replay visually aligned with the live chess system
+- **Done Criteria**:
+  - live chess uses SVG pieces
+  - move list appears in the live right rail
+  - replay uses the same SVG piece set and board language
+  - board remains visually dominant
+  - `npm run build` passes
+- **Out-of-Scope**:
+  - chess clocks
+  - engine analysis
+  - route changes
+  - copying chess.com exactly
+- **Proposed-By**: Codex GPT-5
+- **plan**: chess-v1-standard-hvh
+- **Cautions / Risks**:
+  - svg piece treatment must stay lightweight and local to the repo
+  - live move list is powered from replay frames in the current contract, so styling changes should not assume extra server payload shape

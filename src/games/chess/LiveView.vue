@@ -1,6 +1,6 @@
 <script setup>
-import { computed, ref, watch } from "vue";
-import { FILE_LABELS, PIECE_GLYPHS, RANK_LABELS } from "./shared.js";
+import { computed, onMounted, ref, watch } from "vue";
+import { buildMoveRowsFromFrames, FILE_LABELS, pieceSvgMarkup, RANK_LABELS } from "./shared.js";
 
 const props = defineProps({
   room: { type: Object, required: true },
@@ -14,6 +14,8 @@ const emit = defineEmits(["place"]);
 
 const selectedSquare = ref(null);
 const pendingPromotion = ref(null);
+const replayFrames = ref([]);
+
 const currentTurnPlayer = computed(() => props.gameView.players?.[props.gameView.turnIndex] || null);
 const activeViewer = computed(() => props.gameView.players?.find((player) => player.profileId === props.interactiveProfileId) || null);
 const viewerCanMove = computed(() => activeViewer.value?.profileId === currentTurnPlayer.value?.profileId);
@@ -52,6 +54,9 @@ const sideSummary = computed(() =>
     captured: props.gameView.capturedPieces?.[player.colorIndex === 0 ? "black" : "white"] || []
   }))
 );
+const moveRows = computed(() => buildMoveRowsFromFrames(replayFrames.value));
+const latestMoveStep = computed(() => replayFrames.value.at(-1)?.step || null);
+const currentSideCard = computed(() => sideSummary.value.find((player) => player.profileId === currentTurnPlayer.value?.profileId) || null);
 
 function sameSquare(left, right) {
   return !!left && !!right && left.x === right.x && left.y === right.y;
@@ -69,6 +74,17 @@ function ownerAt(x, y) {
 
 function labelForSquare(x, y) {
   return `${FILE_LABELS[x]}${RANK_LABELS[y]}`;
+}
+
+async function loadMoveHistory() {
+  if (!props.match?.id) {
+    replayFrames.value = [];
+    return;
+  }
+  const response = await fetch(`/api/matches/${props.match.id}`);
+  if (!response.ok) return;
+  const data = await response.json();
+  replayFrames.value = data?.replay?.frames || [];
 }
 
 function selectOrMove(x, y) {
@@ -122,6 +138,18 @@ watch(() => props.gameView.lastMove, () => {
     selectedSquare.value = null;
   }
 });
+
+watch(() => props.match?.moveCount, () => {
+  loadMoveHistory().catch(() => {});
+});
+
+watch(() => props.match?.id, () => {
+  loadMoveHistory().catch(() => {});
+}, { immediate: true });
+
+onMounted(() => {
+  loadMoveHistory().catch(() => {});
+});
 </script>
 
 <template>
@@ -136,28 +164,33 @@ watch(() => props.gameView.lastMove, () => {
 
     <div class="match-main-row chess-match-row">
       <section class="panel chess-status-panel">
-        <div class="mini-scoreboard__head">
-          <strong>Match Status</strong>
-          <span class="muted">{{ currentTurnPlayer?.sideLabel }}</span>
-        </div>
-        <div class="chess-status-copy">
-          <p class="muted">Last move: {{ gameView.lastMove?.label || "Opening" }}</p>
-          <p class="muted" v-if="gameView.checkState">Check on {{ gameView.checkState === 'w' ? 'White' : 'Black' }}</p>
-          <p class="muted">Spectators: {{ spectatorCount }}</p>
-        </div>
-
-        <div class="mini-scoreboard__list">
+        <div class="chess-side-identity">
           <div
             v-for="player in sideSummary"
             :key="player.profileId"
-            class="mini-scoreboard__row"
-            :style="{ '--player-color': player.colorFill }"
+            class="chess-side-card"
+            :class="{ 'chess-side-card--active': player.profileId === currentTurnPlayer?.profileId }"
+            :style="{ '--player-color': player.colorFill, '--player-text': player.textFill || '#fff' }"
           >
-            <span class="mini-scoreboard__rank">{{ player.sideLabel }}</span>
-            <strong>{{ player.name }}</strong>
-            <span class="muted">{{ player.endState }}</span>
-            <span class="mini-scoreboard__value">{{ player.score }}</span>
+            <div class="chess-side-card__head">
+              <strong>{{ player.name }}</strong>
+              <span class="phase-pill">{{ player.sideLabel }}</span>
+            </div>
+            <div class="chess-side-card__meta">
+              <span>{{ player.endState }}</span>
+              <span>{{ player.score }}</span>
+            </div>
           </div>
+        </div>
+
+        <div class="chess-status-copy">
+          <p class="chess-turn-line">
+            <strong>{{ currentSideCard?.name || currentTurnPlayer?.name || "Waiting" }}</strong>
+            <span>{{ currentTurnPlayer?.sideLabel || "" }} to move</span>
+          </p>
+          <p class="muted">Last move: {{ gameView.lastMove?.label || "Opening" }}</p>
+          <p class="muted" v-if="gameView.checkState">Check on {{ gameView.checkState === 'w' ? 'White' : 'Black' }}</p>
+          <p class="muted">Spectators: {{ spectatorCount }}</p>
         </div>
       </section>
 
@@ -192,9 +225,8 @@ watch(() => props.gameView.lastMove, () => {
                     'chess-piece--white': square.piece[0] === 'w',
                     'chess-piece--arrived': gameView.lastMove && sameSquare(gameView.lastMove.to, square)
                   }"
-                >
-                  {{ PIECE_GLYPHS[square.piece] }}
-                </span>
+                  v-html="pieceSvgMarkup(square.piece)"
+                />
               </button>
             </div>
             <div class="chess-files">
@@ -202,30 +234,51 @@ watch(() => props.gameView.lastMove, () => {
             </div>
           </div>
         </div>
+      </section>
 
-        <div v-if="pendingPromotion" class="chess-promotion">
+      <section class="panel chess-side-panel">
+        <div class="board-rack-head">
+          <h3>Moves</h3>
+          <span class="phase-pill">{{ moveRows.length }} turns</span>
+        </div>
+        <div class="chess-move-list">
+          <div v-for="row in moveRows" :key="`move-row-${row.moveNumber}`" class="chess-move-row">
+            <span class="chess-move-number">{{ row.moveNumber }}.</span>
+            <span v-if="row.white" class="chess-move-chip" :class="{ active: row.white.frameStep === latestMoveStep }">
+              {{ row.white.label }}
+            </span>
+            <span v-if="row.black" class="chess-move-chip" :class="{ active: row.black.frameStep === latestMoveStep }">
+              {{ row.black.label }}
+            </span>
+          </div>
+        </div>
+
+        <div v-if="pendingPromotion" class="chess-promotion chess-promotion--rail">
           <span class="muted">Choose promotion</span>
-          <div class="action-row">
+          <div class="chess-promotion-grid">
             <button class="secondary" @click="submitPromotion('queen')">Queen</button>
             <button class="secondary" @click="submitPromotion('rook')">Rook</button>
             <button class="secondary" @click="submitPromotion('bishop')">Bishop</button>
             <button class="secondary" @click="submitPromotion('knight')">Knight</button>
           </div>
         </div>
-      </section>
 
-      <section class="panel chess-capture-panel">
-        <div class="board-rack-head">
-          <h3>Captured Pieces</h3>
-          <span class="phase-pill">{{ gameView.lastMove?.label || "Opening" }}</span>
-        </div>
-        <div v-for="player in sideSummary" :key="`${player.profileId}-captures`" class="chess-capture-group">
-          <strong>{{ player.name }}</strong>
-          <div class="chess-capture-list">
-            <span v-for="(piece, index) in player.captured" :key="`${player.profileId}-${piece}-${index}`" class="chess-piece chess-piece--capture">
-              {{ PIECE_GLYPHS[piece] }}
-            </span>
-            <span v-if="!player.captured.length" class="muted">None</span>
+        <div class="chess-captures-block">
+          <div class="board-rack-head">
+            <h3>Captured</h3>
+            <span class="muted">{{ gameView.lastMove?.label || "Opening" }}</span>
+          </div>
+          <div v-for="player in sideSummary" :key="`${player.profileId}-captures`" class="chess-capture-group">
+            <strong>{{ player.name }}</strong>
+            <div class="chess-capture-list">
+              <span
+                v-for="(piece, index) in player.captured"
+                :key="`${player.profileId}-${piece}-${index}`"
+                class="chess-piece chess-piece--capture"
+                v-html="pieceSvgMarkup(piece)"
+              />
+              <span v-if="!player.captured.length" class="muted">None</span>
+            </div>
           </div>
         </div>
       </section>
