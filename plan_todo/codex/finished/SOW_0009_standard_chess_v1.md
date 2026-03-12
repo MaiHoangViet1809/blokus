@@ -370,3 +370,48 @@ left rail
 - **Cautions / Risks**:
   - stats must be derived from persisted finished chess matches only
   - empty histories must render cleanly as `0-0-0`
+
+## Extension: Prevent Overflow in Chess Left-Rail Player Cards
+
+- **Status**: APPROVED
+- **Approved-By**: Viet
+- **Approved-On**: 2026-03-12
+- **Task**: Fix the new chess left-rail player cards so their content always fits inside the card container without overflowing.
+- **Location**:
+  - `/Users/maihoangviet/Projects/blokus/src/style.css`
+  - `/Users/maihoangviet/Projects/blokus/src/games/chess/LiveView.vue`
+  - `/Users/maihoangviet/Projects/blokus/plan_todo/codex/finished/SOW_0009_standard_chess_v1.md`
+- **Why**: The player-centric record cards added more content, but the left rail still used rigid row-height assumptions and a two-column record grid that could overflow narrower card widths.
+- **As-Is Diagram (ASCII)**:
+```text
+left rail
+  -> two player cards
+  -> top card has more content
+  -> rail still uses fixed row height assumptions
+  -> content can overflow card bounds
+```
+- **To-Be Diagram (ASCII)**:
+```text
+left rail
+  -> two player cards
+  -> top card still larger
+  -> card height adapts safely to content
+  -> record blocks reflow cleanly
+  -> content stays inside container
+```
+- **Deliverables**:
+  - remove rigid fixed-height assumptions from the left-rail card grid
+  - keep the top card visually larger than the bottom card
+  - let record blocks reflow safely within the card width
+- **Done Criteria**:
+  - no left-rail card content overflows its container
+  - top card remains more prominent than the bottom card
+  - `npm run build` passes
+- **Out-of-Scope**:
+  - changing chess stats content
+  - changing board or right-rail layout
+  - new API or server behavior
+- **Proposed-By**: Codex GPT-5
+- **plan**: chess-v1-standard-hvh
+- **Cautions / Risks**:
+  - the fix should preserve the “top card bigger” hierarchy without brittle fixed row sizing

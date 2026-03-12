@@ -1126,8 +1126,9 @@ p {
 .chess-side-identity {
   display: grid;
   gap: 10px;
-  height: 100%;
-  grid-template-rows: minmax(220px, 1.15fr) minmax(156px, 0.85fr);
+  min-height: 0;
+  align-content: start;
+  grid-template-rows: auto auto;
 }
 
 .chess-side-card {
@@ -1139,6 +1140,7 @@ p {
   background:
     linear-gradient(135deg, color-mix(in srgb, var(--player-color) 12%, rgba(8, 13, 20, 0.92)) 0%, rgba(8, 13, 20, 0.94) 100%);
   align-content: start;
+  min-width: 0;
 }
 
 .chess-side-card--active {
@@ -1160,6 +1162,7 @@ p {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
+  min-width: 0;
 }
 
 .chess-capture-group {
@@ -1179,6 +1182,10 @@ p {
   align-items: stretch;
 }
 
+.chess-side-card--primary .chess-side-card__meta--detailed {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .chess-record-block {
   display: grid;
   gap: 4px;
@@ -1186,6 +1193,7 @@ p {
   border-radius: 14px;
   border: 1px solid rgba(132, 154, 190, 0.16);
   background: rgba(7, 14, 24, 0.62);
+  min-width: 0;
 }
 
 .chess-record-block strong {
