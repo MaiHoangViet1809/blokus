@@ -713,6 +713,14 @@ function getMovesForMatch(matchId) {
   }));
 }
 
+function latestPlacedMove(matchId) {
+  const moves = getMovesForMatch(matchId);
+  for (let index = moves.length - 1; index >= 0; index -= 1) {
+    if (moves[index].eventType === "piece_placed") return moves[index];
+  }
+  return null;
+}
+
 function getOrderedMatchPlayers(matchId) {
   return db.prepare(`
     select match_players.*, profiles.name
@@ -1250,6 +1258,8 @@ function buildGameView(roomCode, viewerProfileId = null) {
   const players = getOrderedMatchPlayers(match.id);
   const context = room.game_type === "chess"
     ? { playerRecords: chessPlayerRecords(players) }
+    : room.game_type === "blokus"
+      ? { lastPlacedMove: latestPlacedMove(match.id) }
     : {};
   return driver.projectMatch(room, match, players, viewerProfileId, context);
 }

@@ -2098,3 +2098,56 @@ UI
 ### Cautions / Risks
 - route behavior must remain generic across all games
 - current redirect to `/rooms/:roomCode` on `PREPARE` must not regress
+
+## Extension: Highlight the Most Recently Placed Blokus Piece
+- **Status**: APPROVED
+- **Approved-By**: Viet
+- **Approved-On**: 2026-03-12
+- **Task**: Highlight exactly one most-recently placed Blokus piece on the live board so the next player can immediately see what was just played.
+- **Location**:
+  - `/Users/maihoangviet/Projects/blokus/src/games/blokus/server.js`
+  - `/Users/maihoangviet/Projects/blokus/src/games/blokus/GameBoard.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/platform/server/index.js`
+  - `/Users/maihoangviet/Projects/blokus/plan_todo/codex/SOW_0007_multi_board_game_platform_refactor.md`
+- **Why**: The live Blokus board currently shows only the board state and the active hover shadow. It does not distinguish the most recent placed piece, which makes it harder for the next player to see what just changed.
+- **As-Is Diagram (ASCII)**:
+```text
+live board
+  -> board state only
+  -> current hover shadow
+  -> no authoritative "last placed piece" payload
+```
+- **To-Be Diagram (ASCII)**:
+```text
+platform server
+  -> latest piece_placed event
+  -> pass lastPlacedPiece into Blokus gameView
+
+live board
+  -> render exactly one highlighted latest footprint
+  -> next placement replaces previous highlight
+```
+- **Deliverables**:
+  - extend Blokus live `gameView` with `lastPlacedPiece`
+  - derive `lastPlacedPiece` from the latest `piece_placed` event
+  - include exact placed cells for the highlighted footprint
+  - render a visible highlight overlay in `GameBoard.vue`
+  - ensure only the most recent placed piece is highlighted at any time
+- **Done Criteria**:
+  - after a player places a piece, that exact footprint is highlighted
+  - when another player places a piece, the highlight moves to the new footprint
+  - only one latest piece highlight exists at a time
+  - `node --check src/platform/server/index.js` passes
+  - `node --check src/games/blokus/server.js` passes
+  - `npm run build` passes
+- **Out-of-Scope**:
+  - replay changes
+  - move history panel
+  - animation system redesign
+  - highlighting all pieces of the last player
+- **Proposed-By**: Codex GPT-5
+- **plan**: multi-board-game-platform-refactor-v1
+- **Cautions / Risks**:
+  - highlight must stay readable on all player colors
+  - highlight should not be confused with the current hover shadow
+  - best implemented from authoritative move event data, not inferred from the current board

@@ -41,6 +41,7 @@ const boardColors = computed(() => props.match?.colors || PLAYER_COLORS);
 const startCorners = computed(() => props.match?.startCorners || buildStartCorners(boardSize.value));
 const activeColorMeta = computed(() => boardColors.value[activeRackPlayer.value?.colorIndex || 0] || boardColors.value[0] || PLAYER_COLORS[0]);
 const activePieceTransform = computed(() => resolvePieceTransform(props.selectedPieceId, props.rotation, props.flipped));
+const lastPlacedPiece = computed(() => props.match?.lastPlacedPiece || null);
 
 function clampCell(value) {
   return Math.max(0, Math.min(boardSize.value - 1, value));
@@ -81,6 +82,22 @@ function draw() {
     ctx.strokeStyle = `${colorMeta.fill}dd`;
     ctx.lineWidth = 1.5;
     ctx.strokeRect(cornerX * cellSize + 1, cornerY * cellSize + 1, cellSize - 2, cellSize - 2);
+    ctx.restore();
+  }
+  if (lastPlacedPiece.value?.cells?.length) {
+    const highlightMeta = boardColors.value[lastPlacedPiece.value.colorIndex] || activeColorMeta.value;
+    const inset = Math.max(2, cellSize * 0.08);
+    ctx.save();
+    for (const [x, y] of lastPlacedPiece.value.cells) {
+      ctx.fillStyle = `${highlightMeta.fill}33`;
+      ctx.fillRect(x * cellSize + 1, y * cellSize + 1, cellSize - 2, cellSize - 2);
+      ctx.strokeStyle = "rgba(255,255,255,0.88)";
+      ctx.lineWidth = Math.max(2, cellSize * 0.08);
+      ctx.strokeRect(x * cellSize + inset, y * cellSize + inset, cellSize - inset * 2, cellSize - inset * 2);
+      ctx.strokeStyle = highlightMeta.fill;
+      ctx.lineWidth = Math.max(1.25, cellSize * 0.045);
+      ctx.strokeRect(x * cellSize + inset * 1.9, y * cellSize + inset * 1.9, cellSize - inset * 3.8, cellSize - inset * 3.8);
+    }
     ctx.restore();
   }
   if (isMyTurn.value && hoverCell.value.x >= 0 && availablePieces.value.has(props.selectedPieceId)) {

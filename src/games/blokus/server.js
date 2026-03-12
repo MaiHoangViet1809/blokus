@@ -427,9 +427,21 @@ export function createBlokusDriver() {
         }]
       };
     },
-    projectMatch(room, match, players, viewerProfileId) {
+    projectMatch(room, match, players, viewerProfileId, context = {}) {
       const config = resolveBlokusConfig(parseJson(room.config_json, {}));
       const colors = buildPlayerColors(config.boardSize);
+      const lastPlacedMove = context.lastPlacedMove || null;
+      const lastPlacedPlayer = lastPlacedMove
+        ? players.find((player) => player.profileId === lastPlacedMove.profileId) || null
+        : null;
+      const lastPlacedCells = lastPlacedMove
+        ? buildAbsCells(
+          lastPlacedMove.payload?.pieceId,
+          lastPlacedMove.payload?.orientationIndex,
+          lastPlacedMove.payload?.x,
+          lastPlacedMove.payload?.y
+        )
+        : null;
       return {
         gameType: BLOKUS_GAME_TYPE,
         ruleset: config.ruleset,
@@ -439,6 +451,17 @@ export function createBlokusDriver() {
         board: parseBoard(match.board_json, config.boardSize),
         players: projectMatchPlayers(players, colors),
         turnIndex: match.turn_index,
+        lastPlacedPiece: lastPlacedMove && lastPlacedCells
+          ? {
+            profileId: lastPlacedMove.profileId,
+            colorIndex: lastPlacedPlayer?.colorIndex ?? null,
+            pieceId: lastPlacedMove.payload.pieceId,
+            orientationIndex: lastPlacedMove.payload.orientationIndex,
+            x: lastPlacedMove.payload.x,
+            y: lastPlacedMove.payload.y,
+            cells: lastPlacedCells
+          }
+          : null,
         viewerProfileId,
         supports: {
           flip: true,
