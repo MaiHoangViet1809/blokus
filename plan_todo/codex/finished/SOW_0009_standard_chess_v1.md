@@ -462,3 +462,44 @@ Captured
 - **Cautions / Risks**:
   - chronology must come from replay frames, not board material
   - right rail density must stay readable and not overflow
+
+## Extension: Remove the Redundant Chess Bottom Meta Strip
+
+- **Status**: APPROVED
+- **Approved-By**: Viet
+- **Approved-On**: 2026-03-12
+- **Task**: Remove the redundant bottom `player-strip` from the live chess view now that player/game state is already covered by the app bar and side rails.
+- **Location**:
+  - `/Users/maihoangviet/Projects/blokus/src/games/chess/LiveView.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/style.css`
+  - `/Users/maihoangviet/Projects/blokus/plan_todo/codex/finished/SOW_0009_standard_chess_v1.md`
+- **Why**: The chess live screen already carries player identity, side, move context, and status in the app bar plus left/right rails. The bottom strip duplicates that information and wastes vertical space.
+- **As-Is Diagram (ASCII)**:
+```text
+Chess match view
+  -> app bar / match header
+  -> left rail | board | right rail
+  -> bottom player strip with duplicated info
+```
+- **To-Be Diagram (ASCII)**:
+```text
+Chess match view
+  -> app bar / match header
+  -> left rail | board | right rail
+  -> no redundant bottom strip
+```
+- **Deliverables**:
+  - remove the chess live `player-strip`
+  - rebalance the live panel rows so the board row consumes the freed height
+- **Done Criteria**:
+  - live chess no longer renders the redundant bottom strip
+  - board/rails gain the freed vertical space
+  - `npm run build` passes
+- **Out-of-Scope**:
+  - changing Blokus bottom strip
+  - platform-wide match shell redesign
+  - server/API changes
+- **Proposed-By**: Codex GPT-5
+- **plan**: chess-v1-standard-hvh
+- **Cautions / Risks**:
+  - host/spectator context must remain sufficiently visible via the existing header and rails

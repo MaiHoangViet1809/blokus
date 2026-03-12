@@ -379,26 +379,5 @@ onBeforeUnmount(() => {
       </section>
     </div>
 
-    <div class="player-strip">
-      <div
-        v-for="player in gameView.players"
-        :key="player.profileId"
-        class="player-strip-item"
-        :class="{ active: player.profileId === currentTurnPlayer?.profileId }"
-        :style="{ '--player-color': player.colorFill }"
-      >
-        <strong>{{ player.name }}</strong>
-        <span class="muted">{{ player.sideLabel }}</span>
-        <span class="muted">{{ player.endState }}</span>
-      </div>
-      <div class="player-strip-item player-strip-item--meta">
-        <strong>Host</strong>
-        <span class="muted">{{ room.hostName }}</span>
-      </div>
-      <div class="player-strip-item player-strip-item--meta">
-        <strong>Spectators</strong>
-        <span class="muted">{{ spectatorCount }}</span>
-      </div>
-    </div>
   </article>
 </template>
