@@ -415,3 +415,50 @@ left rail
 - **plan**: chess-v1-standard-hvh
 - **Cautions / Risks**:
   - the fix should preserve the “top card bigger” hierarchy without brittle fixed row sizing
+
+## Extension: Ordered Chess Capture Columns with Per-Piece Value Badges
+
+- **Status**: APPROVED
+- **Approved-By**: Viet
+- **Approved-On**: 2026-03-12
+- **Task**: Refine the chess right rail so the `Captured` section becomes a proper 2-column capture history with per-piece value badges.
+- **Location**:
+  - `/Users/maihoangviet/Projects/blokus/src/games/chess/LiveView.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/games/chess/shared.js`
+  - `/Users/maihoangviet/Projects/blokus/src/style.css`
+  - `/Users/maihoangviet/Projects/blokus/plan_todo/codex/finished/SOW_0009_standard_chess_v1.md`
+- **Why**: The current capture display groups missing material by side, which loses chronology. The chess right rail should show what each player captured, in actual order, with per-piece value cues.
+- **As-Is Diagram (ASCII)**:
+```text
+Captured
+  -> grouped missing material snapshot
+  -> no chronology
+  -> no per-piece value cue
+```
+- **To-Be Diagram (ASCII)**:
+```text
+Captured
+  -> 2 columns
+  -> left = captured by White
+  -> right = captured by Black
+  -> top-to-bottom chronological order
+  -> each capture row shows icon + value badge
+```
+- **Deliverables**:
+  - derive ordered capture columns from loaded replay frames
+  - render two dense capture columns in the right rail
+  - add per-piece value badges (`+1`, `+3`, `+5`, `+9`)
+- **Done Criteria**:
+  - capture order matches move chronology
+  - each side has its own capture column
+  - empty states render cleanly
+  - `npm run build` passes
+- **Out-of-Scope**:
+  - aggregate capture-score summary
+  - route changes
+  - platform API changes
+- **Proposed-By**: Codex GPT-5
+- **plan**: chess-v1-standard-hvh
+- **Cautions / Risks**:
+  - chronology must come from replay frames, not board material
+  - right rail density must stay readable and not overflow

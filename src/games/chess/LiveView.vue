@@ -1,6 +1,6 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { buildMoveRowsFromFrames, FILE_LABELS, pieceSvgAsset, RANK_LABELS } from "./shared.js";
+import { buildCaptureColumnsFromFrames, buildMoveRowsFromFrames, FILE_LABELS, pieceSvgAsset, RANK_LABELS } from "./shared.js";
 
 const props = defineProps({
   room: { type: Object, required: true },
@@ -53,13 +53,9 @@ const statusText = computed(() => {
   if (props.room.phase === "SUSPENDED") return "Match suspended";
   return `${currentTurnPlayer.value?.name || "Waiting"} to move`;
 });
-const sideSummary = computed(() =>
-  props.gameView.players.map((player) => ({
-    ...player,
-    captured: props.gameView.capturedPieces?.[player.colorIndex === 0 ? "black" : "white"] || []
-  }))
-);
+const sideSummary = computed(() => props.gameView.players.map((player) => ({ ...player })));
 const moveRows = computed(() => buildMoveRowsFromFrames(replayFrames.value));
+const captureColumns = computed(() => buildCaptureColumnsFromFrames(replayFrames.value));
 const latestMoveStep = computed(() => replayFrames.value.at(-1)?.step || null);
 const currentSideCard = computed(() => sideSummary.value.find((player) => player.profileId === currentTurnPlayer.value?.profileId) || null);
 const orderedSideSummary = computed(() => {
@@ -354,16 +350,29 @@ onBeforeUnmount(() => {
             <h3>Captured</h3>
             <span class="muted">{{ gameView.lastMove?.label || "Opening" }}</span>
           </div>
-          <div v-for="player in sideSummary" :key="`${player.profileId}-captures`" class="chess-capture-group">
-            <strong>{{ player.name }}</strong>
-            <div class="chess-capture-list">
-              <span
-                v-for="(piece, index) in player.captured"
-                :key="`${player.profileId}-${piece}-${index}`"
-                class="chess-piece chess-piece--capture">
-                <img class="chess-piece__img" :src="pieceSvgAsset(piece)" alt="" decoding="async">
-              </span>
-              <span v-if="!player.captured.length" class="muted">None</span>
+          <div class="chess-capture-columns">
+            <div
+              v-for="player in sideSummary"
+              :key="`${player.profileId}-captures`"
+              class="chess-capture-column"
+            >
+              <div class="chess-capture-column__head">
+                <strong>{{ player.name }}</strong>
+                <span class="muted">{{ player.sideLabel }}</span>
+              </div>
+              <div v-if="captureColumns[player.colorIndex === 0 ? 'white' : 'black'].length" class="chess-capture-stack">
+                <div
+                  v-for="entry in captureColumns[player.colorIndex === 0 ? 'white' : 'black']"
+                  :key="`${player.profileId}-${entry.step}-${entry.piece}`"
+                  class="chess-capture-entry"
+                >
+                  <span class="chess-piece chess-piece--capture">
+                    <img class="chess-piece__img" :src="pieceSvgAsset(entry.piece)" alt="" decoding="async">
+                  </span>
+                  <span v-if="entry.value" class="chess-capture-value">+{{ entry.value }}</span>
+                </div>
+              </div>
+              <span v-else class="muted chess-capture-empty">No captures</span>
             </div>
           </div>
         </div>

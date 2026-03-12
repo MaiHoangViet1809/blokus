@@ -109,6 +109,10 @@ export function pieceSvgAsset(piece) {
   return piece ? (PIECE_SVG_ASSETS[piece] || "") : "";
 }
 
+export function pieceValue(piece) {
+  return PIECE_VALUES[pieceType(piece)] || 0;
+}
+
 function pieceLetter(piece) {
   const type = piece?.[1];
   if (type === "n") return "N";
@@ -159,4 +163,33 @@ export function buildMoveRowsFromFrames(frames = []) {
     rows[rows.length - 1].black = { label: san, frameStep: frame.step };
   });
   return rows;
+}
+
+export function buildCaptureColumnsFromFrames(frames = []) {
+  const columns = {
+    white: [],
+    black: []
+  };
+  if (!Array.isArray(frames) || !frames.length) return columns;
+  for (let index = 1; index < frames.length; index += 1) {
+    const frame = frames[index];
+    if (frame?.eventType !== "move_made") continue;
+    const previousBoard = frames[index - 1]?.board;
+    const payload = frame.payload || {};
+    if (!payload.capture || !previousBoard) continue;
+    const movingPiece = previousBoard?.[payload.from?.y]?.[payload.from?.x] || null;
+    if (!movingPiece) continue;
+    let capturedPiece = previousBoard?.[payload.to?.y]?.[payload.to?.x] || null;
+    if (!capturedPiece && pieceType(movingPiece) === "p" && payload.from?.x !== payload.to?.x) {
+      capturedPiece = `${pieceColor(movingPiece) === "w" ? "b" : "w"}p`;
+    }
+    if (!capturedPiece) continue;
+    const capturer = pieceColor(movingPiece) === "w" ? "white" : "black";
+    columns[capturer].push({
+      piece: capturedPiece,
+      value: pieceValue(capturedPiece),
+      step: frame.step
+    });
+  }
+  return columns;
 }
