@@ -737,6 +737,80 @@ function moveCount(matchId) {
   return db.prepare("select count(*) as count from moves where match_id = ?").get(matchId).count;
 }
 
+function emptyRecordSummary() {
+  return {
+    wins: 0,
+    draws: 0,
+    losses: 0,
+    winRate: 0
+  };
+}
+
+function withWinRate(record) {
+  const total = record.wins + record.draws + record.losses;
+  return {
+    ...record,
+    winRate: total ? Math.round((record.wins / total) * 100) : 0
+  };
+}
+
+function finishedChessRecord(profileId, opponentProfileId = null) {
+  const rows = db.prepare(`
+    select distinct matches.id, matches.winner_profile_id
+    from matches
+    join rooms on rooms.id = matches.room_id
+    where matches.status = 'finished'
+      and rooms.game_type = 'chess'
+      and exists (
+        select 1
+        from match_players mp_self
+        where mp_self.match_id = matches.id and mp_self.profile_id = ?
+      )
+      and (? is null or exists (
+        select 1
+        from match_players mp_opp
+        where mp_opp.match_id = matches.id and mp_opp.profile_id = ?
+      ))
+  `).all(profileId, opponentProfileId, opponentProfileId);
+  const matches = new Map();
+  for (const row of rows) {
+    if (!matches.has(row.id)) {
+      matches.set(row.id, {
+        winnerProfileId: row.winner_profile_id
+      });
+    }
+  }
+  const summary = emptyRecordSummary();
+  for (const match of matches.values()) {
+    if (!match.winnerProfileId) {
+      summary.draws += 1;
+    } else if (match.winnerProfileId === profileId) {
+      summary.wins += 1;
+    } else {
+      summary.losses += 1;
+    }
+  }
+  return withWinRate(summary);
+}
+
+function chessPlayerRecords(players) {
+  const ordered = [...players].sort((left, right) => left.seat_index - right.seat_index);
+  if (!ordered.length) return new Map();
+  const [firstPlayer, secondPlayer] = ordered;
+  const records = new Map();
+  for (const player of ordered) {
+    const opponent = ordered.find((entry) => entry.profile_id !== player.profile_id) || null;
+    records.set(player.profile_id, {
+      overallRecord: finishedChessRecord(player.profile_id),
+      headToHeadRecord: finishedChessRecord(player.profile_id, opponent?.profile_id || null)
+    });
+  }
+  if (firstPlayer && secondPlayer) {
+    return records;
+  }
+  return records;
+}
+
 function ttlDeadline(timestamp, ttlMs) {
   if (!timestamp) return null;
   return new Date(Date.parse(timestamp) + ttlMs).toISOString();
@@ -1174,7 +1248,10 @@ function buildGameView(roomCode, viewerProfileId = null) {
   const match = getLatestMatch(room.id);
   if (!match) return null;
   const players = getOrderedMatchPlayers(match.id);
-  return driver.projectMatch(room, match, players, viewerProfileId);
+  const context = room.game_type === "chess"
+    ? { playerRecords: chessPlayerRecords(players) }
+    : {};
+  return driver.projectMatch(room, match, players, viewerProfileId, context);
 }
 
 function buildMatchLivePayload(matchId, viewerProfileId = null) {

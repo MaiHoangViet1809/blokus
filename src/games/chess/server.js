@@ -97,9 +97,10 @@ function normalizeSetupMember(member) {
   };
 }
 
-function projectMatchPlayers(players) {
+function projectMatchPlayers(players, playerRecords = new Map()) {
   return players.map((player) => {
     const meta = sideMeta(player.color_index);
+    const record = playerRecords.get(player.profile_id) || {};
     return {
       profileId: player.profile_id,
       name: player.name,
@@ -111,7 +112,9 @@ function projectMatchPlayers(players) {
       seatIndex: player.seat_index,
       disconnected: !!player.disconnected,
       endState: player.end_state,
-      score: player.score
+      score: player.score,
+      overallRecord: record.overallRecord || { wins: 0, draws: 0, losses: 0, winRate: 0 },
+      headToHeadRecord: record.headToHeadRecord || { wins: 0, draws: 0, losses: 0, winRate: 0 }
     };
   });
 }
@@ -768,7 +771,7 @@ export function createChessDriver() {
         }]
       };
     },
-    projectMatch(_room, match, players, viewerProfileId) {
+    projectMatch(_room, match, players, viewerProfileId, context = {}) {
       const state = parseState(match.board_json);
       const currentPlayer = players[match.turn_index];
       const currentColor = colorFromIndex(currentPlayer?.color_index ?? 0);
@@ -776,6 +779,7 @@ export function createChessDriver() {
       const legalMap = viewer && viewer.profile_id === currentPlayer?.profile_id
         ? legalMovesByColor(state, currentColor)
         : {};
+      const playerRecords = context.playerRecords || new Map();
       return {
         gameType: CHESS_GAME_TYPE,
         ruleset: "standard_2p",
@@ -783,7 +787,7 @@ export function createChessDriver() {
         mode: "match",
         boardSize: 8,
         board: state.board,
-        players: projectMatchPlayers(players),
+        players: projectMatchPlayers(players, playerRecords),
         turnIndex: match.turn_index,
         viewerProfileId,
         activeColorIndex: currentPlayer?.color_index ?? 0,

@@ -321,3 +321,52 @@ Live / Replay chess
 - **Cautions / Risks**:
   - asset license must stay explicit and safe
   - board fit must be container-driven, not another viewport constant
+
+## Extension: Chess Side Cards with Player-Centric Records
+
+- **Status**: APPROVED
+- **Approved-By**: Viet
+- **Approved-On**: 2026-03-12
+- **Task**: Refine the chess live view so the left rail becomes a true player-comparison rail with viewer-centric ordering and chess-only W-D-L records.
+- **Location**:
+  - `/Users/maihoangviet/Projects/blokus/src/platform/server/index.js`
+  - `/Users/maihoangviet/Projects/blokus/src/games/chess/server.js`
+  - `/Users/maihoangviet/Projects/blokus/src/games/chess/LiveView.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/style.css`
+  - `/Users/maihoangviet/Projects/blokus/plan_todo/codex/finished/SOW_0009_standard_chess_v1.md`
+- **Why**: The left rail still mixes small side cards with a separate move/status block. The chess view should instead show two player-centric cards with persistent overall and head-to-head chess records.
+- **As-Is Diagram (ASCII)**:
+```text
+left rail
+  -> two small side cards
+  -> separate status block for last move / whose turn
+  -> no chess-only player record
+```
+- **To-Be Diagram (ASCII)**:
+```text
+left rail
+  -> exactly two player cards
+  -> top card = viewer side, or side to move for spectators
+  -> top card larger and more detailed
+  -> each card shows chess-only overall and head-to-head W-D-L + win rate
+```
+- **Deliverables**:
+  - extend chess live player projection with overall and head-to-head chess records
+  - remove the separate left-side status block
+  - render two player-centric cards only, with viewer/turn-based ordering
+  - make the top card taller and more detailed than the lower card
+- **Done Criteria**:
+  - viewer sees their own side card on top; spectators see side-to-move on top
+  - records are chess-only and draw-aware
+  - left rail no longer duplicates move context already shown on the right
+  - `node --check server.js` passes
+  - `npm run build` passes
+- **Out-of-Scope**:
+  - new stats routes
+  - cross-game records
+  - replay redesign
+- **Proposed-By**: Codex GPT-5
+- **plan**: chess-v1-standard-hvh
+- **Cautions / Risks**:
+  - stats must be derived from persisted finished chess matches only
+  - empty histories must render cleanly as `0-0-0`

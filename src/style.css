@@ -1123,32 +1123,35 @@ p {
   overflow: hidden;
 }
 
-.chess-status-copy {
-  display: grid;
-  gap: 8px;
-  padding: 14px;
-  border: 1px solid rgba(117, 142, 182, 0.2);
-  border-radius: 18px;
-  background: rgba(11, 19, 31, 0.7);
-}
-
 .chess-side-identity {
   display: grid;
   gap: 10px;
+  height: 100%;
+  grid-template-rows: minmax(220px, 1.15fr) minmax(156px, 0.85fr);
 }
 
 .chess-side-card {
   display: grid;
-  gap: 8px;
+  gap: 12px;
   padding: 14px;
   border-radius: 18px;
   border: 1px solid color-mix(in srgb, var(--player-color) 58%, rgba(255, 255, 255, 0.08));
   background:
     linear-gradient(135deg, color-mix(in srgb, var(--player-color) 12%, rgba(8, 13, 20, 0.92)) 0%, rgba(8, 13, 20, 0.94) 100%);
+  align-content: start;
 }
 
 .chess-side-card--active {
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--player-color) 72%, white 18%), 0 10px 24px rgba(0, 0, 0, 0.28);
+}
+
+.chess-side-card--primary {
+  padding: 18px;
+}
+
+.chess-side-card--viewer {
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--player-color) 18%, rgba(9, 14, 22, 0.96)) 0%, rgba(8, 13, 20, 0.96) 100%);
 }
 
 .chess-side-card__head,
@@ -1162,6 +1165,32 @@ p {
 .chess-capture-group {
   display: grid;
   gap: 8px;
+}
+
+.chess-side-card__role {
+  font-size: 0.9rem;
+  letter-spacing: 0.03em;
+}
+
+.chess-side-card__meta--detailed {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  align-items: stretch;
+}
+
+.chess-record-block {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(132, 154, 190, 0.16);
+  background: rgba(7, 14, 24, 0.62);
+}
+
+.chess-record-block strong {
+  font-size: 1.1rem;
+  letter-spacing: 0.02em;
 }
 
 .chess-captures-block {

@@ -62,6 +62,22 @@ const sideSummary = computed(() =>
 const moveRows = computed(() => buildMoveRowsFromFrames(replayFrames.value));
 const latestMoveStep = computed(() => replayFrames.value.at(-1)?.step || null);
 const currentSideCard = computed(() => sideSummary.value.find((player) => player.profileId === currentTurnPlayer.value?.profileId) || null);
+const orderedSideSummary = computed(() => {
+  if (!sideSummary.value.length) return [];
+  const viewerProfileId = activeViewer.value?.profileId || null;
+  const topProfileId = viewerProfileId || currentTurnPlayer.value?.profileId || sideSummary.value[0]?.profileId || null;
+  const sorted = [...sideSummary.value].sort((left, right) => {
+    if (left.profileId === topProfileId) return -1;
+    if (right.profileId === topProfileId) return 1;
+    return left.seatIndex - right.seatIndex;
+  });
+  return sorted.map((player, index) => ({
+    ...player,
+    isPrimaryCard: index === 0,
+    isViewerCard: player.profileId === viewerProfileId,
+    statusLabel: playerStatusLabel(player)
+  }));
+});
 const boardFrameStyle = computed(() => boardSide.value ? { width: `${boardSide.value}px` } : {});
 const boardStyle = computed(() => boardSide.value ? { width: `${boardSide.value}px`, height: `${boardSide.value}px` } : {});
 const boardFilesStyle = computed(() => boardSide.value ? { width: `${boardSide.value}px` } : {});
@@ -83,6 +99,30 @@ function ownerAt(x, y) {
 
 function labelForSquare(x, y) {
   return `${FILE_LABELS[x]}${RANK_LABELS[y]}`;
+}
+
+function formatRecord(record) {
+  return `${record?.wins || 0}-${record?.draws || 0}-${record?.losses || 0}`;
+}
+
+function formatRate(value) {
+  return `${Number.isFinite(value) ? value : 0}%`;
+}
+
+function playerStatusLabel(player) {
+  if (props.room.phase === "FINISHED") {
+    if (props.match.winnerProfileId) {
+      if (props.match.winnerProfileId === player.profileId) return "Won";
+      return "Lost";
+    }
+    return "Draw";
+  }
+  if (player.disconnected) return "Offline";
+  if (props.gameView.checkState && props.gameView.checkState === (player.colorIndex === 0 ? "w" : "b")) {
+    return player.profileId === currentTurnPlayer.value?.profileId ? "In check" : "Pressing";
+  }
+  if (player.profileId === currentTurnPlayer.value?.profileId) return "To move";
+  return "Waiting";
 }
 
 async function loadMoveHistory() {
@@ -207,31 +247,36 @@ onBeforeUnmount(() => {
       <section class="panel chess-status-panel">
         <div class="chess-side-identity">
           <div
-            v-for="player in sideSummary"
+            v-for="player in orderedSideSummary"
             :key="player.profileId"
             class="chess-side-card"
-            :class="{ 'chess-side-card--active': player.profileId === currentTurnPlayer?.profileId }"
+            :class="{
+              'chess-side-card--active': player.profileId === currentTurnPlayer?.profileId,
+              'chess-side-card--primary': player.isPrimaryCard,
+              'chess-side-card--viewer': player.isViewerCard
+            }"
             :style="{ '--player-color': player.colorFill, '--player-text': player.textFill || '#fff' }"
           >
             <div class="chess-side-card__head">
-              <strong>{{ player.name }}</strong>
-              <span class="phase-pill">{{ player.sideLabel }}</span>
+              <div class="stack stack-tight">
+                <strong>{{ player.name }}</strong>
+                <span class="muted chess-side-card__role">{{ player.sideLabel }}</span>
+              </div>
+              <span class="phase-pill">{{ player.statusLabel }}</span>
             </div>
-            <div class="chess-side-card__meta">
-              <span>{{ player.endState }}</span>
-              <span>{{ player.score }}</span>
+            <div class="chess-side-card__meta chess-side-card__meta--detailed">
+              <div class="chess-record-block">
+                <span class="muted">Overall chess</span>
+                <strong>{{ formatRecord(player.overallRecord) }}</strong>
+                <span class="muted">{{ formatRate(player.overallRecord?.winRate) }} win rate</span>
+              </div>
+              <div class="chess-record-block">
+                <span class="muted">Vs current opponent</span>
+                <strong>{{ formatRecord(player.headToHeadRecord) }}</strong>
+                <span class="muted">{{ formatRate(player.headToHeadRecord?.winRate) }} win rate</span>
+              </div>
             </div>
           </div>
-        </div>
-
-        <div class="chess-status-copy">
-          <p class="chess-turn-line">
-            <strong>{{ currentSideCard?.name || currentTurnPlayer?.name || "Waiting" }}</strong>
-            <span>{{ currentTurnPlayer?.sideLabel || "" }} to move</span>
-          </p>
-          <p class="muted">Last move: {{ gameView.lastMove?.label || "Opening" }}</p>
-          <p class="muted" v-if="gameView.checkState">Check on {{ gameView.checkState === 'w' ? 'White' : 'Black' }}</p>
-          <p class="muted">Spectators: {{ spectatorCount }}</p>
         </div>
       </section>
 
