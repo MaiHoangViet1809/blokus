@@ -31,6 +31,10 @@ export const useAppStore = defineStore("app", {
     match: null,
     gameView: null,
     replay: null,
+    roomChatMessages: [],
+    roomChatOpen: false,
+    roomChatUnreadCount: 0,
+    roomChatRoomCode: "",
     socket: null,
     connected: false,
     loading: false,
@@ -123,6 +127,23 @@ export const useAppStore = defineStore("app", {
       this.room = data.room || null;
       this.match = data.match || null;
       this.gameView = data.gameView || null;
+      this.bindRoomChat(data.room?.code || "");
+    },
+    bindRoomChat(roomCode) {
+      const normalized = String(roomCode || "").trim().toUpperCase();
+      if (normalized === this.roomChatRoomCode) return normalized;
+      this.roomChatRoomCode = normalized;
+      this.roomChatMessages = [];
+      this.roomChatUnreadCount = 0;
+      this.roomChatOpen = false;
+      return normalized;
+    },
+    openRoomChat() {
+      this.roomChatOpen = true;
+      this.roomChatUnreadCount = 0;
+    },
+    closeRoomChat() {
+      this.roomChatOpen = false;
     },
     async bootstrap() {
       this.loading = true;
@@ -179,6 +200,21 @@ export const useAppStore = defineStore("app", {
           if (payload?.match?.status === "finished") {
             this.fetchLeaderboard().catch(() => {});
             this.fetchRecentMatches().catch(() => {});
+          }
+        });
+        this.socket.on("state:room-chat:init", (payload) => {
+          const roomCode = String(payload?.roomCode || "").trim().toUpperCase();
+          if (!roomCode) return;
+          this.roomChatRoomCode = roomCode;
+          this.roomChatMessages = payload.messages || [];
+          this.roomChatUnreadCount = 0;
+        });
+        this.socket.on("state:room-chat:message", (payload) => {
+          const roomCode = String(payload?.roomCode || "").trim().toUpperCase();
+          if (!roomCode || roomCode !== this.roomChatRoomCode || !payload?.message) return;
+          this.roomChatMessages = [...this.roomChatMessages, payload.message];
+          if (!this.roomChatOpen && payload.message.profileId !== this.session?.profileId) {
+            this.roomChatUnreadCount += 1;
           }
         });
         this.socket.on("error", (payload) => {
@@ -246,6 +282,7 @@ export const useAppStore = defineStore("app", {
       this.match = data.match;
       this.gameView = data.gameView || null;
       this.replay = null;
+      this.bindRoomChat(data.room?.code || "");
       if (data.room?.gameType) {
         this.setActiveGameType(data.room.gameType);
       }
@@ -256,6 +293,7 @@ export const useAppStore = defineStore("app", {
       this.room = data.room || null;
       this.match = data.match || null;
       this.gameView = data.gameView || null;
+      this.bindRoomChat(data.room?.code || "");
       if (data.room?.gameType) {
         this.setActiveGameType(data.room.gameType);
       }
@@ -306,6 +344,9 @@ export const useAppStore = defineStore("app", {
           if (response.rooms) this.rooms = response.rooms;
           if (response.leaderboard) this.leaderboard = response.leaderboard;
           if (response.recentMatches) this.recentMatches = response.recentMatches;
+          if (response.room !== undefined) {
+            this.bindRoomChat(response.room?.code || "");
+          }
           resolve(response);
         });
       });
@@ -327,6 +368,7 @@ export const useAppStore = defineStore("app", {
       this.match = null;
       this.gameView = null;
       this.replay = null;
+      this.bindRoomChat("");
       return response;
     },
     async setReady(ready) {
@@ -351,6 +393,12 @@ export const useAppStore = defineStore("app", {
       return this.emit("match:governance", {
         roomCode: this.room?.code,
         actionType
+      });
+    },
+    async sendRoomChat(message) {
+      return this.emit("room:chat:send", {
+        roomCode: this.roomChatRoomCode || this.room?.code,
+        message
       });
     }
   }

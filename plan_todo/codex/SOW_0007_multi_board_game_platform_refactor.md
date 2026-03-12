@@ -1958,3 +1958,79 @@ Codebase
 ### Cautions / Risks
 - the setup patch contract should stay small and concrete
 - current Blokus color selection behavior must remain intact while patch routing moves behind the driver
+
+## Extension: Room Chat with Messenger-Style Floating Panel
+- **Status**: APPROVED
+- **Approved-By**: Viet
+- **Approved-On**: 2026-03-12
+- **Task**: Add a room-wide realtime chat system shared by staging and live match routes, with a Messenger-style floating chat button and panel, unread badge, left/right message alignment, and sender avatar/name metadata.
+- **Location**:
+  - `/Users/maihoangviet/Projects/blokus/src/platform/server/index.js`
+  - `/Users/maihoangviet/Projects/blokus/src/platform/client/store.js`
+  - `/Users/maihoangviet/Projects/blokus/src/platform/client/views/RoomView.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/platform/client/views/MatchView.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/platform/client/components/RoomChatFab.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/platform/client/components/RoomChatPanel.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/style.css`
+  - `/Users/maihoangviet/Projects/blokus/plan_todo/codex/SOW_0007_multi_board_game_platform_refactor.md`
+
+### As-Is Diagram (ASCII)
+```text
+Room / Match routes
+  -> presence
+  -> staging
+  -> gameplay
+  -> no room communication channel
+```
+
+### To-Be Diagram (ASCII)
+```text
+Room / Match routes
+  -> shared room chat available everywhere
+
+UI
+  -> floating chat button like Messenger
+  -> unread red badge count
+  -> click opens chat panel
+  -> my messages right
+  -> other messages left
+  -> each message shows profile name + avatar/icon
+```
+
+### Deliverables
+- add durable room chat storage with a `room_messages` table
+- add realtime room chat transport:
+  - `room:chat:send`
+  - `state:room-chat:init`
+  - `state:room-chat:message`
+- extend the platform store with room chat state and unread tracking
+- add reusable floating chat UI for both staging and match routes
+- keep chat room-scoped, including spectators
+
+### Done Criteria
+- users in the same room can send and receive chat in realtime
+- chat is available from both `/rooms/:roomCode` and `/matches/:matchId`
+- floating chat button appears with unread badge
+- my messages render on the right and others on the left
+- message rows show sender name and initial avatar badge
+- refresh in the same room restores recent message history
+- `node --check server.js` passes
+- `npm run build` passes
+
+### Out-of-Scope
+- private messages
+- file or image attachments
+- emoji picker
+- moderation tools
+- global lobby chat
+
+### Proposed-By
+- Codex GPT-5
+
+### plan
+- multi-board-game-platform-refactor-v1
+
+### Cautions / Risks
+- chat must stay room-scoped, not match-scoped
+- unread count stays client-local in this version
+- message history must stay bounded to avoid heavy payloads

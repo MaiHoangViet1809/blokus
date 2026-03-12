@@ -133,6 +133,15 @@ db.exec(`
     reclaimed_at text,
     released_at text
   );
+
+  create table if not exists room_messages (
+    id text primary key,
+    room_id text not null,
+    profile_id text not null,
+    profile_name text not null,
+    message text not null,
+    created_at text not null
+  );
 `);
 
 function columnExists(tableName, columnName) {
@@ -227,6 +236,8 @@ const EMPTY_ROOM_TTL_MS = 5 * 60_000;
 const FINISHED_ROOM_TTL_MS = 15 * 60_000;
 const BROWSER_COOKIE_NAME = "blokus_browser_token";
 const BROWSER_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
+const ROOM_CHAT_HISTORY_LIMIT = 300;
+const ROOM_CHAT_MESSAGE_MAX_LENGTH = 1000;
 db.prepare("update rooms set phase = ? where phase = 'LOBBY'").run(ROOM_PHASES.PREPARE);
 
 function nowIso() {
@@ -547,6 +558,60 @@ function getLatestMatch(roomId) {
     order by created_at desc
     limit 1
   `).get(roomId) || null;
+}
+
+function getRoomMessages(roomId, limit = ROOM_CHAT_HISTORY_LIMIT) {
+  return db.prepare(`
+    select *
+    from room_messages
+    where room_id = ?
+    order by created_at desc
+    limit ?
+  `).all(roomId, limit).reverse().map((row) => ({
+    id: row.id,
+    profileId: row.profile_id,
+    profileName: row.profile_name,
+    message: row.message,
+    createdAt: row.created_at
+  }));
+}
+
+function insertRoomMessage(room, session, rawMessage) {
+  const trimmedMessage = String(rawMessage || "").trim();
+  if (!trimmedMessage) {
+    throw new Error("Message cannot be empty.");
+  }
+  if (trimmedMessage.length > ROOM_CHAT_MESSAGE_MAX_LENGTH) {
+    throw new Error(`Message cannot exceed ${ROOM_CHAT_MESSAGE_MAX_LENGTH} characters.`);
+  }
+  const membership = db.prepare(`
+    select id
+    from room_members
+    where room_id = ? and profile_id = ?
+  `).get(room.id, session.profile_id);
+  if (!membership) {
+    throw new Error("You must be in the room to send chat.");
+  }
+  const chatMessage = {
+    id: makeId("room_message"),
+    roomCode: room.code,
+    profileId: session.profile_id,
+    profileName: session.profile_name,
+    message: trimmedMessage,
+    createdAt: nowIso()
+  };
+  db.prepare(`
+    insert into room_messages (id, room_id, profile_id, profile_name, message, created_at)
+    values (?, ?, ?, ?, ?, ?)
+  `).run(
+    chatMessage.id,
+    room.id,
+    chatMessage.profileId,
+    chatMessage.profileName,
+    chatMessage.message,
+    chatMessage.createdAt
+  );
+  return chatMessage;
 }
 
 function getActiveReconnectLease(roomId, profileId) {
@@ -1901,6 +1966,15 @@ function roomAndMatchPayload(roomCode, viewerProfileId = null) {
   };
 }
 
+function emitRoomChatInit(roomCode, socket) {
+  const room = getRoomByCode(roomCode);
+  if (!room) return;
+  socket.emit("state:room-chat:init", {
+    roomCode,
+    messages: getRoomMessages(room.id)
+  });
+}
+
 async function emitRoomState(roomCode) {
   const room = buildRoomSnapshot(roomCode);
   if (!room) return;
@@ -2105,6 +2179,7 @@ io.on("connection", (socket) => {
   if (socket.data.session?.room_code) {
     socket.join(socket.data.session.room_code);
     setMemberOnline(socket.data.session.room_code, socket.data.session.client_instance_id);
+    emitRoomChatInit(socket.data.session.room_code, socket);
     emitRoomState(socket.data.session.room_code);
   }
 
@@ -2114,6 +2189,7 @@ io.on("connection", (socket) => {
     socket.data.session = session;
     setMemberOnline(session.room_code, session.client_instance_id);
     socket.join(session.room_code);
+    emitRoomChatInit(session.room_code, socket);
     emitRoomState(session.room_code);
   });
 
@@ -2129,6 +2205,7 @@ io.on("connection", (socket) => {
         config
       );
       socket.data.session = sessionForInstance(session.client_instance_id);
+      emitRoomChatInit(room.code, socket);
       emitRoomState(room.code);
       return roomAndMatchPayload(room.code, session.profile_id);
     });
@@ -2140,6 +2217,7 @@ io.on("connection", (socket) => {
       const parsedSeatIndex = Number.isInteger(seatIndex) ? seatIndex : null;
       const room = joinRoomAs(session, String(roomCode || "").toUpperCase(), "player", socket, parsedSeatIndex);
       socket.data.session = sessionForInstance(session.client_instance_id);
+      emitRoomChatInit(room.code, socket);
       emitRoomState(room.code);
       return roomAndMatchPayload(room.code, session.profile_id);
     });
@@ -2150,6 +2228,7 @@ io.on("connection", (socket) => {
       const session = requireSession(socket);
       const room = joinRoomAs(session, String(roomCode || "").toUpperCase(), "spectator", socket);
       socket.data.session = sessionForInstance(session.client_instance_id);
+      emitRoomChatInit(room.code, socket);
       emitRoomState(room.code);
       return roomAndMatchPayload(room.code, session.profile_id);
     });
@@ -2227,6 +2306,21 @@ io.on("connection", (socket) => {
       const match = handleMatchGovernance(roomCode, session.profile_id, String(actionType || ""));
       emitRoomState(roomCode);
       return { ...roomAndMatchPayload(roomCode, session.profile_id), match };
+    });
+  });
+
+  socket.on("room:chat:send", ({ roomCode, message }, ack) => {
+    ackHandler(ack, () => {
+      const session = requireSession(socket);
+      const targetRoomCode = String(roomCode || session.room_code || "").toUpperCase();
+      const room = getRoomByCode(targetRoomCode);
+      if (!room) throw new Error("Room not found.");
+      const chatMessage = insertRoomMessage(room, session, message);
+      io.in(targetRoomCode).emit("state:room-chat:message", {
+        roomCode: targetRoomCode,
+        message: chatMessage
+      });
+      return {};
     });
   });
 

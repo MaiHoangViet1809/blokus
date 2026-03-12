@@ -1,6 +1,8 @@
 <script setup>
 import { computed, onMounted, watch } from "vue";
 import { useRouter } from "vue-router";
+import RoomChatFab from "../components/RoomChatFab.vue";
+import RoomChatPanel from "../components/RoomChatPanel.vue";
 import { getGameClient } from "../registry";
 import { useAppStore } from "../store";
 
@@ -284,4 +286,7 @@ onMounted(async () => {
   <section v-else class="panel">
     <p class="muted">Loading room…</p>
   </section>
+
+  <RoomChatFab />
+  <RoomChatPanel />
 </template>
