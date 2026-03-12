@@ -15,6 +15,7 @@ const store = useAppStore();
 
 const gameClient = computed(() => getGameClient(store.match?.gameType || store.room?.gameType || "blokus"));
 const liveComponent = computed(() => gameClient.value.liveComponent);
+const hasLivePayload = computed(() => Boolean(store.room && store.match && store.gameView));
 const interactiveProfileId = computed(() =>
   ["STARTING", "IN_GAME"].includes(store.room?.phase || "") ? (store.session?.profileId || "") : ""
 );
@@ -31,6 +32,9 @@ const hasRematchVote = computed(() => governance.value.rematchVotes.includes(sto
 const canVoteEnd = computed(() => ["STARTING", "IN_GAME", "SUSPENDED"].includes(store.room?.phase || ""));
 const canVoteRematch = computed(() => store.room?.phase === "FINISHED");
 const canSurrender = computed(() => ["STARTING", "IN_GAME", "SUSPENDED"].includes(store.room?.phase || ""));
+const canOpenRoom = computed(() => Boolean(store.room?.code));
+const canOpenReplay = computed(() => Boolean(store.match?.id));
+const currentTurnName = computed(() => store.match?.activePlayerName || "Waiting");
 const reconnectStatus = computed(() => {
   if (!store.room) return "No room";
   if (store.room.phase === "SUSPENDED") {
@@ -39,6 +43,30 @@ const reconnectStatus = computed(() => {
       : "Suspended";
   }
   return store.connected ? "Live connection healthy" : "Realtime reconnecting";
+});
+const stateTitle = computed(() => {
+  if (hasLivePayload.value) return "";
+  if (!store.room) return "Match unavailable";
+  if (store.room.phase === "PREPARE") return "Returning to room staging";
+  if (store.room.phase === "FINISHED") return "Match finished";
+  if (store.currentMember?.role === "spectator") return "Viewing as spectator";
+  if (store.room.phase === "ABANDONED") return "Match abandoned";
+  return "Match state is updating";
+});
+const stateDescription = computed(() => {
+  if (hasLivePayload.value) return "";
+  if (!store.room) return "This match could not be restored. You can return to the room or exit to the lobby.";
+  if (store.room.phase === "PREPARE") return "The room has reset to staging. You can head back to the room and start again.";
+  if (store.room.phase === "FINISHED") {
+    return canGovern.value
+      ? "The match has ended. Wait for rematch votes or return to the room staging screen."
+      : "The match has ended. You are no longer a voting player, but you can still return to the room or exit to the lobby.";
+  }
+  if (store.currentMember?.role === "spectator") {
+    return "You are currently watching this room as a spectator. Match governance controls are limited until you take a seat in staging again.";
+  }
+  if (store.room.phase === "ABANDONED") return "This match no longer has enough active players. Return to the room to reset or exit to the lobby.";
+  return "Realtime state is still syncing. Navigation remains available while the match payload catches up.";
 });
 
 async function hydrateMatch() {
@@ -70,6 +98,16 @@ async function voteRematch() {
   await store.governMatch("vote_rematch");
 }
 
+async function backToRoom() {
+  if (!store.room?.code) return;
+  await router.push(`/rooms/${store.room.code}`);
+}
+
+async function openReplay() {
+  if (!store.match?.id) return;
+  await router.push(`/matches/${store.match.id}/replay`);
+}
+
 watch(() => store.room?.phase, async (phase) => {
   if (!phase || !store.room?.code) return;
   if (phase === "PREPARE") {
@@ -83,26 +121,34 @@ onMounted(async () => {
 </script>
 
 <template>
-  <section v-if="store.room && store.match && store.gameView" class="route-shell match-view">
+  <section class="route-shell match-view">
     <header class="panel match-header">
       <div>
-        <p class="eyebrow">{{ store.room.gameType }}</p>
-        <h1>{{ store.room.title }}</h1>
-        <p class="muted">Room {{ store.room.code }} · Turn {{ store.match.activePlayerName || "Waiting" }} · Phase {{ store.room.phase }}</p>
+        <p class="eyebrow">{{ store.room?.gameType || "match" }}</p>
+        <h1>{{ store.room?.title || "Match" }}</h1>
+        <p class="muted">
+          <template v-if="store.room">
+            Room {{ store.room.code }} · Turn {{ currentTurnName }} · Phase {{ store.room.phase }}
+          </template>
+          <template v-else>
+            Match {{ props.matchId }} · Restoring route state
+          </template>
+        </p>
       </div>
       <div class="action-row">
-        <button class="secondary" @click="router.push(`/rooms/${store.room.code}`)">Room staging</button>
-        <button class="secondary" @click="router.push(`/matches/${store.match.id}/replay`)">Replay</button>
-        <button @click="leaveRoom">Leave</button>
+        <button v-if="canOpenRoom" class="secondary" @click="backToRoom">Back to room</button>
+        <button v-if="canOpenReplay" class="secondary" @click="openReplay">Replay</button>
+        <button class="danger" @click="leaveRoom">Exit to lobby</button>
       </div>
     </header>
 
-    <section class="panel governance-bar">
+    <section v-if="store.room && store.match" class="panel governance-bar">
       <div class="governance-copy">
         <strong>Match controls</strong>
         <span class="muted">{{ reconnectStatus }}</span>
         <span class="muted">End votes {{ governance.endVotes.length }}/{{ governance.endVoteEligibleCount }}</span>
         <span v-if="canVoteRematch" class="muted">Rematch votes {{ governance.rematchVotes.length }}/{{ governance.rematchVoteEligibleCount }}</span>
+        <span v-if="!canGovern" class="muted">You are currently viewing this room without governance voting rights.</span>
       </div>
       <div class="action-row">
         <button v-if="canGovern && canSurrender" class="secondary" @click="surrenderMatch">Surrender</button>
@@ -117,6 +163,7 @@ onMounted(async () => {
 
     <component
       :is="liveComponent"
+      v-if="hasLivePayload"
       :room="store.room"
       :match="store.match"
       :game-view="store.gameView"
@@ -124,10 +171,17 @@ onMounted(async () => {
       :spectator-count="spectatorCount"
       @place="placeMove"
     />
-  </section>
-
-  <section v-else class="panel">
-    <p class="muted">Loading match…</p>
+    <section v-else class="panel match-state-panel">
+      <div class="match-state-panel__copy">
+        <p class="eyebrow">Match state</p>
+        <h2>{{ stateTitle }}</h2>
+        <p class="muted">{{ stateDescription }}</p>
+      </div>
+      <div class="action-row">
+        <button v-if="canOpenRoom" class="secondary" @click="backToRoom">Back to room</button>
+        <button class="danger" @click="leaveRoom">Exit to lobby</button>
+      </div>
+    </section>
   </section>
 
   <RoomChatFab />

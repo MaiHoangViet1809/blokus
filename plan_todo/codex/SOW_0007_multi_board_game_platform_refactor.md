@@ -2034,3 +2034,67 @@ UI
 - chat must stay room-scoped, not match-scoped
 - unread count stays client-local in this version
 - message history must stay bounded to avoid heavy payloads
+
+## Extension: Resilient Match Navigation and Terminal-State UX
+- **Status**: APPROVED
+- **Approved-By**: Viet
+- **Approved-On**: 2026-03-12
+- **Task**: Make `/matches/:matchId` navigation and terminal-state UX resilient so users can always leave to main, return to room staging, and understand post-AFK or post-loss states.
+- **Location**:
+  - `/Users/maihoangviet/Projects/blokus/src/platform/client/views/MatchView.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/platform/client/store.js`
+  - `/Users/maihoangviet/Projects/blokus/src/style.css`
+  - `/Users/maihoangviet/Projects/blokus/plan_todo/codex/SOW_0007_multi_board_game_platform_refactor.md`
+
+### As-Is Diagram (ASCII)
+```text
+/matches/:matchId
+  -> if room + match + gameView exist
+     -> header actions visible
+  -> else
+     -> "Loading match…"
+     -> no room button
+     -> no exit-to-main button
+     -> no state explanation
+```
+
+### To-Be Diagram (ASCII)
+```text
+/matches/:matchId
+  -> persistent route header always visible
+     -> Back to room
+     -> Replay
+     -> Exit to lobby
+  -> content area changes by state
+     -> live match
+     -> finished / waiting rematch
+     -> spectator / abandoned notice
+     -> fallback loading with navigation still present
+```
+
+### Deliverables
+- keep match header and navigation visible even when `match` or `gameView` is temporarily unavailable
+- rename `Leave` to explicit `Exit to lobby`
+- add clear state copy for spectator, abandonment, rematch-wait, and sync-transition states
+- preserve the existing redirect back to `/rooms/:roomCode` when the room returns to `PREPARE`
+
+### Done Criteria
+- user always has a visible way to return to room or exit to main lobby
+- fallback/loading state does not strand the user
+- post-AFK/post-loss states are explained
+- `npm run build` passes
+
+### Out-of-Scope
+- governance redesign
+- server lifecycle changes
+- replay redesign
+
+### Proposed-By
+- Codex GPT-5
+
+### plan
+- multi-board-game-platform-refactor-v1
+
+### Cautions / Risks
+- route behavior must remain generic across all games
+- current redirect to `/rooms/:roomCode` on `PREPARE` must not regress

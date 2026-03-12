@@ -63,6 +63,12 @@ button.secondary {
   background: rgba(255, 255, 255, 0.04);
 }
 
+button.danger {
+  border-color: color-mix(in srgb, var(--danger) 45%, var(--line));
+  color: color-mix(in srgb, var(--danger) 70%, var(--text));
+  background: linear-gradient(135deg, rgba(255, 107, 107, 0.18), rgba(255, 107, 107, 0.05));
+}
+
 button:disabled {
   opacity: 0.45;
   transform: none;
@@ -1005,6 +1011,21 @@ p {
   align-items: center;
   gap: 12px;
   flex-wrap: wrap;
+}
+
+.match-state-panel {
+  align-content: space-between;
+  min-height: 200px;
+}
+
+.match-state-panel__copy {
+  display: grid;
+  gap: 8px;
+}
+
+.match-state-panel__copy h2 {
+  margin: 0;
+  font-size: clamp(1.25rem, 2vw, 1.65rem);
 }
 
 .spectator-strip-panel {
