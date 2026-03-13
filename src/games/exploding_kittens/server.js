@@ -964,12 +964,12 @@ function buildPlayerProjection(player, viewerProfileId, state) {
 }
 
 function buildViewerPrompt(state, viewerProfileId) {
-  const basePrompt = publicPrompt(state.prompt, viewerProfileId);
-  if (basePrompt) return basePrompt;
   const preview = zoneFor(state, viewerProfileId).sharedFuturePreview;
   if (preview?.length) {
     return promptDismiss(viewerProfileId, `Shared future: ${preview.map(cardLabel).join(" · ")}`);
   }
+  const basePrompt = publicPrompt(state.prompt, viewerProfileId);
+  if (basePrompt) return basePrompt;
   return null;
 }
 

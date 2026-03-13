@@ -552,3 +552,49 @@ Result:
 - **Cautions / Risks**:
   - this is a reaction-subsystem rewrite, not a small bugfix
   - nopeatable action paths must be retested after the refactor
+
+---
+
+## Extension: Fix `Share The Future` Projection Priority
+
+- **Status**: APPROVED
+- **Approved-By**: Viet
+- **Approved-On**: 2026-03-13
+- **Task**: Fix EK `Share The Future` projection so the target sees the local shared preview prompt instead of being blocked by the actor's info prompt.
+- **Location**:
+  - `/Users/maihoangviet/Projects/blokus/src/games/exploding_kittens/server.js`
+  - `/Users/maihoangviet/Projects/blokus/plan_todo/codex/SOW_0010_exploding_kittens_v1.md`
+- **Why**: `Share The Future` resolves, but the target currently sees a generic waiting prompt because projection checks the actor-owned server prompt before the target's local `sharedFuturePreview`.
+
+### As-Is Diagram (ASCII)
+```text
+A plays Share The Future
+  -> actor gets info prompt
+  -> target gets sharedFuturePreview
+  -> projection checks state.prompt first
+  -> target sees "Waiting on another player."
+```
+
+### To-Be Diagram (ASCII)
+```text
+A plays Share The Future
+  -> actor sees own info prompt
+  -> target sees local shared future preview
+  -> target dismisses preview cleanly
+```
+
+- **Deliverables**:
+  - adjust EK prompt projection priority so `sharedFuturePreview` wins for the target viewer
+  - keep actor info prompt behavior intact
+- **Done Criteria**:
+  - target sees `Shared future: ...`
+  - target can dismiss it without error
+  - `node --check /Users/maihoangviet/Projects/blokus/src/games/exploding_kittens/server.js` passes
+  - `npm run build` passes
+- **Out-of-Scope**:
+  - other EK rule changes
+  - broader prompt redesign
+- **Proposed-By**: Codex GPT-5
+- **plan**: exploding-kittens-v1-platform-game
+- **Cautions / Risks**:
+  - fix must stay narrow and must not leak private preview state to the wrong viewer
