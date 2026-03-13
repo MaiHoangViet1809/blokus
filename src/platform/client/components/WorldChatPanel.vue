@@ -163,21 +163,8 @@ watch(() => messages.value.length, () => {
             <strong>{{ message.profileName }}</strong>
             <span>{{ formatTimestamp(message.createdAt) }}</span>
           </div>
-          <div class="room-chat-message__bubble">{{ message.message }}</div>
-          <div v-if="message.reactions?.length" class="room-chat-message__reactions">
-            <button
-              v-for="reaction in message.reactions"
-              :key="`${message.id}-${reaction.emoji}`"
-              class="room-chat-message__reaction-chip"
-              :class="{ 'room-chat-message__reaction-chip--mine': reaction.reactedByMe }"
-              type="button"
-              @click="reactToMessage(message.id, reaction.emoji)"
-            >
-              <span>{{ reaction.emoji }}</span>
-              <span>{{ reaction.count }}</span>
-            </button>
-          </div>
-          <div class="room-chat-message__action-row">
+          <div class="room-chat-message__bubble-wrap">
+            <div class="room-chat-message__bubble">{{ message.message }}</div>
             <button
               class="secondary room-chat-message__react-toggle"
               type="button"
@@ -185,8 +172,8 @@ watch(() => messages.value.length, () => {
               @click="toggleReactionPicker(message.id)"
             >
               <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M12 21c-4.971 0-9-3.813-9-8.5S7.029 4 12 4s9 3.813 9 8.5c0 1.944-.692 3.735-1.855 5.145L20 21l-3.55-1.183A9.75 9.75 0 0 1 12 21Zm-4-9a1 1 0 1 0 0 2a1 1 0 0 0 0-2Zm8 0a1 1 0 1 0 0 2a1 1 0 0 0 0-2Zm-5.188 3.188a.75.75 0 1 0-1.06 1.06A3.2 3.2 0 0 0 12 17.2a3.2 3.2 0 0 0 2.248-.952a.75.75 0 0 0-1.06-1.06A1.7 1.7 0 0 1 12 15.7a1.7 1.7 0 0 1-1.188-.512Z" />
-                <path d="M19 2.75a.75.75 0 0 1 .75.75V5.5h2a.75.75 0 0 1 0 1.5h-2v2a.75.75 0 0 1-1.5 0V7h-2a.75.75 0 0 1 0-1.5h2v-2a.75.75 0 0 1 .75-.75Z" />
+                <path d="M12 21c-4.971 0-9-3.813-9-8.5S7.029 4 12 4s9 3.813 9 8.5c0 4.687-4.029 8.5-9 8.5Zm0-11.75a1 1 0 0 0-1 1v3.75a1 1 0 0 0 .553.894l2.5 1.25a1 1 0 1 0 .894-1.788L13 13.691V10.25a1 1 0 0 0-1-1Z" />
+                <path d="m12 8.4l-.952-.97a2.55 2.55 0 0 0-3.652 0 2.66 2.66 0 0 0 0 3.72L12 15.8l4.604-4.65a2.66 2.66 0 0 0 0-3.72 2.55 2.55 0 0 0-3.652 0L12 8.4Z" />
               </svg>
             </button>
             <div v-if="activeReactionMessageId === message.id" class="room-chat-message__reaction-picker">
@@ -198,6 +185,19 @@ watch(() => messages.value.length, () => {
                 @click="reactToMessage(message.id, emoji)"
               >
                 {{ emoji }}
+              </button>
+            </div>
+            <div v-if="message.reactions?.length" class="room-chat-message__reactions">
+              <button
+                v-for="reaction in message.reactions"
+                :key="`${message.id}-${reaction.emoji}`"
+                class="room-chat-message__reaction-chip"
+                :class="{ 'room-chat-message__reaction-chip--mine': reaction.reactedByMe }"
+                type="button"
+                @click="reactToMessage(message.id, reaction.emoji)"
+              >
+                <span>{{ reaction.emoji }}</span>
+                <span>{{ reaction.count }}</span>
               </button>
             </div>
           </div>

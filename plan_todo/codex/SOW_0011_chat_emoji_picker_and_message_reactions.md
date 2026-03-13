@@ -126,3 +126,25 @@ Init payload:
   - no visible `React` text remains in room/world chat message actions
   - the reaction picker still opens from a compact icon helper
   - `npm run build` passes
+
+## Extension: Align Chat Reaction Placement with Zalo-Style Bubble Affordances
+- **Status**: APPROVED
+- **Approved-By**: Viet
+- **Approved-On**: 2026-03-13
+- **Task**: Reposition the chat reaction helper, reaction picker, and reaction chips so they anchor around the message bubble like Zalo.
+- **Location**:
+  - `/Users/maihoangviet/Projects/blokus/src/platform/client/components/RoomChatPanel.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/platform/client/components/WorldChatPanel.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/style.css`
+  - `/Users/maihoangviet/Projects/blokus/plan_todo/codex/SOW_0011_chat_emoji_picker_and_message_reactions.md`
+- **Why**: The current helper icon and reaction row still read like separate controls below the message. The desired feel is the Zalo pattern: helper icon hugging the bubble edge, picker floating above the bubble, and reaction chips docking on the bubble corner.
+- **Deliverables**:
+  - anchor the reaction trigger to the edge of each message bubble instead of rendering it as a row below
+  - restyle the reaction picker into a rounded floating tray above the bubble
+  - dock aggregated reaction chips onto the lower bubble edge in a Zalo-like placement
+  - keep mirrored positioning for own-message vs other-message bubbles
+- **Done Criteria**:
+  - helper icon sits at the bubble edge instead of as a separate text/action row
+  - reaction tray opens above the bubble with a floating rounded appearance
+  - aggregated reaction chips appear attached to the bubble corner
+  - `npm run build` passes
