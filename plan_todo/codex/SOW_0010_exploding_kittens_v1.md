@@ -598,3 +598,61 @@ A plays Share The Future
 - **plan**: exploding-kittens-v1-platform-game
 - **Cautions / Risks**:
   - fix must stay narrow and must not leak private preview state to the wrong viewer
+
+---
+
+## Extension: Normalize EK Public Outcome Labels Across Live Timeline and Replay
+
+- **Status**: APPROVED
+- **Approved-By**: Viet
+- **Approved-On**: 2026-03-13
+- **Task**: Upgrade EK public event labeling so live timeline and replay describe the resolved public outcome of actions instead of generic `resolved` text.
+- **Location**:
+  - `/Users/maihoangviet/Projects/blokus/src/games/exploding_kittens/server.js`
+  - `/Users/maihoangviet/Projects/blokus/src/games/exploding_kittens/LiveView.vue` only if minor display formatting is needed
+  - `/Users/maihoangviet/Projects/blokus/src/games/exploding_kittens/ReplayView.vue` only if minor display formatting is needed
+  - `/Users/maihoangviet/Projects/blokus/plan_todo/codex/SOW_0010_exploding_kittens_v1.md`
+- **Why**: EK gameplay is resolving correctly in the tested paths, but replay and live timeline still flatten many actions into generic labels that hide the actual public outcome.
+
+### As-Is Diagram (ASCII)
+```text
+Action resolves correctly
+  -> event payload already contains public outcome
+  -> buildReplayLabel() ignores that detail
+  -> timeline/replay says only:
+     "resolved Favor"
+     "drew a card"
+     "resolved Potluck"
+```
+
+### To-Be Diagram (ASCII)
+```text
+Action resolves correctly
+  -> event payload contains public outcome
+  -> buildReplayLabel() uses that outcome
+  -> timeline/replay says what actually happened publicly
+```
+
+- **Deliverables**:
+  - improve `buildReplayLabel()` for at least:
+    - `draw_card` with `transferredTo`
+    - `favor_resolved`
+    - `future_altered`
+    - `potluck_resolved`
+    - `barking_resolved`
+    - `pair_stole_card`
+  - keep labels public-state-safe
+  - keep replay/timeline structures unchanged
+- **Done Criteria**:
+  - live timeline and replay no longer lose obvious public outcome semantics
+  - `npm run build` passes
+  - no hidden/private information is leaked by improved labels
+- **Out-of-Scope**:
+  - deeper EK rule changes
+  - hidden-info projection redesign
+  - replay UI redesign
+- **Proposed-By**: Codex GPT-5
+- **plan**: exploding-kittens-v1-platform-game
+- **Cautions / Risks**:
+  - labels must stay public-only
+  - better semantics must not reveal private card identities where the public should not know them

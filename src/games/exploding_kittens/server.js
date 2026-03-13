@@ -260,21 +260,32 @@ function buildReplayLabel(eventType, payload = {}) {
     case "reaction_nope":
       return `${payload.playerName || "Player"} played Nope`;
     case "draw_card":
+      if (payload.transferredTo) {
+        return `${payload.playerName || "Player"} drew a card for ${payload.transferredTo}`;
+      }
       return `${payload.playerName || "Player"} drew a card`;
     case "defuse_reinserted":
       return `${payload.playerName || "Player"} reinserted a kitten`;
     case "imploding_reinserted":
       return `${payload.playerName || "Player"} reinserted the Imploding Kitten`;
     case "favor_resolved":
-      return `${payload.playerName || "Player"} resolved Favor`;
+      return `${payload.playerName || "Player"} gave a card to ${payload.actorName || "another player"}`;
     case "future_altered":
-      return `${payload.playerName || "Player"} altered the future`;
+      return `${payload.playerName || "Player"} reordered the next ${(payload.after || payload.before || []).length || 0} cards`;
     case "card_buried":
       return `${payload.playerName || "Player"} buried ${cardLabel(payload.cardId)}`;
     case "potluck_resolved":
-      return `${payload.playerName || "Player"} resolved Potluck`;
+      return `${payload.playerName || "Player"} stacked ${(payload.cards || []).length || 0} cards for Potluck`;
     case "barking_resolved":
+      if (payload.outcome === "defused") {
+        return `${payload.playerName || "Player"} hit ${payload.targetName || "another player"} with Barking Kitten, but it was defused`;
+      }
+      if (payload.targetName) {
+        return `${payload.playerName || "Player"} resolved Barking Kitten against ${payload.targetName}`;
+      }
       return `${payload.playerName || "Player"} resolved a Barking Kitten`;
+    case "pair_stole_card":
+      return `${payload.playerName || "Player"} stole a card from ${payload.targetName || "another player"}`;
     case "player_eliminated":
       return `${payload.playerName || "Player"} exploded`;
     case "match_finished":
