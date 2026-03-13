@@ -29,14 +29,18 @@ const governance = computed(() => store.match?.governance || {
   rematchVoteEligibleCount: 0
 });
 const canGovern = computed(() => store.currentMember?.role === "player");
+const isSpectatorViewer = computed(() => store.currentMember?.role === "spectator");
 const hasEndVote = computed(() => governance.value.endVotes.includes(store.session?.profileId));
 const hasRematchVote = computed(() => governance.value.rematchVotes.includes(store.session?.profileId));
 const canVoteEnd = computed(() => ["STARTING", "IN_GAME", "SUSPENDED"].includes(store.room?.phase || ""));
 const canVoteRematch = computed(() => store.room?.phase === "FINISHED");
 const canSurrender = computed(() => ["STARTING", "IN_GAME", "SUSPENDED"].includes(store.room?.phase || ""));
 const canOpenRoom = computed(() => Boolean(store.room?.code));
-const canOpenReplay = computed(() => Boolean(store.match?.id));
-const currentTurnName = computed(() => store.match?.activePlayerName || "Waiting");
+const canOpenReplay = computed(() =>
+  isSpectatorViewer.value
+  && store.room?.phase === "FINISHED"
+  && Boolean(store.match?.id)
+);
 const reconnectStatus = computed(() => {
   if (!store.room) return "No room";
   if (store.room.phase === "SUSPENDED") {
@@ -128,27 +132,7 @@ onMounted(async () => {
     <div ref="viewportRef" class="route-fit-shell">
       <div class="route-fit-stage" :style="stageStyle">
         <div ref="contentRef" class="route-fit-content match-view-content">
-          <header class="panel match-header">
-            <div>
-              <p class="eyebrow">{{ store.room?.gameType || "match" }}</p>
-              <h1>{{ store.room?.title || "Match" }}</h1>
-              <p class="muted">
-                <template v-if="store.room">
-                  Room {{ store.room.code }} · Turn {{ currentTurnName }} · Phase {{ store.room.phase }}
-                </template>
-                <template v-else>
-                  Match {{ props.matchId }} · Restoring route state
-                </template>
-              </p>
-            </div>
-            <div class="action-row">
-              <button v-if="canOpenRoom" class="secondary" @click="backToRoom">Back to room</button>
-              <button v-if="canOpenReplay" class="secondary" @click="openReplay">Replay</button>
-              <button class="danger" @click="leaveRoom">Exit to lobby</button>
-            </div>
-          </header>
-
-          <section v-if="store.room && store.match" class="panel governance-bar">
+          <section v-if="store.room || store.match" class="panel governance-bar">
             <div class="governance-copy">
               <strong>Match controls</strong>
               <span class="muted">{{ reconnectStatus }}</span>
@@ -157,6 +141,9 @@ onMounted(async () => {
               <span v-if="!canGovern" class="muted">You are currently viewing this room without governance voting rights.</span>
             </div>
             <div class="action-row">
+              <button v-if="canOpenRoom" class="secondary" @click="backToRoom">Back to room</button>
+              <button v-if="canOpenReplay" class="secondary" @click="openReplay">Replay</button>
+              <button class="danger" @click="leaveRoom">Exit to lobby</button>
               <button v-if="canGovern && canSurrender" class="secondary" @click="surrenderMatch">Surrender</button>
               <button v-if="canGovern && canVoteEnd" class="secondary" @click="voteEndMatch">
                 {{ hasEndVote ? "Retract End Vote" : "Vote End Match" }}
@@ -182,10 +169,6 @@ onMounted(async () => {
               <p class="eyebrow">Match state</p>
               <h2>{{ stateTitle }}</h2>
               <p class="muted">{{ stateDescription }}</p>
-            </div>
-            <div class="action-row">
-              <button v-if="canOpenRoom" class="secondary" @click="backToRoom">Back to room</button>
-              <button class="danger" @click="leaveRoom">Exit to lobby</button>
             </div>
           </section>
         </div>

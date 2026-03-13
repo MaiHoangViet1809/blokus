@@ -2335,3 +2335,66 @@ Result:
   - transform-based scaling must not break click targets or overlay positioning
   - route-fit wrappers must not remove intentional inner scrollbars
   - the scale floor must preserve readability on very short screens
+
+## Extension: Match Navigation Ownership Belongs to Match Controls, Not a Route Header
+- **Status**: APPROVED
+- **Approved-By**: Viet
+- **Approved-On**: 2026-03-13
+- **Task**: Resolve the internal `SOW_0007` conflict around `/matches/:matchId` navigation by removing the duplicate route-local match header and making match navigation belong to the platform-owned `Match controls` block inside the match route itself.
+- **Location**:
+  - `/Users/maihoangviet/Projects/blokus/src/platform/client/views/MatchView.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/style.css`
+  - `/Users/maihoangviet/Projects/blokus/plan_todo/codex/SOW_0007_multi_board_game_platform_refactor.md`
+- **Why**: The top application bar already shows match context. Keeping another route-local match header duplicates title/phase context and incorrectly makes match navigation look like shell navigation. `Back to room` and `Exit to lobby` are still required, but they belong to the match/game route itself and should live in `Match controls`. `Replay` is not a live-player action and should only be offered to finished-match spectators.
+- **As-Is Diagram (ASCII)**:
+```text
+/matches/:matchId
+  -> top application bar shows match context
+  -> route-local match header repeats:
+     game
+     title
+     room / turn / phase
+     Back to room / Replay / Exit to lobby
+  -> Match controls block below only holds governance actions
+
+Result:
+  duplicated context
+  navigation ownership split across 2 blocks
+```
+- **To-Be Diagram (ASCII)**:
+```text
+/matches/:matchId
+  -> top application bar is the only context header
+  -> no route-local match header block
+  -> Match controls block owns:
+     Back to room
+     Exit to lobby
+     Surrender / Vote End / Vote Rematch
+     Replay only for spectator on FINISHED match
+  -> live or fallback content renders below
+```
+- **Deliverables**:
+  - remove the route-local `match-header` block from `MatchView.vue`
+  - move `Back to room` and `Exit to lobby` into the `Match controls` action row
+  - show `Replay` only when:
+    - current member role is `spectator`
+    - room phase is `FINISHED`
+    - current match id exists
+  - keep `Match controls` visible in fallback/terminal states so users are never stranded
+  - update spacing so removing the route header does not leave dead vertical space in viewport-fit layouts
+- **Done Criteria**:
+  - `/matches/:matchId` no longer shows a duplicate match header block below the application bar
+  - `Back to room` and `Exit to lobby` are rendered inside `Match controls`
+  - live players do not see `Replay` on the live match route
+  - finished-match spectators do see `Replay` inside `Match controls`
+  - fallback/loading/terminal states still expose match navigation
+  - `npm run build` passes
+- **Out-of-Scope**:
+  - app bar redesign
+  - replay route redesign
+  - server/API changes
+- **Proposed-By**: Codex GPT-5
+- **plan**: multi-board-game-platform-refactor-v1
+- **Cautions / Risks**:
+  - this extension supersedes the earlier ownership assumption that route navigation lives in a persistent route-local header
+  - this extension also supersedes the earlier assumption that `Replay` is a general match-route action for all viewers

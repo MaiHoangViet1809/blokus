@@ -1093,6 +1093,10 @@ p {
   font-size: clamp(1.25rem, 2vw, 1.65rem);
 }
 
+.match-view-content > .governance-bar {
+  flex: 0 0 auto;
+}
+
 .spectator-strip-panel {
   padding-block: 12px;
 }
