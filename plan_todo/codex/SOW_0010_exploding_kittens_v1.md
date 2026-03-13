@@ -262,6 +262,64 @@ Create EK room
 
 ---
 
+## Extension: Randomize the First EK Player and Fix Viewer-Local Prompt Dismissal
+
+- **Status**: APPROVED
+- **Approved-By**: Viet
+- **Approved-On**: 2026-03-13
+- **Task**: Bring the Base EK state machine closer to official behavior by randomizing the starting player and making `dismiss_prompt` work for viewer-local `sharedFuturePreview` prompts.
+- **Location**:
+  - `/Users/maihoangviet/Projects/blokus/src/games/exploding_kittens/server.js`
+  - `/Users/maihoangviet/Projects/blokus/plan_todo/codex/SOW_0010_exploding_kittens_v1.md`
+- **Why**: EK still diverged from the intended rules and prompt model in two important ways: seat 0 always started first, and `Share The Future` produced a viewer-local prompt that could not be dismissed without hitting an unsupported-command error.
+
+### As-Is Diagram (ASCII)
+```text
+Match setup
+  -> turnIndex = 0
+  -> seat 0 always goes first
+
+Shared Future preview
+  -> target gets a local informational prompt
+  -> UI sends dismiss_prompt
+  -> server only handles state.prompt-owned dismiss
+  -> unsupported command
+```
+
+### To-Be Diagram (ASCII)
+```text
+Match setup
+  -> random starting seat
+  -> first player varies per match
+
+Shared Future preview
+  -> target gets a local informational prompt
+  -> dismiss_prompt clears sharedFuturePreview cleanly
+  -> no unsupported-command error
+```
+
+- **Deliverables**:
+  - randomize the starting player in EK `createMatch()`
+  - persist the randomized `turnIndex` into initial match state
+  - let `dismiss_prompt` clear viewer-local `sharedFuturePreview`
+  - keep server-owned prompt dismissal unchanged
+- **Done Criteria**:
+  - EK no longer always starts with seat 0
+  - `Share The Future` target can dismiss the informational prompt without error
+  - `node --check /Users/maihoangviet/Projects/blokus/src/games/exploding_kittens/server.js` passes
+  - `npm run build` passes
+- **Out-of-Scope**:
+  - broader reaction-window redesign
+  - draw-pile exhaustion policy
+  - UI polish
+- **Proposed-By**: Codex GPT-5
+- **plan**: exploding-kittens-v1-platform-game
+- **Cautions / Risks**:
+  - starting-player randomization must not break deterministic persisted state after match creation
+  - viewer-local dismiss handling must not accidentally clear unrelated server-owned prompts
+
+---
+
 ## Extension: Align Exploding Kittens `createMatch()` with the Platform Driver Contract
 
 - **Status**: APPROVED

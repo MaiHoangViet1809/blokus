@@ -1101,6 +1101,7 @@ export function createExplodingKittensDriver() {
       const players = members
         .filter((member) => member.role === "player")
         .sort((a, b) => a.seat_index - b.seat_index);
+      const startingIndex = players.length ? Math.floor(Math.random() * players.length) : 0;
       const { actionDeck, stash } = buildInitialDeck(resolveEkRuleset(roomConfig), players.length);
       const shuffledActionDeck = shuffle(actionDeck);
       const matchPlayers = [];
@@ -1129,7 +1130,8 @@ export function createExplodingKittensDriver() {
       const state = createInitialState(roomConfig);
       state.drawPile = shuffle(shuffledActionDeck);
       state.sharedStash = stash;
-      state.lastActionText = `${playerLabel(players[0])} goes first.`;
+      state.turnIndex = startingIndex;
+      state.lastActionText = `${playerLabel(players[startingIndex])} goes first.`;
       const events = [{
         profileId: null,
         eventType: "match_started",
@@ -1151,7 +1153,7 @@ export function createExplodingKittensDriver() {
           id: makeId("match"),
           roomId: room.id,
           status: MATCH_STARTING,
-          turnIndex: 0,
+          turnIndex: startingIndex,
           boardJson: JSON.stringify(state),
           governanceJson: JSON.stringify({ endVotes: [], rematchVotes: [] }),
           winnerProfileId: null,
@@ -1238,6 +1240,10 @@ export function createExplodingKittensDriver() {
       if (state.prompt?.profileId === profileId && commandType === "dismiss_prompt") {
         zoneFor(state, profileId).sharedFuturePreview = null;
         state.prompt = null;
+        return finalize();
+      }
+      if (commandType === "dismiss_prompt" && zoneFor(state, profileId).sharedFuturePreview?.length) {
+        zoneFor(state, profileId).sharedFuturePreview = null;
         return finalize();
       }
 
