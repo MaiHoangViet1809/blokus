@@ -324,3 +324,24 @@ Init payload:
   - preference persists after refresh
   - full interactive chat appearance remains unchanged
   - `npm run build` passes
+
+## Extension: Render App Settings as a Floating Popup Window
+- **Status**: APPROVED
+- **Approved-By**: Viet
+- **Approved-On**: 2026-03-14
+- **Task**: Refine the topbar settings control so it opens a true floating popup window rather than a dropdown that can be hidden behind page content.
+- **Location**:
+  - `/Users/maihoangviet/Projects/blokus/src/App.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/style.css`
+  - `/Users/maihoangviet/Projects/blokus/plan_todo/codex/SOW_0011_chat_emoji_picker_and_message_reactions.md`
+- **Why**:
+  - the current settings popover is visually clipped/hidden behind route blocks
+  - app configuration should appear as a dedicated floating layer above the shell content
+- **Deliverables**:
+  - render the app settings UI in a top-level floating popup layer
+  - anchor the popup visually near the top-right settings trigger while keeping it above route content
+  - preserve the existing passive chat opacity slider and close behaviors
+- **Done Criteria**:
+  - the settings popup remains visible above surrounding page blocks
+  - outside click and route change still close it
+  - `npm run build` passes
