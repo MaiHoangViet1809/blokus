@@ -1058,6 +1058,7 @@ function resolveBarkingAttack(state, players, actor, target, events) {
 
 export function createExplodingKittensDriver() {
   return {
+    gameType: EXPLODING_KITTENS_GAME_TYPE,
     buildRoomConfig(config = {}) {
       return buildEkRoomConfig(config);
     },

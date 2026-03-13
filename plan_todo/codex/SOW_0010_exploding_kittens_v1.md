@@ -206,3 +206,56 @@ Platform server
 - **Cautions / Risks**:
   - this extension broadens scope into platform orchestration, but only where strictly necessary
   - the generic match-command path must not regress Blokus or Chess
+
+---
+
+## Extension: Fix Exploding Kittens Room `gameType` Registration
+
+- **Status**: APPROVED
+- **Approved-By**: Viet
+- **Approved-On**: 2026-03-13
+- **Task**: Fix the Exploding Kittens server driver so newly created EK rooms persist `game_type = exploding_kittens` instead of falling back to Blokus.
+- **Location**:
+  - `/Users/maihoangviet/Projects/blokus/src/games/exploding_kittens/server.js`
+  - `/Users/maihoangviet/Projects/blokus/plan_todo/codex/SOW_0010_exploding_kittens_v1.md`
+- **Why**: Browser smoke testing showed that creating an EK room lands on `/rooms/:roomCode` with Blokus staging and `blokus · PREPARE` in the app bar. The platform room-create path writes `rooms.game_type = driver.gameType`, but the EK driver did not expose `gameType`, so the room fell back to Blokus defaults.
+
+### As-Is Diagram (ASCII)
+```text
+Create EK room
+  -> room:create(gameType = exploding_kittens)
+  -> createRoomForSession()
+  -> insert rooms.game_type = driver.gameType
+  -> EK driver has no gameType field
+  -> room row falls back/defaults to blokus
+  -> /rooms/:roomCode renders Blokus staging
+```
+
+### To-Be Diagram (ASCII)
+```text
+Create EK room
+  -> room:create(gameType = exploding_kittens)
+  -> createRoomForSession()
+  -> insert rooms.game_type = exploding_kittens
+  -> room snapshot keeps EK type
+  -> /rooms/:roomCode renders EK staging/live correctly
+```
+
+- **Deliverables**:
+  - add `gameType: EXPLODING_KITTENS_GAME_TYPE` to the EK server driver
+  - append this extension to `/Users/maihoangviet/Projects/blokus/plan_todo/codex/SOW_0010_exploding_kittens_v1.md`
+- **Done Criteria**:
+  - creating an EK room persists `room.gameType = exploding_kittens`
+  - `/api/rooms/:roomCode` returns EK config, not Blokus fallback config
+  - `/rooms/:roomCode` uses EK staging instead of Blokus staging
+  - `node --check /Users/maihoangviet/Projects/blokus/src/games/exploding_kittens/server.js` passes
+  - `npm run build` passes
+- **Out-of-Scope**:
+  - broader EK gameplay fixes
+  - staging UX redesign
+  - platform room-create redesign
+- **Proposed-By**: Codex GPT-5
+- **plan**: exploding-kittens-v1-platform-game
+- **Cautions / Risks**:
+  - this is a narrow regression fix; no platform shell changes should be mixed into it
+  - existing wrongly-created EK rooms in the local DB will remain wrong unless recreated or repaired separately
