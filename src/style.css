@@ -771,7 +771,7 @@ p {
   position: fixed;
   right: 24px;
   bottom: 24px;
-  z-index: 60;
+  z-index: 62;
   width: 64px;
   height: 64px;
   padding: 0;
@@ -816,8 +816,8 @@ p {
   right: 24px;
   bottom: 24px;
   z-index: 61;
-  width: min(380px, calc(100vw - 32px));
-  height: min(560px, calc(100dvh - 48px));
+  width: min(438px, calc(100vw - 32px));
+  height: min(644px, calc(100dvh - 48px));
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
   gap: 12px;
@@ -826,6 +826,17 @@ p {
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.42);
   overflow: visible;
   isolation: isolate;
+}
+
+.room-chat-panel--passive {
+  grid-template-rows: minmax(0, 1fr);
+  padding: 12px 14px;
+  gap: 0;
+  pointer-events: none;
+  background: rgba(8, 16, 25, 0.2);
+  border-color: rgba(144, 193, 255, 0.08);
+  backdrop-filter: blur(5px);
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.2);
 }
 
 .room-chat-panel__header,
@@ -848,6 +859,12 @@ p {
   justify-content: flex-end;
   gap: 12px;
   padding-right: 4px;
+}
+
+.room-chat-panel--passive .room-chat-panel__messages {
+  overflow: hidden;
+  padding-right: 0;
+  mask-image: linear-gradient(to top, rgba(0, 0, 0, 1) 72%, rgba(0, 0, 0, 0));
 }
 
 .room-chat-message {
@@ -908,6 +925,10 @@ p {
   font-size: 0.76rem;
 }
 
+.room-chat-panel--passive .room-chat-message__meta {
+  color: rgba(236, 244, 255, 0.64);
+}
+
 .room-chat-message__balloon-shell {
   position: relative;
   display: inline-flex;
@@ -926,6 +947,12 @@ p {
   line-height: 1.35;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.room-chat-panel--passive .room-chat-message__bubble {
+  background: rgba(255, 255, 255, 0.03);
+  border-color: rgba(255, 255, 255, 0.08);
+  color: rgba(236, 244, 255, 0.84);
 }
 
 .room-chat-message__quote-block {
@@ -955,6 +982,11 @@ p {
   border-radius: 18px 18px 6px 18px;
   background: linear-gradient(135deg, rgba(88, 178, 255, 0.24), rgba(88, 178, 255, 0.12));
   border-color: rgba(88, 178, 255, 0.32);
+}
+
+.room-chat-panel--passive .room-chat-message--mine .room-chat-message__bubble {
+  background: linear-gradient(135deg, rgba(88, 178, 255, 0.14), rgba(88, 178, 255, 0.06));
+  border-color: rgba(144, 193, 255, 0.16);
 }
 
 .room-chat-message__trail-actions {

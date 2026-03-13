@@ -19,10 +19,15 @@ const selectionStart = ref(0);
 const selectionEnd = ref(0);
 const quotedComposerMessage = ref(null);
 const activeReactionPickerStyle = ref({});
+const shouldStickToBottom = ref(true);
+const pendingOwnScrollToBottom = ref(false);
 const reactionAnchorRefs = new Map();
 const QUOTE_PREVIEW_MAX = 96;
+const PASSIVE_HUD_MESSAGE_LIMIT = 6;
+const BOTTOM_FOLLOW_THRESHOLD = 28;
 
 const canRender = computed(() => !!store.roomChatRoomCode && !!store.currentMember);
+const isInteractive = computed(() => store.roomChatOpen);
 const roomCode = computed(() => store.roomChatRoomCode || store.room?.code || "");
 const messages = computed(() => store.roomChatMessages || []);
 const renderedMessages = computed(() => messages.value.map((message) => ({
@@ -30,6 +35,9 @@ const renderedMessages = computed(() => messages.value.map((message) => ({
   parsedContent: parseQuotedMessage(message.message),
   reactionOverview: reactionSummary(message)
 })));
+const displayedMessages = computed(() => (
+  isInteractive.value ? renderedMessages.value : renderedMessages.value.slice(-PASSIVE_HUD_MESSAGE_LIMIT)
+));
 const activeReactionMessage = computed(() => renderedMessages.value.find((message) => message.id === activeReactionMessageId.value) || null);
 const composerMaxLength = computed(() => {
   const quoteHeader = buildQuoteHeader(quotedComposerMessage.value);
@@ -67,24 +75,38 @@ function closeTransientMenus() {
   activeReactionPickerStyle.value = {};
 }
 
-function scrollToBottom() {
+function panelIsNearBottom() {
+  const panel = messagesRef.value;
+  if (!panel) return true;
+  return (panel.scrollHeight - panel.clientHeight - panel.scrollTop) <= BOTTOM_FOLLOW_THRESHOLD;
+}
+
+function syncStickToBottom() {
+  shouldStickToBottom.value = panelIsNearBottom();
+}
+
+function scrollToBottom(force = false) {
   nextTick(() => {
     const panel = messagesRef.value;
     if (!panel) return;
+    if (!force && !shouldStickToBottom.value) return;
     panel.scrollTop = panel.scrollHeight;
+    shouldStickToBottom.value = true;
   });
 }
 
 async function sendMessage() {
   const message = composeOutgoingMessage();
   if (!message || message.length > CHAT_MESSAGE_MAX_LENGTH) return;
+  pendingOwnScrollToBottom.value = true;
+  shouldStickToBottom.value = true;
   await store.sendRoomChat(message);
   draftMessage.value = "";
   quotedComposerMessage.value = null;
   selectionStart.value = 0;
   selectionEnd.value = 0;
   closeTransientMenus();
-  scrollToBottom();
+  scrollToBottom(true);
 }
 
 function insertEmoji(emoji) {
@@ -295,6 +317,12 @@ function handleMessagesViewportMutation() {
   }
 }
 
+function handleMessagesScroll() {
+  handleMessagesViewportMutation();
+  if (!isInteractive.value) return;
+  syncStickToBottom();
+}
+
 function reactionPeopleLabel(reaction) {
   const reactors = Array.isArray(reaction?.reactors) ? reaction.reactors : [];
   if (!reactors.length) return "";
@@ -311,9 +339,10 @@ onBeforeUnmount(() => {
   window.removeEventListener("resize", handleMessagesViewportMutation);
 });
 
-watch(() => store.roomChatOpen, (open) => {
+watch(() => isInteractive.value, (open) => {
   if (open) {
-    scrollToBottom();
+    shouldStickToBottom.value = true;
+    scrollToBottom(true);
     nextTick(() => {
       composerInputRef.value?.focus();
       captureSelection();
@@ -321,14 +350,14 @@ watch(() => store.roomChatOpen, (open) => {
     return;
   }
   closeTransientMenus();
-  quotedComposerMessage.value = null;
-  draftMessage.value = "";
 });
 
 watch(() => messages.value.length, () => {
-  if (store.roomChatOpen) {
-    scrollToBottom();
+  if (!isInteractive.value) return;
+  if (pendingOwnScrollToBottom.value || shouldStickToBottom.value) {
+    scrollToBottom(true);
   }
+  pendingOwnScrollToBottom.value = false;
 });
 
 watch(() => activeReactionMessageId.value, (messageId) => {
@@ -343,8 +372,13 @@ watch(() => activeReactionMessageId.value, (messageId) => {
 </script>
 
 <template>
-  <section v-if="canRender && store.roomChatOpen" ref="panelRef" class="room-chat-panel panel">
-    <header class="room-chat-panel__header">
+  <section
+    v-if="canRender"
+    ref="panelRef"
+    class="room-chat-panel panel"
+    :class="{ 'room-chat-panel--passive': !isInteractive }"
+  >
+    <header v-if="isInteractive" class="room-chat-panel__header">
       <div>
         <strong>Room chat</strong>
         <p class="muted">Room {{ roomCode }}</p>
@@ -352,9 +386,9 @@ watch(() => activeReactionMessageId.value, (messageId) => {
       <button class="secondary room-chat-panel__close" type="button" @click="store.closeRoomChat()">Close</button>
     </header>
 
-    <div ref="messagesRef" class="room-chat-panel__messages" @scroll="handleMessagesViewportMutation">
+    <div ref="messagesRef" class="room-chat-panel__messages" @scroll="handleMessagesScroll">
       <article
-        v-for="message in renderedMessages"
+        v-for="message in displayedMessages"
         :key="message.id"
         class="room-chat-message"
         :class="{ 'room-chat-message--mine': isMine(message) }"
@@ -400,7 +434,7 @@ watch(() => activeReactionMessageId.value, (messageId) => {
                 </svg>
               </button>
             </div>
-            <div class="room-chat-message__trail-actions">
+            <div v-if="isInteractive" class="room-chat-message__trail-actions">
               <button
                 class="secondary room-chat-message__action-btn"
                 type="button"
@@ -432,7 +466,7 @@ watch(() => activeReactionMessageId.value, (messageId) => {
       </article>
     </div>
 
-    <div v-if="activeReactionMessageId" class="room-chat-panel__overlay">
+    <div v-if="isInteractive && activeReactionMessageId" class="room-chat-panel__overlay">
       <div ref="reactionPickerRef" class="room-chat-message__reaction-picker" :style="activeReactionPickerStyle">
         <div class="room-chat-message__reaction-picker-row">
           <button
@@ -459,7 +493,7 @@ watch(() => activeReactionMessageId.value, (messageId) => {
       </div>
     </div>
 
-    <footer class="room-chat-panel__composer">
+    <footer v-if="isInteractive" class="room-chat-panel__composer">
       <div class="room-chat-panel__composer-main">
         <div v-if="quotedComposerMessage" class="room-chat-panel__composer-quote">
           <div class="room-chat-panel__composer-quote-body">

@@ -271,3 +271,30 @@ Init payload:
   - typed body content is always below quote block
   - `Shift+Enter` inserts newline, `Enter` sends
   - `npm run build` passes
+
+## Extension: Bottom-Growing Chat, Larger Panel, and Passive HUD Overlay
+- **Status**: APPROVED
+- **Approved-By**: Viet
+- **Approved-On**: 2026-03-14
+- **Task**: Refine chat panel behavior so messages continue to grow from the bottom without forced scroll resets, enlarge the panel by about 15%, and add a passive translucent HUD state that remains visible but click-through until full chat is opened.
+- **Location**:
+  - `/Users/maihoangviet/Projects/blokus/src/platform/client/components/RoomChatPanel.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/platform/client/components/WorldChatPanel.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/style.css`
+  - `/Users/maihoangviet/Projects/blokus/plan_todo/codex/SOW_0011_chat_emoji_picker_and_message_reactions.md`
+- **Why**:
+  - new messages should appear at the bottom and push older messages upward without relying on unconditional scroll resets
+  - users need to read older messages without being yanked back to the bottom
+  - the current chat panel is slightly too small
+  - the product wants a game-style passive chat HUD that is readable but non-interactive until the messenger icon is clicked
+- **Deliverables**:
+  - keep chronological message ordering and bottom-growth behavior, while only auto-following new messages when the viewer is already near the bottom or just sent a message
+  - enlarge room/world chat panels by roughly 15% while keeping viewport clamps
+  - render a passive HUD variant when chat is not fully open, showing only a recent message slice with reduced-opacity styling and click-through behavior
+  - keep the existing FAB as the trigger to switch from passive HUD to full interactive chat
+- **Done Criteria**:
+  - users can stay scrolled up in full chat while new messages arrive
+  - new messages continue to append at the bottom and push older content upward
+  - passive HUD is readable, translucent, and does not block gameplay clicks
+  - full chat remains fully interactive when opened
+  - `npm run build` passes
