@@ -10,11 +10,14 @@ const draftMessage = ref("");
 const messagesRef = ref(null);
 const panelRef = ref(null);
 const composerInputRef = ref(null);
+const reactionPickerRef = ref(null);
 const emojiPickerOpen = ref(false);
 const activeReactionMessageId = ref("");
 const activeMoreMessageId = ref("");
 const selectionStart = ref(0);
 const selectionEnd = ref(0);
+const activeReactionPickerStyle = ref({});
+const reactionAnchorRefs = new Map();
 const QUOTE_PREVIEW_MAX = 96;
 
 const canRender = computed(() => !!store.roomChatRoomCode && !!store.currentMember);
@@ -48,6 +51,7 @@ function closeTransientMenus() {
   emojiPickerOpen.value = false;
   activeReactionMessageId.value = "";
   activeMoreMessageId.value = "";
+  activeReactionPickerStyle.value = {};
 }
 
 function scrollToBottom() {
@@ -97,7 +101,12 @@ function toggleReactionPicker(messageId) {
   if (activeReactionMessageId.value) {
     emojiPickerOpen.value = false;
     activeMoreMessageId.value = "";
+    nextTick(() => {
+      updateReactionPickerPosition();
+    });
+    return;
   }
+  activeReactionPickerStyle.value = {};
 }
 
 async function reactToMessage(messageId, emoji) {
@@ -118,6 +127,50 @@ function quotePreviewText(message) {
   if (!condensed) return "";
   if (condensed.length <= QUOTE_PREVIEW_MAX) return condensed;
   return `${condensed.slice(0, QUOTE_PREVIEW_MAX - 3).trimEnd()}...`;
+}
+
+function reactionSummary(message) {
+  const reactions = Array.isArray(message?.reactions) ? message.reactions : [];
+  if (!reactions.length) return null;
+  return {
+    emojis: reactions.slice(0, 2).map((reaction) => reaction.emoji),
+    count: reactions.reduce((total, reaction) => total + Number(reaction.count || 0), 0),
+    reactedByMe: reactions.some((reaction) => reaction.reactedByMe)
+  };
+}
+
+function setReactionAnchorRef(messageId, element) {
+  if (element) {
+    reactionAnchorRefs.set(messageId, element);
+    return;
+  }
+  reactionAnchorRefs.delete(messageId);
+}
+
+function updateReactionPickerPosition() {
+  const panel = panelRef.value;
+  const anchor = reactionAnchorRefs.get(activeReactionMessageId.value);
+  const picker = reactionPickerRef.value;
+  if (!panel || !anchor || !picker) return;
+  const panelRect = panel.getBoundingClientRect();
+  const anchorRect = anchor.getBoundingClientRect();
+  const pickerWidth = picker.offsetWidth || 320;
+  const pickerHeight = picker.offsetHeight || 76;
+  const anchorCenter = anchorRect.left - panelRect.left + (anchorRect.width / 2);
+  const horizontalPadding = 12;
+  let left = anchorCenter - (pickerWidth / 2);
+  const maxLeft = panelRect.width - pickerWidth - horizontalPadding;
+  left = Math.max(horizontalPadding, Math.min(left, maxLeft));
+  let top = anchorRect.top - panelRect.top - pickerHeight - 12;
+  if (top < 12) {
+    top = anchorRect.bottom - panelRect.top + 12;
+  }
+  const tailLeft = Math.max(26, Math.min(anchorCenter - left, pickerWidth - 26));
+  activeReactionPickerStyle.value = {
+    left: `${left}px`,
+    top: `${top}px`,
+    "--reaction-picker-tail-left": `${tailLeft}px`
+  };
 }
 
 function insertQuotedMessage(message) {
@@ -151,12 +204,22 @@ function handleDocumentPointerDown(event) {
   }
 }
 
+function handleMessagesViewportMutation() {
+  if (activeReactionMessageId.value || activeMoreMessageId.value) {
+    activeReactionMessageId.value = "";
+    activeMoreMessageId.value = "";
+    activeReactionPickerStyle.value = {};
+  }
+}
+
 onMounted(() => {
   document.addEventListener("pointerdown", handleDocumentPointerDown);
+  window.addEventListener("resize", handleMessagesViewportMutation);
 });
 
 onBeforeUnmount(() => {
   document.removeEventListener("pointerdown", handleDocumentPointerDown);
+  window.removeEventListener("resize", handleMessagesViewportMutation);
 });
 
 watch(() => store.roomChatOpen, (open) => {
@@ -176,6 +239,16 @@ watch(() => messages.value.length, () => {
     scrollToBottom();
   }
 });
+
+watch(() => activeReactionMessageId.value, (messageId) => {
+  if (!messageId) {
+    activeReactionPickerStyle.value = {};
+    return;
+  }
+  nextTick(() => {
+    updateReactionPickerPosition();
+  });
+});
 </script>
 
 <template>
@@ -188,7 +261,7 @@ watch(() => messages.value.length, () => {
       <button class="secondary room-chat-panel__close" type="button" @click="store.closeRoomChat()">Close</button>
     </header>
 
-    <div ref="messagesRef" class="room-chat-panel__messages">
+    <div ref="messagesRef" class="room-chat-panel__messages" @scroll="handleMessagesViewportMutation">
       <article
         v-for="message in messages"
         :key="message.id"
@@ -202,7 +275,31 @@ watch(() => messages.value.length, () => {
             <span>{{ formatTimestamp(message.createdAt) }}</span>
           </div>
           <div class="room-chat-message__bubble-wrap">
-            <div class="room-chat-message__action-rail">
+            <div class="room-chat-message__balloon-shell">
+              <div class="room-chat-message__bubble">{{ message.message }}</div>
+              <button
+                :ref="(element) => setReactionAnchorRef(message.id, element)"
+                class="secondary room-chat-message__reaction-anchor"
+                :class="{
+                  'room-chat-message__reaction-anchor--summary': !!reactionSummary(message),
+                  'room-chat-message__reaction-anchor--mine': reactionSummary(message)?.reactedByMe
+                }"
+                type="button"
+                :aria-label="reactionSummary(message) ? 'View reactions' : 'React to message'"
+                @click="toggleReactionPicker(message.id)"
+              >
+                <template v-if="reactionSummary(message)">
+                  <span class="room-chat-message__reaction-anchor-emojis">
+                    <span v-for="emoji in reactionSummary(message).emojis" :key="`${message.id}-${emoji}`">{{ emoji }}</span>
+                  </span>
+                  <span class="room-chat-message__reaction-anchor-count">{{ reactionSummary(message).count }}</span>
+                </template>
+                <svg v-else viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M9.75 21H6.5A2.5 2.5 0 0 1 4 18.5v-6A2.5 2.5 0 0 1 6.5 10h3.25v11ZM19.27 10.24c.45.55.73 1.3.73 2.11v.15c0 .76-.2 1.5-.58 2.16l-2.2 3.82A3 3 0 0 1 14.61 20H11.25V10.66l2.7-5.07a1.74 1.74 0 0 1 3.25.82c0 .16-.02.32-.07.48L16.4 10h1.36c.6 0 1.16.27 1.51.74Z" />
+                </svg>
+              </button>
+            </div>
+            <div class="room-chat-message__trail-actions">
               <button
                 class="secondary room-chat-message__action-btn"
                 type="button"
@@ -211,16 +308,6 @@ watch(() => messages.value.length, () => {
               >
                 <svg viewBox="0 0 24 24" aria-hidden="true">
                   <path d="M10.5 7H7.75A2.75 2.75 0 0 0 5 9.75v2.5A2.75 2.75 0 0 0 7.75 15h1.06A4.5 4.5 0 0 1 5 19.25a.75.75 0 0 0 .25 1.47a6 6 0 0 0 6-6V9.75A2.75 2.75 0 0 0 8.5 7Zm7.75 0H15.5a2.75 2.75 0 0 0-2.75 2.75v2.5A2.75 2.75 0 0 0 15.5 15h1.06a4.5 4.5 0 0 1-3.81 4.25a.75.75 0 0 0 .25 1.47a6 6 0 0 0 6-6V9.75A2.75 2.75 0 0 0 18.25 7Z" />
-                </svg>
-              </button>
-              <button
-                class="secondary room-chat-message__action-btn room-chat-message__action-btn--like"
-                type="button"
-                aria-label="React to message"
-                @click="toggleReactionPicker(message.id)"
-              >
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M9.75 21H6.5A2.5 2.5 0 0 1 4 18.5v-6A2.5 2.5 0 0 1 6.5 10h3.25v11ZM19.27 10.24c.45.55.73 1.3.73 2.11v.15c0 .76-.2 1.5-.58 2.16l-2.2 3.82A3 3 0 0 1 14.61 20H11.25V10.66l2.7-5.07a1.74 1.74 0 0 1 3.25.82c0 .16-.02.32-.07.48L16.4 10h1.36c.6 0 1.16.27 1.51.74Z" />
                 </svg>
               </button>
               <button
@@ -234,39 +321,28 @@ watch(() => messages.value.length, () => {
                 </svg>
               </button>
             </div>
-            <div class="room-chat-message__bubble">{{ message.message }}</div>
-            <div v-if="activeReactionMessageId === message.id" class="room-chat-message__reaction-picker">
-              <button
-                v-for="emoji in REACTION_EMOJIS"
-                :key="`${message.id}-${emoji}`"
-                class="room-chat-message__reaction-option"
-                type="button"
-                @click="reactToMessage(message.id, emoji)"
-              >
-                {{ emoji }}
-              </button>
-            </div>
             <div v-if="activeMoreMessageId === message.id" class="room-chat-message__more-menu">
               <button class="secondary room-chat-message__more-menu-item" type="button" disabled>
                 More actions POC
               </button>
             </div>
-            <div v-if="message.reactions?.length" class="room-chat-message__reactions">
-              <button
-                v-for="reaction in message.reactions"
-                :key="`${message.id}-${reaction.emoji}`"
-                class="room-chat-message__reaction-chip"
-                :class="{ 'room-chat-message__reaction-chip--mine': reaction.reactedByMe }"
-                type="button"
-                @click="reactToMessage(message.id, reaction.emoji)"
-              >
-                <span>{{ reaction.emoji }}</span>
-                <span>{{ reaction.count }}</span>
-              </button>
-            </div>
           </div>
         </div>
       </article>
+    </div>
+
+    <div v-if="activeReactionMessageId" class="room-chat-panel__overlay">
+      <div ref="reactionPickerRef" class="room-chat-message__reaction-picker" :style="activeReactionPickerStyle">
+        <button
+          v-for="emoji in REACTION_EMOJIS"
+          :key="`${activeReactionMessageId}-${emoji}`"
+          class="room-chat-message__reaction-option"
+          type="button"
+          @click="reactToMessage(activeReactionMessageId, emoji)"
+        >
+          {{ emoji }}
+        </button>
+      </div>
     </div>
 
     <footer class="room-chat-panel__composer">

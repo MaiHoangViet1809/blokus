@@ -190,3 +190,28 @@ Init payload:
   - new/sparse messages sit visually at the bottom of the panel
   - action icons render below the bubble instead of above it
   - `npm run build` passes
+
+## Extension: Mirror Message Actions by Bubble Side and Float the Reaction Tray
+- **Status**: APPROVED
+- **Approved-By**: Viet
+- **Approved-On**: 2026-03-13
+- **Task**: Rework the chat message action UX so quote/more actions mirror by bubble ownership, the reaction affordance sits on the balloon border, and the reaction tray floats outside the clipped message viewport.
+- **Location**:
+  - `/Users/maihoangviet/Projects/blokus/src/platform/client/components/RoomChatPanel.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/platform/client/components/WorldChatPanel.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/style.css`
+  - `/Users/maihoangviet/Projects/blokus/plan_todo/codex/SOW_0011_chat_emoji_picker_and_message_reactions.md`
+- **Why**:
+  - quote and more icons should live on the trailing side of the bubble, not in a generic row below it
+  - the reaction affordance should attach to the latter half of the balloon border and be replaced by the rendered reaction chip once reactions exist
+  - the floating reaction tray should not be clipped by the scrollable chat viewport
+- **Deliverables**:
+  - mirror quote and more actions by ownership so they sit after other users' bubbles and before the current user's bubbles
+  - move the reaction button onto the bubble border and replace it with a compact aggregated reaction chip in the same anchor slot after reactions exist
+  - render the reaction tray in a panel-level floating overlay so it escapes message viewport clipping
+  - preserve bottom-anchored sparse-chat behavior
+- **Done Criteria**:
+  - quote and more actions mirror correctly for own vs other messages
+  - the reaction button/chip sits on the bubble edge instead of in a row below the bubble
+  - the reaction tray no longer clips inside the message scroll viewport
+  - `npm run build` passes
