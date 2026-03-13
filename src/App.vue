@@ -19,45 +19,73 @@ const connectionStatus = computed(() => (store.connected ? "Connected" : "Offlin
 const passiveChatOpacityPercent = computed(() => Math.round((store.uiSettings?.passiveChatOpacity ?? 0.1) * 100));
 const isRoomRoute = computed(() => route.path.startsWith("/rooms/") && !!store.room);
 const isMatchRoute = computed(() => route.path.startsWith("/matches/") && (!!store.match || !!store.replay));
-const roomHeaderContext = computed(() => {
-  if (!isRoomRoute.value || !store.room) return "";
-  return `${store.room.gameType} · ${store.room.phase} · ${store.room.code}`;
-});
-const roomSecondaryContext = computed(() => {
-  if (!isRoomRoute.value || !store.room) return "";
-  return `${store.room.title} · Host ${store.room.hostName || "Unknown"}`;
-});
 const roomRole = computed(() => {
   if (!isRoomRoute.value) return "";
   return store.currentMember?.role || "spectator";
 });
 const formattedRoomRole = computed(() => roomRole.value ? `Role: ${capitalizeLabel(roomRole.value)}` : "");
-const matchHeaderContext = computed(() => {
-  if (!isMatchRoute.value) return "";
-  if (store.replay) {
-    return `${store.replay.gameType} · Replay · ${store.replay.roomCode || store.replay.id}`;
-  }
-  if (!store.match) return "";
-  return `${store.match.gameType} · ${store.match.phase || store.match.status} · ${store.match.roomCode}`;
-});
-const matchSecondaryContext = computed(() => {
-  if (!isMatchRoute.value) return "";
-  if (store.replay) {
-    return `${store.replay.roomTitle} · Match ${store.replay.id}`;
-  }
-  if (!store.match) return "";
-  return `${store.room?.title || store.match.roomCode} · Turn ${store.match.activePlayerName || "Waiting"}`;
-});
 const matchRole = computed(() => {
   if (!isMatchRoute.value) return "";
   return store.currentMember?.role || "spectator";
 });
 const formattedMatchRole = computed(() => matchRole.value ? `Role: ${capitalizeLabel(matchRole.value)}` : "");
+const topbarCenterFields = computed(() => {
+  if (isRoomRoute.value && store.room) {
+    return [
+      `Game: ${titleCaseLabel(store.room.gameType)}`,
+      `Status: ${phaseLabel(store.room.phase)}`,
+      `Room ID: ${store.room.code}`,
+      `Room Name: ${store.room.title}`,
+      `Host: ${store.room.hostName || "Unknown"}`
+    ];
+  }
+  if (isMatchRoute.value) {
+    if (store.replay) {
+      return [
+        `Game: ${titleCaseLabel(store.replay.gameType)}`,
+        "Status: Replay",
+        `Room ID: ${store.replay.roomCode || store.replay.id}`,
+        `Room Name: ${store.replay.roomTitle || "Unknown"}`,
+        `Replay ID: ${store.replay.id}`
+      ];
+    }
+    if (store.match) {
+      return [
+        `Game: ${titleCaseLabel(store.match.gameType)}`,
+        `Status: ${phaseLabel(store.room?.phase || store.match.phase || store.match.status)}`,
+        `Room ID: ${store.match.roomCode}`,
+        `Room Name: ${store.room?.title || store.match.roomCode}`,
+        `Turn: ${store.match.activePlayerName || "Waiting"}`
+      ];
+    }
+  }
+  return [];
+});
 
 function capitalizeLabel(value) {
   const normalized = String(value || "").trim();
   if (!normalized) return "";
   return normalized[0].toUpperCase() + normalized.slice(1);
+}
+
+function titleCaseLabel(value) {
+  const normalized = String(value || "").trim().replaceAll("_", " ");
+  if (!normalized) return "";
+  return normalized
+    .split(" ")
+    .filter(Boolean)
+    .map((segment) => `${segment[0].toUpperCase()}${segment.slice(1).toLowerCase()}`)
+    .join(" ");
+}
+
+function phaseLabel(value) {
+  const normalized = String(value || "").trim().toUpperCase();
+  if (normalized === "IN_GAME") return "In-progress";
+  if (normalized === "STARTING") return "Starting";
+  if (normalized === "SUSPENDED") return "Suspended";
+  if (normalized === "FINISHED") return "Finished";
+  if (normalized === "ABANDONED") return "Abandoned";
+  return titleCaseLabel(value);
 }
 
 function closeSettingsMenu() {
@@ -136,13 +164,14 @@ watch(() => settingsMenuOpen.value, (open) => {
     <header class="topbar">
       <RouterLink class="brand" to="/">Board Game Platform</RouterLink>
       <div class="topbar-center">
-        <template v-if="isRoomRoute">
-          <strong>{{ roomHeaderContext }}</strong>
-          <span class="muted">{{ roomSecondaryContext }}</span>
-        </template>
-        <template v-else-if="isMatchRoute">
-          <strong>{{ matchHeaderContext }}</strong>
-          <span class="muted">{{ matchSecondaryContext }}</span>
+        <template v-if="topbarCenterFields.length">
+          <span
+            v-for="field in topbarCenterFields"
+            :key="field"
+            class="topbar-context-field"
+          >
+            {{ field }}
+          </span>
         </template>
         <span v-else class="muted">Profile-driven rooms, match routes, and replay under one platform shell.</span>
       </div>

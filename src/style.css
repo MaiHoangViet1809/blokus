@@ -173,11 +173,23 @@ p {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 14px;
+  gap: 10px;
   min-width: 0;
   text-align: center;
   white-space: normal;
   flex-wrap: wrap;
+}
+
+.topbar-context-field {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  padding: 0.28rem 0.7rem;
+  border-radius: 999px;
+  border: 1px solid rgba(144, 193, 255, 0.14);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--muted);
+  white-space: nowrap;
 }
 
 .status-strip {

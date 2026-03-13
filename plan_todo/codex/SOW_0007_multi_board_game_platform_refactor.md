@@ -2549,3 +2549,26 @@ Result:
   - players with no finished Blokus history show `0%`
   - cards remain compact
   - `npm run build` passes
+
+## Extension: Relabel Match Topbar Context into Structured Fields
+- **Status**: APPROVED
+- **Approved-By**: Viet
+- **Approved-On**: 2026-03-14
+- **Task**: Replace the current fragment-style match/replay context in the application bar center with structured labeled fields.
+- **Location**:
+  - `/Users/maihoangviet/Projects/blokus/src/App.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/style.css`
+  - `/Users/maihoangviet/Projects/blokus/plan_todo/codex/SOW_0007_multi_board_game_platform_refactor.md`
+- **Why**:
+  - the current center text still reads like raw fragments instead of explicit app context
+  - match and replay context should be scannable and self-describing
+- **Deliverables**:
+  - render live match topbar context as labeled fields for game, status, room id, room name, and turn
+  - render replay topbar context as labeled fields for game, status, room id, room name, and replay id
+  - map live `Status` from `room.phase`, not `match.status`
+  - keep right-side `User / Status / Role` pills unchanged
+- **Done Criteria**:
+  - live match topbar center reads with labeled fields
+  - replay topbar center reads with labeled fields
+  - the topbar still wraps cleanly on smaller laptop widths
+  - `npm run build` passes
