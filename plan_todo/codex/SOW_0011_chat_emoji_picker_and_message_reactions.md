@@ -298,3 +298,29 @@ Init payload:
   - passive HUD is readable, translucent, and does not block gameplay clicks
   - full chat remains fully interactive when opened
   - `npm run build` passes
+
+## Extension: App Settings Menu with Adjustable Passive Chat Opacity
+- **Status**: APPROVED
+- **Approved-By**: Viet
+- **Approved-On**: 2026-03-14
+- **Task**: Add a topbar app settings menu and expose passive chat opacity as the first persisted UI preference.
+- **Location**:
+  - `/Users/maihoangviet/Projects/blokus/src/App.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/platform/client/store.js`
+  - `/Users/maihoangviet/Projects/blokus/src/style.css`
+  - `/Users/maihoangviet/Projects/blokus/plan_todo/codex/SOW_0011_chat_emoji_picker_and_message_reactions.md`
+- **Why**:
+  - passive chat HUD should be configurable by the user
+  - the application bar currently has no app-level settings entry point
+  - this preference should survive refreshes using the same client-side persistence style as existing UI selections
+- **Deliverables**:
+  - add a compact settings button in the top-right application bar cluster
+  - open a small app settings popover from that button with a slider for passive chat opacity
+  - persist passive chat opacity in store-backed localStorage state
+  - apply the stored opacity immediately to passive room/world chat HUD styling through a CSS custom property
+- **Done Criteria**:
+  - settings menu opens from the top-right topbar and closes on outside click
+  - passive chat opacity slider updates the passive HUD immediately
+  - preference persists after refresh
+  - full interactive chat appearance remains unchanged
+  - `npm run build` passes

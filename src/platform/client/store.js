@@ -9,7 +9,34 @@ const CLIENT_INSTANCE_STORAGE_KEY = "blokus-client-instance-id";
 const LEGACY_BROWSER_TOKEN_KEY = "blokus-device-token";
 const LEGACY_SESSION_TOKEN_KEY = "blokus-session-token";
 const ACTIVE_GAME_STORAGE_KEY = "board-platform-active-game";
+const UI_SETTINGS_STORAGE_KEY = "board-platform-ui-settings";
 const CHAT_REACTION_EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "😡"];
+const DEFAULT_PASSIVE_CHAT_OPACITY = 0.2;
+
+function readUiSettings() {
+  try {
+    const raw = localStorage.getItem(UI_SETTINGS_STORAGE_KEY);
+    if (!raw) {
+      return {
+        passiveChatOpacity: DEFAULT_PASSIVE_CHAT_OPACITY
+      };
+    }
+    const parsed = JSON.parse(raw);
+    return {
+      passiveChatOpacity: clampPassiveChatOpacity(parsed?.passiveChatOpacity)
+    };
+  } catch {
+    return {
+      passiveChatOpacity: DEFAULT_PASSIVE_CHAT_OPACITY
+    };
+  }
+}
+
+function clampPassiveChatOpacity(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return DEFAULT_PASSIVE_CHAT_OPACITY;
+  return Math.min(0.6, Math.max(0.1, Math.round(numeric * 20) / 20));
+}
 
 function makeClientInstanceId() {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -74,6 +101,7 @@ export const useAppStore = defineStore("app", {
     legacyBrowserToken: localStorage.getItem(LEGACY_BROWSER_TOKEN_KEY) || "",
     clientInstanceId: sessionStorage.getItem(CLIENT_INSTANCE_STORAGE_KEY) || "",
     activeGameType: localStorage.getItem(ACTIVE_GAME_STORAGE_KEY) || "blokus",
+    uiSettings: readUiSettings(),
     profiles: [],
     session: null,
     rooms: [],
@@ -144,6 +172,17 @@ export const useAppStore = defineStore("app", {
       this.activeGameType = normalized;
       localStorage.setItem(ACTIVE_GAME_STORAGE_KEY, normalized);
       return normalized;
+    },
+    persistUiSettings() {
+      localStorage.setItem(UI_SETTINGS_STORAGE_KEY, JSON.stringify(this.uiSettings));
+    },
+    setPassiveChatOpacity(value) {
+      this.uiSettings = {
+        ...this.uiSettings,
+        passiveChatOpacity: clampPassiveChatOpacity(value)
+      };
+      this.persistUiSettings();
+      return this.uiSettings.passiveChatOpacity;
     },
     async api(path, options = {}) {
       const response = await fetch(path, {
