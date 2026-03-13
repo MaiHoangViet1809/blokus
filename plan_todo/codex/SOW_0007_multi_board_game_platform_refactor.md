@@ -2398,3 +2398,54 @@ Result:
 - **Cautions / Risks**:
   - this extension supersedes the earlier ownership assumption that route navigation lives in a persistent route-local header
   - this extension also supersedes the earlier assumption that `Replay` is a general match-route action for all viewers
+
+## Extension: Home Route Should Expand the Rooms Row, Not the Top Lobby Row
+- **Status**: APPROVED
+- **Approved-By**: Viet
+- **Approved-On**: 2026-03-13
+- **Task**: Fix `/` so the top lobby row keeps content height and the `Rooms` row takes the remaining viewport height.
+- **Location**:
+  - `/Users/maihoangviet/Projects/blokus/src/style.css`
+  - `/Users/maihoangviet/Projects/blokus/plan_todo/codex/SOW_0007_multi_board_game_platform_refactor.md`
+- **Why**: The current home-route grid defines only the first row as `1fr`, so `Profiles + Game Type` expand vertically while the `Rooms` panel falls into an implicit auto row and stays short. The intended behavior is the opposite: the top row should size to content and the `Rooms` panel should own the remaining height.
+- **As-Is Diagram (ASCII)**:
+```text
+/ home
+  row 1: Profiles + Game Type -> stretches tall
+  row 2: Rooms -> content height only
+
+Result:
+  top row wastes vertical space
+  Rooms table gets too little height
+```
+- **To-Be Diagram (ASCII)**:
+```text
+/ home
+  row 1: Profiles + Game Type -> auto content height
+  row 2: Rooms -> minmax(0, 1fr)
+
+Result:
+  top row stays compact
+  Rooms panel fills remaining viewport height
+```
+- **Deliverables**:
+  - make `.platform-lobby-view` use `grid-template-rows: auto minmax(0, 1fr)`
+  - keep the fix local to `.platform-lobby-view`
+  - allow a home-only short-height override on medium laptop widths so `Profiles + Game Type` do not stack into a full-height column on `1024x600`-class viewports
+  - preserve existing desktop 2-column top row and current narrow-screen collapse behavior
+  - keep `Rooms` as the scrollable fill panel
+- **Done Criteria**:
+  - on `/`, the top lobby row stays content-height
+  - the `Rooms` panel expands to use remaining height
+  - on `1024x600`, the `Rooms` panel still remains visible instead of collapsing to zero height
+  - inner room-table scrolling still works
+  - `npm run build` passes
+- **Out-of-Scope**:
+  - redesigning the home route content
+  - changing inner sizing of `Profiles` vs `Game Type`
+  - changing room table behavior beyond height ownership
+- **Proposed-By**: Codex GPT-5
+- **plan**: multi-board-game-platform-refactor-v1
+- **Cautions / Risks**:
+  - the fix should not change other routes that currently rely on the shared grouped selector
+  - desktop and narrow responsive breakpoints must keep the same structure, with any two-column rescue limited to short-height medium-width laptops

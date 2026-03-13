@@ -418,6 +418,7 @@ p {
 }
 
 .platform-lobby-view {
+  grid-template-rows: auto minmax(0, 1fr);
   gap: 12px;
 }
 
@@ -1635,6 +1636,30 @@ p {
     grid-template-columns: 1fr;
   }
 
+}
+
+@media (min-width: 960px) and (max-width: 1180px) and (max-height: 760px) {
+  .platform-lobby-view {
+    gap: 8px;
+  }
+
+  .platform-lobby-grid {
+    grid-template-columns: minmax(240px, 320px) minmax(280px, 1fr);
+    gap: 8px;
+  }
+
+  .platform-lobby-view .panel {
+    padding: 14px;
+    gap: 10px;
+  }
+
+  .platform-join-inline {
+    grid-template-columns: minmax(0, 1fr) minmax(220px, 320px);
+  }
+
+  .game-selector-list {
+    gap: 8px;
+  }
 }
 
 @media (max-height: 760px) {
