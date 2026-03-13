@@ -395,7 +395,14 @@ export function createBlokusDriver() {
     },
     createMatch(room, members, makeId, nowIso) {
       const config = resolveBlokusConfig(parseJson(room.config_json, {}));
-      const players = members.filter((member) => member.role === "player");
+      const players = members
+        .filter((member) => member.role === "player")
+        .sort((left, right) => {
+          if (left.chosen_color_index !== right.chosen_color_index) {
+            return left.chosen_color_index - right.chosen_color_index;
+          }
+          return (left.seat_index ?? 99) - (right.seat_index ?? 99);
+        });
       return {
         match: {
           id: makeId("match"),
@@ -411,7 +418,7 @@ export function createBlokusDriver() {
         matchPlayers: players.map((player, index) => ({
           id: makeId("match_player"),
           profile_id: player.profile_id,
-          seatIndex: player.seat_index ?? index,
+          seatIndex: index,
           colorIndex: player.chosen_color_index,
           hasMoved: 0,
           passed: 0,

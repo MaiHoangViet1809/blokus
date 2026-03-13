@@ -2477,3 +2477,29 @@ Result:
   - the left rail becomes the single source of player status in live Blokus
   - the footer `player-strip` no longer renders
   - `npm run build` passes
+
+## Extension: Stronger Active-Player Highlight, Labeled Topbar Status, and Circular Blokus Turn Order
+- **Status**: APPROVED
+- **Approved-By**: Viet
+- **Approved-On**: 2026-03-14
+- **Task**: Make the current-turn Blokus player card much more obvious, relabel the topbar identity/status cluster, and make Blokus turn order follow circular board order rather than join order.
+- **Location**:
+  - `/Users/maihoangviet/Projects/blokus/src/App.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/games/blokus/LiveView.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/games/blokus/server.js`
+  - `/Users/maihoangviet/Projects/blokus/src/style.css`
+  - `/Users/maihoangviet/Projects/blokus/plan_todo/codex/SOW_0007_multi_board_game_platform_refactor.md`
+- **Why**:
+  - the current `To move` highlight is too subtle in the left rail
+  - the topbar identity pills are ambiguous without labels
+  - Blokus should advance turns around the board in circular color/corner order, not effectively by room join order
+- **Deliverables**:
+  - strengthen the visual treatment of the active Blokus player card
+  - render topbar pills as labeled `User`, `Status`, and `Role`
+  - change Blokus match player ordering to follow `chosen_color_index` when a match starts
+  - keep the existing circular `turnIndex + 1` progression over that color-ordered player sequence
+- **Done Criteria**:
+  - the active Blokus player is visually obvious at a glance
+  - topbar identity/status pills read with labels instead of bare values
+  - Blokus turns follow color/corner order instead of join order
+  - `npm run build` passes

@@ -15,7 +15,7 @@ const shellStyle = computed(() => ({
 }));
 
 const profileName = computed(() => store.activeProfile?.name || "No profile");
-const connectionStatus = computed(() => (store.connected ? "Realtime connected" : "Realtime offline"));
+const connectionStatus = computed(() => (store.connected ? "Connected" : "Offline"));
 const passiveChatOpacityPercent = computed(() => Math.round((store.uiSettings?.passiveChatOpacity ?? 0.1) * 100));
 const isRoomRoute = computed(() => route.path.startsWith("/rooms/") && !!store.room);
 const isMatchRoute = computed(() => route.path.startsWith("/matches/") && (!!store.match || !!store.replay));
@@ -31,6 +31,7 @@ const roomRole = computed(() => {
   if (!isRoomRoute.value) return "";
   return store.currentMember?.role || "spectator";
 });
+const formattedRoomRole = computed(() => roomRole.value ? `Role: ${capitalizeLabel(roomRole.value)}` : "");
 const matchHeaderContext = computed(() => {
   if (!isMatchRoute.value) return "";
   if (store.replay) {
@@ -51,6 +52,13 @@ const matchRole = computed(() => {
   if (!isMatchRoute.value) return "";
   return store.currentMember?.role || "spectator";
 });
+const formattedMatchRole = computed(() => matchRole.value ? `Role: ${capitalizeLabel(matchRole.value)}` : "");
+
+function capitalizeLabel(value) {
+  const normalized = String(value || "").trim();
+  if (!normalized) return "";
+  return normalized[0].toUpperCase() + normalized.slice(1);
+}
 
 function closeSettingsMenu() {
   settingsMenuOpen.value = false;
@@ -139,10 +147,10 @@ watch(() => settingsMenuOpen.value, (open) => {
         <span v-else class="muted">Profile-driven rooms, match routes, and replay under one platform shell.</span>
       </div>
       <div class="status-strip">
-        <span class="status-pill">{{ profileName }}</span>
-        <span v-if="isRoomRoute" class="status-pill">{{ roomRole }}</span>
-        <span v-else-if="isMatchRoute" class="status-pill">{{ matchRole }}</span>
-        <span class="status-pill">{{ connectionStatus }}</span>
+        <span class="status-pill">User: {{ profileName }}</span>
+        <span class="status-pill">Status: {{ connectionStatus }}</span>
+        <span v-if="isRoomRoute" class="status-pill">{{ formattedRoomRole }}</span>
+        <span v-else-if="isMatchRoute" class="status-pill">{{ formattedMatchRole }}</span>
         <button
           ref="settingsButtonRef"
           class="secondary app-settings-toggle"

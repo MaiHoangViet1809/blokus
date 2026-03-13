@@ -1420,10 +1420,29 @@ p {
 
 .mini-scoreboard__card--active {
   border-color: var(--line-strong);
+  background:
+    linear-gradient(135deg, rgba(255, 209, 102, 0.18), rgba(88, 178, 255, 0.08)),
+    rgba(20, 34, 52, 0.96);
+  box-shadow:
+    inset 4px 0 0 var(--player-color, transparent),
+    0 0 0 1px rgba(255, 209, 102, 0.22),
+    0 18px 30px rgba(0, 0, 0, 0.22);
 }
 
 .mini-scoreboard__card--viewer {
   background: rgba(18, 34, 56, 0.92);
+}
+
+.mini-scoreboard__card--active .phase-pill {
+  border-color: rgba(255, 209, 102, 0.4);
+  color: color-mix(in srgb, #ffd166 72%, var(--text));
+  background: rgba(255, 209, 102, 0.1);
+}
+
+.mini-scoreboard__card--viewer:not(.mini-scoreboard__card--active) {
+  box-shadow:
+    inset 4px 0 0 var(--player-color, transparent),
+    0 0 0 1px rgba(88, 178, 255, 0.12);
 }
 
 .mini-scoreboard__card-head,
