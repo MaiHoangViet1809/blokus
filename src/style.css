@@ -1465,7 +1465,8 @@ p {
 }
 
 .mini-scoreboard__card-meta--compact {
-  font-size: 0.84rem;
+  gap: 6px 10px;
+  font-size: 0.8rem;
   line-height: 1.25;
 }
 

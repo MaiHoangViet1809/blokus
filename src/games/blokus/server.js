@@ -170,8 +170,9 @@ function normalizeSetupMember(member, colors) {
   };
 }
 
-function projectMatchPlayers(players, colors) {
+function projectMatchPlayers(players, colors, playerRecords = new Map()) {
   return players.map((player) => ({
+    ...(playerRecords.get(player.profile_id) || {}),
     profileId: player.profile_id,
     name: player.name,
     colorIndex: player.color_index,
@@ -438,6 +439,7 @@ export function createBlokusDriver() {
       const config = resolveBlokusConfig(parseJson(room.config_json, {}));
       const colors = buildPlayerColors(config.boardSize);
       const lastPlacedMove = context.lastPlacedMove || null;
+      const playerRecords = context.playerRecords || new Map();
       const lastPlacedPlayer = lastPlacedMove
         ? players.find((player) => player.profileId === lastPlacedMove.profileId) || null
         : null;
@@ -456,7 +458,7 @@ export function createBlokusDriver() {
         mode: "match",
         boardSize: config.boardSize,
         board: parseBoard(match.board_json, config.boardSize),
-        players: projectMatchPlayers(players, colors),
+        players: projectMatchPlayers(players, colors, playerRecords),
         turnIndex: match.turn_index,
         lastPlacedPiece: lastPlacedMove && lastPlacedCells
           ? {

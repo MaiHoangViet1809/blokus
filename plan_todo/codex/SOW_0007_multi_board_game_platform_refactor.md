@@ -2525,3 +2525,27 @@ Result:
   - no player footer strip returns
   - key player information remains readable
   - `npm run build` passes
+
+## Extension: Add Blokus Overall Win Rate to Left-Rail Player Cards
+- **Status**: APPROVED
+- **Approved-By**: Viet
+- **Approved-On**: 2026-03-14
+- **Task**: Add each player's overall finished-match Blokus win rate to the compact live left-rail player cards.
+- **Location**:
+  - `/Users/maihoangviet/Projects/blokus/src/platform/server/index.js`
+  - `/Users/maihoangviet/Projects/blokus/src/games/blokus/server.js`
+  - `/Users/maihoangviet/Projects/blokus/src/games/blokus/LiveView.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/style.css`
+  - `/Users/maihoangviet/Projects/blokus/plan_todo/codex/SOW_0007_multi_board_game_platform_refactor.md`
+- **Why**:
+  - player cards now own the live identity/status summary for Blokus
+  - users want overall game win rate visible there as an at-a-glance strength indicator
+- **Deliverables**:
+  - compute overall finished-match Blokus records across all Blokus rulesets
+  - expose `overallRecord` on live Blokus match players
+  - render a compact `Win rate` line inside the existing compact player-card metadata
+- **Done Criteria**:
+  - each live Blokus player card shows overall Blokus win rate
+  - players with no finished Blokus history show `0%`
+  - cards remain compact
+  - `npm run build` passes

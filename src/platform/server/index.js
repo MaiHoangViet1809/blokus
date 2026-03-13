@@ -1048,6 +1048,40 @@ function finishedChessRecord(profileId, opponentProfileId = null) {
   return withWinRate(summary);
 }
 
+function finishedBlokusRecord(profileId) {
+  const rows = db.prepare(`
+    select distinct matches.id, matches.winner_profile_id
+    from matches
+    join rooms on rooms.id = matches.room_id
+    where matches.status = 'finished'
+      and rooms.game_type = 'blokus'
+      and exists (
+        select 1
+        from match_players mp_self
+        where mp_self.match_id = matches.id and mp_self.profile_id = ?
+      )
+  `).all(profileId);
+  const matches = new Map();
+  for (const row of rows) {
+    if (!matches.has(row.id)) {
+      matches.set(row.id, {
+        winnerProfileId: row.winner_profile_id
+      });
+    }
+  }
+  const summary = emptyRecordSummary();
+  for (const match of matches.values()) {
+    if (!match.winnerProfileId) {
+      summary.draws += 1;
+    } else if (match.winnerProfileId === profileId) {
+      summary.wins += 1;
+    } else {
+      summary.losses += 1;
+    }
+  }
+  return withWinRate(summary);
+}
+
 function chessPlayerRecords(players) {
   const ordered = [...players].sort((left, right) => left.seat_index - right.seat_index);
   if (!ordered.length) return new Map();
@@ -1062,6 +1096,16 @@ function chessPlayerRecords(players) {
   }
   if (firstPlayer && secondPlayer) {
     return records;
+  }
+  return records;
+}
+
+function blokusPlayerRecords(players) {
+  const records = new Map();
+  for (const player of players) {
+    records.set(player.profile_id, {
+      overallRecord: finishedBlokusRecord(player.profile_id)
+    });
   }
   return records;
 }
@@ -1508,7 +1552,7 @@ function buildGameView(roomCode, viewerProfileId = null) {
   const context = room.game_type === "chess"
     ? { playerRecords: chessPlayerRecords(players) }
     : room.game_type === "blokus"
-      ? { lastPlacedMove: latestPlacedMove(match.id) }
+      ? { lastPlacedMove: latestPlacedMove(match.id), playerRecords: blokusPlayerRecords(players) }
     : {};
   return driver.projectMatch(room, match, players, viewerProfileId, context);
 }

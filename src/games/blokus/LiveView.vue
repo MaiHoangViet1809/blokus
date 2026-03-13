@@ -228,6 +228,7 @@ watch(availablePieceIds, (pieces) => {
             <div class="mini-scoreboard__card-meta mini-scoreboard__card-meta--compact">
               <span><span class="muted">Cells</span> <strong>{{ player.remainingCells }}</strong></span>
               <span><span class="muted">Pieces</span> <strong>{{ player.remainingPieces?.length || 0 }}</strong></span>
+              <span><span class="muted">Win rate</span> <strong>{{ player.overallRecord?.winRate || 0 }}%</strong></span>
               <span><span class="muted">State</span> <strong>{{ player.stateLabel }}</strong></span>
             </div>
           </div>
