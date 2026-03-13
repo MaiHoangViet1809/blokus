@@ -681,7 +681,7 @@ function resolveDrawResult(state, players, player, drawResult, events, nowIso) {
           winnerProfileId,
           winnerName: winner?.name || null
         });
-        return { finished: true, winnerProfileId, finishedAt: nowIso };
+        return { finished: true, winnerProfileId, finishedAt: nowIso() };
       }
     }
   } else if (drawnCard === "imploding_kitten") {
@@ -699,7 +699,7 @@ function resolveDrawResult(state, players, player, drawResult, events, nowIso) {
           winnerProfileId,
           winnerName: winner?.name || null
         });
-        return { finished: true, winnerProfileId, finishedAt: nowIso };
+        return { finished: true, winnerProfileId, finishedAt: nowIso() };
       }
     } else {
       state.prompt = {
@@ -1227,7 +1227,7 @@ export function createExplodingKittensDriver() {
       const finalize = (result = {}) => ({
         boardJson: JSON.stringify(state),
         turnIndex: state.turnIndex,
-        firstCommittedAt: match.first_committed_at || nowIso,
+        firstCommittedAt: match.first_committed_at || nowIso(),
         status: result.finished ? MATCH_FINISHED : MATCH_ACTIVE,
         winnerProfileId: result.winnerProfileId ?? null,
         finishedAt: result.finished ? result.finishedAt : null,
@@ -1459,7 +1459,7 @@ export function createExplodingKittensDriver() {
       return {
         status: winnerProfileId ? MATCH_FINISHED : match.status,
         winnerProfileId,
-        finishedAt: winnerProfileId ? nowIso : null,
+        finishedAt: winnerProfileId ? nowIso() : null,
         players: nextPlayers
       };
     }

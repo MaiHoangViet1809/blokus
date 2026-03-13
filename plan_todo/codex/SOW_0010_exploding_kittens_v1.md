@@ -318,3 +318,103 @@ room:start
 - **Cautions / Risks**:
   - keep the fix narrow; this is a driver contract bug, not a full gameplay pass
   - client null-safe guard should not hide real protocol errors, only avoid a brittle crash
+
+---
+
+## Extension: Fix EK First-Commit Timestamp Binding
+
+- **Status**: APPROVED
+- **Approved-By**: Viet
+- **Approved-On**: 2026-03-13
+- **Task**: Fix the Exploding Kittens command finalization path so `firstCommittedAt` is stored as a timestamp string instead of a function reference.
+- **Location**:
+  - `/Users/maihoangviet/Projects/blokus/src/games/exploding_kittens/server.js`
+  - `/Users/maihoangviet/Projects/blokus/plan_todo/codex/SOW_0010_exploding_kittens_v1.md`
+- **Why**: EK matches start correctly now, but the first live command fails because `firstCommittedAt` is being returned as a function reference, which SQLite cannot bind.
+
+### As-Is Diagram (ASCII)
+```text
+EK live match
+  -> player sends draw_card
+  -> EK handleCommand().finalize()
+  -> firstCommittedAt = nowIso   (function ref)
+  -> applyDriverMutation()
+  -> sqlite update matches(... first_committed_at = ? ...)
+  -> cannot bind function to SQL parameter
+  -> command fails
+```
+
+### To-Be Diagram (ASCII)
+```text
+EK live match
+  -> player sends draw_card
+  -> EK handleCommand().finalize()
+  -> firstCommittedAt = nowIso() (timestamp string)
+  -> applyDriverMutation()
+  -> sqlite update succeeds
+  -> live match progresses normally
+```
+
+- **Deliverables**:
+  - change EK `finalize()` to use `nowIso()` instead of `nowIso`
+  - append this regression fix to `/Users/maihoangviet/Projects/blokus/plan_todo/codex/SOW_0010_exploding_kittens_v1.md`
+- **Done Criteria**:
+  - `draw_card` no longer fails with `Provided value cannot be bound to SQLite parameter 6`
+  - `node --check /Users/maihoangviet/Projects/blokus/src/games/exploding_kittens/server.js` passes
+  - `npm run build` passes
+- **Out-of-Scope**:
+  - broader EK gameplay validation beyond this timestamp bug
+  - hidden-info/reaction bugs after the first command
+- **Proposed-By**: Codex GPT-5
+- **plan**: exploding-kittens-v1-platform-game
+- **Cautions / Risks**:
+  - keep the fix narrow; this is a timestamp binding regression, not a larger command redesign
+
+---
+
+## Extension: Fix Remaining EK Timestamp Function Bindings
+
+- **Status**: APPROVED
+- **Approved-By**: Viet
+- **Approved-On**: 2026-03-13
+- **Task**: Replace all remaining `finishedAt: nowIso` function references in the EK driver with real timestamp strings via `nowIso()`.
+- **Location**:
+  - `/Users/maihoangviet/Projects/blokus/src/games/exploding_kittens/server.js`
+  - `/Users/maihoangviet/Projects/blokus/plan_todo/codex/SOW_0010_exploding_kittens_v1.md`
+- **Why**: After fixing `firstCommittedAt`, deeper EK gameplay testing still fails in finish/elimination paths because multiple branches still return `finishedAt` as a function reference instead of a string timestamp.
+
+### As-Is Diagram (ASCII)
+```text
+EK gameplay branch
+  -> elimination / finish
+  -> returns finishedAt = nowIso   (function ref)
+  -> platform persists finished_at
+  -> sqlite bind error on parameter 5
+  -> gameplay fails in deeper variant paths
+```
+
+### To-Be Diagram (ASCII)
+```text
+EK gameplay branch
+  -> elimination / finish
+  -> returns finishedAt = nowIso()
+  -> sqlite persists real timestamp string
+  -> finish/elimination path works
+```
+
+- **Deliverables**:
+  - replace every remaining `finishedAt: nowIso` with `finishedAt: nowIso()`
+  - append this extension to `/Users/maihoangviet/Projects/blokus/plan_todo/codex/SOW_0010_exploding_kittens_v1.md`
+- **Done Criteria**:
+  - no EK path binds a function object into `finished_at`
+  - `node --check /Users/maihoangviet/Projects/blokus/src/games/exploding_kittens/server.js` passes
+  - `npm run build` passes
+- **Out-of-Scope**:
+  - broader EK gameplay redesign
+  - UI changes
+  - non-timestamp bugs
+- **Proposed-By**: Codex GPT-5
+- **plan**: exploding-kittens-v1-platform-game
+- **Cautions / Risks**:
+  - keep fix narrow and mechanical
+  - need to catch all remaining `nowIso` function-reference returns in EK server logic
