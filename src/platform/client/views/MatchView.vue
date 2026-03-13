@@ -3,6 +3,7 @@ import { computed, onMounted, watch } from "vue";
 import { useRouter } from "vue-router";
 import RoomChatFab from "../components/RoomChatFab.vue";
 import RoomChatPanel from "../components/RoomChatPanel.vue";
+import { useViewportFit } from "../composables/useViewportFit";
 import { getGameClient } from "../registry";
 import { useAppStore } from "../store";
 
@@ -12,6 +13,7 @@ const props = defineProps({
 
 const router = useRouter();
 const store = useAppStore();
+const { viewportRef, contentRef, stageStyle, scheduleMeasure } = useViewportFit();
 
 const gameClient = computed(() => getGameClient(store.match?.gameType || store.room?.gameType || "blokus"));
 const liveComponent = computed(() => gameClient.value.liveComponent);
@@ -117,71 +119,78 @@ watch(() => store.room?.phase, async (phase) => {
 
 onMounted(async () => {
   await hydrateMatch();
+  scheduleMeasure();
 });
 </script>
 
 <template>
-  <section class="route-shell match-view">
-    <header class="panel match-header">
-      <div>
-        <p class="eyebrow">{{ store.room?.gameType || "match" }}</p>
-        <h1>{{ store.room?.title || "Match" }}</h1>
-        <p class="muted">
-          <template v-if="store.room">
-            Room {{ store.room.code }} · Turn {{ currentTurnName }} · Phase {{ store.room.phase }}
-          </template>
-          <template v-else>
-            Match {{ props.matchId }} · Restoring route state
-          </template>
-        </p>
-      </div>
-      <div class="action-row">
-        <button v-if="canOpenRoom" class="secondary" @click="backToRoom">Back to room</button>
-        <button v-if="canOpenReplay" class="secondary" @click="openReplay">Replay</button>
-        <button class="danger" @click="leaveRoom">Exit to lobby</button>
-      </div>
-    </header>
+  <section class="route-shell match-view viewport-fit-route">
+    <div ref="viewportRef" class="route-fit-shell">
+      <div class="route-fit-stage" :style="stageStyle">
+        <div ref="contentRef" class="route-fit-content match-view-content">
+          <header class="panel match-header">
+            <div>
+              <p class="eyebrow">{{ store.room?.gameType || "match" }}</p>
+              <h1>{{ store.room?.title || "Match" }}</h1>
+              <p class="muted">
+                <template v-if="store.room">
+                  Room {{ store.room.code }} · Turn {{ currentTurnName }} · Phase {{ store.room.phase }}
+                </template>
+                <template v-else>
+                  Match {{ props.matchId }} · Restoring route state
+                </template>
+              </p>
+            </div>
+            <div class="action-row">
+              <button v-if="canOpenRoom" class="secondary" @click="backToRoom">Back to room</button>
+              <button v-if="canOpenReplay" class="secondary" @click="openReplay">Replay</button>
+              <button class="danger" @click="leaveRoom">Exit to lobby</button>
+            </div>
+          </header>
 
-    <section v-if="store.room && store.match" class="panel governance-bar">
-      <div class="governance-copy">
-        <strong>Match controls</strong>
-        <span class="muted">{{ reconnectStatus }}</span>
-        <span class="muted">End votes {{ governance.endVotes.length }}/{{ governance.endVoteEligibleCount }}</span>
-        <span v-if="canVoteRematch" class="muted">Rematch votes {{ governance.rematchVotes.length }}/{{ governance.rematchVoteEligibleCount }}</span>
-        <span v-if="!canGovern" class="muted">You are currently viewing this room without governance voting rights.</span>
-      </div>
-      <div class="action-row">
-        <button v-if="canGovern && canSurrender" class="secondary" @click="surrenderMatch">Surrender</button>
-        <button v-if="canGovern && canVoteEnd" class="secondary" @click="voteEndMatch">
-          {{ hasEndVote ? "Retract End Vote" : "Vote End Match" }}
-        </button>
-        <button v-if="canGovern && canVoteRematch" @click="voteRematch">
-          {{ hasRematchVote ? "Retract Rematch Vote" : "Vote Rematch" }}
-        </button>
-      </div>
-    </section>
+          <section v-if="store.room && store.match" class="panel governance-bar">
+            <div class="governance-copy">
+              <strong>Match controls</strong>
+              <span class="muted">{{ reconnectStatus }}</span>
+              <span class="muted">End votes {{ governance.endVotes.length }}/{{ governance.endVoteEligibleCount }}</span>
+              <span v-if="canVoteRematch" class="muted">Rematch votes {{ governance.rematchVotes.length }}/{{ governance.rematchVoteEligibleCount }}</span>
+              <span v-if="!canGovern" class="muted">You are currently viewing this room without governance voting rights.</span>
+            </div>
+            <div class="action-row">
+              <button v-if="canGovern && canSurrender" class="secondary" @click="surrenderMatch">Surrender</button>
+              <button v-if="canGovern && canVoteEnd" class="secondary" @click="voteEndMatch">
+                {{ hasEndVote ? "Retract End Vote" : "Vote End Match" }}
+              </button>
+              <button v-if="canGovern && canVoteRematch" @click="voteRematch">
+                {{ hasRematchVote ? "Retract Rematch Vote" : "Vote Rematch" }}
+              </button>
+            </div>
+          </section>
 
-    <component
-      :is="liveComponent"
-      v-if="hasLivePayload"
-      :room="store.room"
-      :match="store.match"
-      :game-view="store.gameView"
-      :interactive-profile-id="interactiveProfileId"
-      :spectator-count="spectatorCount"
-      @place="placeMove"
-    />
-    <section v-else class="panel match-state-panel">
-      <div class="match-state-panel__copy">
-        <p class="eyebrow">Match state</p>
-        <h2>{{ stateTitle }}</h2>
-        <p class="muted">{{ stateDescription }}</p>
+          <component
+            :is="liveComponent"
+            v-if="hasLivePayload"
+            :room="store.room"
+            :match="store.match"
+            :game-view="store.gameView"
+            :interactive-profile-id="interactiveProfileId"
+            :spectator-count="spectatorCount"
+            @place="placeMove"
+          />
+          <section v-else class="panel match-state-panel">
+            <div class="match-state-panel__copy">
+              <p class="eyebrow">Match state</p>
+              <h2>{{ stateTitle }}</h2>
+              <p class="muted">{{ stateDescription }}</p>
+            </div>
+            <div class="action-row">
+              <button v-if="canOpenRoom" class="secondary" @click="backToRoom">Back to room</button>
+              <button class="danger" @click="leaveRoom">Exit to lobby</button>
+            </div>
+          </section>
+        </div>
       </div>
-      <div class="action-row">
-        <button v-if="canOpenRoom" class="secondary" @click="backToRoom">Back to room</button>
-        <button class="danger" @click="leaveRoom">Exit to lobby</button>
-      </div>
-    </section>
+    </div>
   </section>
 
   <RoomChatFab />

@@ -2275,3 +2275,63 @@ Active profile
   - world chat must stay distinct from room chat in store/events/UI
   - chat should not load or render for anonymous/no-profile users
   - history must be bounded to avoid heavy bootstrap payloads
+
+## Extension: Small-Screen CSS Scale-to-Fit for Room, Match, and Replay
+- **Status**: APPROVED
+- **Approved-By**: Viet
+- **Approved-On**: 2026-03-13
+- **Task**: Add route-level CSS scale-to-fit behavior for room, live match, and replay screens so short laptop viewports keep all critical controls visible without relying on browser zoom.
+- **Location**:
+  - `/Users/maihoangviet/Projects/blokus/src/platform/client/views/RoomView.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/platform/client/views/MatchView.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/platform/client/views/MatchReplayView.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/platform/client/composables/useViewportFit.js`
+  - `/Users/maihoangviet/Projects/blokus/src/style.css`
+  - `/Users/maihoangviet/Projects/blokus/plan_todo/codex/SOW_0007_multi_board_game_platform_refactor.md`
+- **Why**: The fixed-viewport shell still breaks on short laptop screens. On `1024x600`, room staging collapses the main table area behind clipped ancestors, and replay/live routes can lose visible controls. The UI needs route-scoped CSS scaling that preserves the desktop structure while fitting inside the current viewport.
+- **As-Is Diagram (ASCII)**:
+```text
+short laptop viewport
+  -> fixed-height route shell
+  -> route content keeps desktop footprint
+  -> some panels collapse or clip
+  -> no safe scrollbar path to hidden controls
+
+Result:
+  users can lose columns, buttons, or replay controls
+```
+- **To-Be Diagram (ASCII)**:
+```text
+short laptop viewport
+  -> route viewport measured
+  -> route content measured
+  -> scale = min(width-fit, height-fit, 1)
+  -> content transformed with CSS scale()
+  -> internal scroll regions remain for dense sub-panels
+
+Result:
+  room/match/replay stay fully reachable without browser zoom
+```
+- **Deliverables**:
+  - append a shared client composable that measures viewport/content and computes route fit scale
+  - wrap `RoomView`, `MatchView`, and `MatchReplayView` with route-fit shell/stage/content structure
+  - apply CSS custom-property driven scaling with `transform: scale(...)`
+  - preserve local scroll areas like staging tables, score strips, and move lists
+  - add compact short-height density rules before scale becomes aggressive
+- **Done Criteria**:
+  - room staging remains visible and usable on `1024x600`
+  - match/replay controls remain visible and clickable on short laptop viewports
+  - no document-level scrollbar is introduced on desktop routes
+  - floating overlays remain outside the scaled content and keep working
+  - `npm run build` passes
+- **Out-of-Scope**:
+  - browser zoom behavior
+  - gameplay rule changes
+  - server/API changes
+  - home/game-lobby route scaling
+- **Proposed-By**: Codex GPT-5
+- **plan**: multi-board-game-platform-refactor-v1
+- **Cautions / Risks**:
+  - transform-based scaling must not break click targets or overlay positioning
+  - route-fit wrappers must not remove intentional inner scrollbars
+  - the scale floor must preserve readability on very short screens

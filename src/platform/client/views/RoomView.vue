@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import RoomChatFab from "../components/RoomChatFab.vue";
 import RoomChatPanel from "../components/RoomChatPanel.vue";
+import { useViewportFit } from "../composables/useViewportFit";
 import { getGameClient } from "../registry";
 import { useAppStore } from "../store";
 
@@ -36,6 +37,7 @@ const spectatorSummaryLabel = computed(() => `Spectators: ${spectatorMembers.val
 const spectatorButtonRef = ref(null);
 const spectatorPopupOpen = ref(false);
 const spectatorPopupStyle = ref({});
+const { viewportRef, contentRef, stageStyle, scheduleMeasure } = useViewportFit();
 let spectatorCloseTimer = null;
 
 function formatLastOnline(member) {
@@ -152,6 +154,7 @@ onMounted(async () => {
   }
   window.addEventListener("resize", updateSpectatorPopupPosition);
   window.addEventListener("scroll", updateSpectatorPopupPosition, true);
+  scheduleMeasure();
 });
 
 onBeforeUnmount(() => {
@@ -162,177 +165,183 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <section v-if="store.room" class="route-shell room-view room-view--staging">
-    <header class="room-header room-control-bar panel">
-      <div class="room-header-controls">
-        <button v-if="canToggleReady" class="room-control-btn room-control-btn--ready" @click="setReady(!currentMember.isReady)">{{ currentReadyLabel }}</button>
-        <button v-if="isHost && store.room.phase === 'PREPARE'" class="room-control-btn room-control-btn--start" :disabled="!canLaunch" @click="startRoom">Start</button>
-        <button v-if="canLeaveSeat" class="room-control-btn room-control-btn--seat secondary" @click="leaveSeat">Leave seat</button>
-        <button class="room-control-btn room-control-btn--leave secondary" @click="leaveRoom">Leave room</button>
-        <button v-if="isHost && store.room.phase === 'FINISHED'" class="room-control-btn room-control-btn--rematch" @click="store.rematch">Rematch lobby</button>
-      </div>
-    </header>
-
-    <section class="room-staging-layout">
-      <section class="room-primary">
-        <article v-if="store.room.phase === 'PREPARE' && store.gameView && stagingTable" class="panel lobby-panel">
-          <div class="section-head">
-            <div>
-              <h2>Match Staging</h2>
-              <p class="muted">Use the universal staging table to claim slots, configure setup fields, and launch the room.</p>
+  <section v-if="store.room" class="route-shell room-view room-view--staging viewport-fit-route">
+    <div ref="viewportRef" class="route-fit-shell">
+      <div class="route-fit-stage" :style="stageStyle">
+        <div ref="contentRef" class="route-fit-content room-view-content">
+          <header class="room-header room-control-bar panel">
+            <div class="room-header-controls">
+              <button v-if="canToggleReady" class="room-control-btn room-control-btn--ready" @click="setReady(!currentMember.isReady)">{{ currentReadyLabel }}</button>
+              <button v-if="isHost && store.room.phase === 'PREPARE'" class="room-control-btn room-control-btn--start" :disabled="!canLaunch" @click="startRoom">Start</button>
+              <button v-if="canLeaveSeat" class="room-control-btn room-control-btn--seat secondary" @click="leaveSeat">Leave seat</button>
+              <button class="room-control-btn room-control-btn--leave secondary" @click="leaveRoom">Leave room</button>
+              <button v-if="isHost && store.room.phase === 'FINISHED'" class="room-control-btn room-control-btn--rematch" @click="store.rematch">Rematch lobby</button>
             </div>
-            <span class="phase-pill">{{ store.room.code }}</span>
-          </div>
+          </header>
 
-          <div class="staging-shell">
-            <section class="room-subsection staging-table-shell">
-              <div class="panel-scroll room-table-wrap">
-                <table class="room-table staging-table">
-                  <thead>
-                    <tr>
-                      <th>Slot</th>
-                      <th>Player</th>
-                      <th>Control</th>
-                      <th>Ready</th>
-                      <th>Status</th>
-                      <th v-for="column in stagingTable.extraColumns" :key="column.key">{{ column.label }}</th>
-                      <th>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr v-for="row in stagingTable.rows" :key="row.seatIndex">
-                      <td><strong>{{ row.slotLabel }}</strong></td>
-                      <td>
-                        <div class="staging-player-cell">
-                          <strong>{{ row.playerLabel }}</strong>
-                          <span v-if="row.player?.isHost" class="phase-pill">Host</span>
-                        </div>
-                      </td>
-                      <td>{{ row.controlLabel }}</td>
-                      <td>{{ row.readyLabel }}</td>
-                      <td>{{ row.statusLabel }}</td>
-                      <td>
-                        <div v-if="row.colorCell.type === 'picker'" class="staging-color-picker">
-                          <button
-                            v-for="option in row.colorCell.options"
-                            :key="option.colorIndex"
-                            class="color-picker-chip"
-                            :class="{ active: row.colorCell.selectedColorIndex === option.colorIndex, blocked: option.blocked }"
-                            :style="{ '--seat-color': option.fill }"
-                            :disabled="option.disabled"
-                            @click="applySetupPatch(option.patch)"
-                          >
-                            <span class="seat-color-dot" :style="{ '--seat-color': option.fill }" />
-                            <span>{{ option.name }}</span>
-                          </button>
-                        </div>
-                        <span v-else class="muted">{{ row.colorCell.text }}</span>
-                      </td>
-                      <td>{{ row.cornerCell.text }}</td>
-                      <td>
-                        <div class="room-table-actions">
-                          <button v-if="row.canClaimSeat && currentMember?.role !== 'player'" class="secondary" @click="claimSeat(row.seatIndex)">Take seat</button>
-                          <span v-else-if="row.canToggleReady" class="muted">Use header controls</span>
-                          <span v-else class="muted">Waiting</span>
-                        </div>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
+          <section class="room-staging-layout">
+            <section class="room-primary">
+              <article v-if="store.room.phase === 'PREPARE' && store.gameView && stagingTable" class="panel lobby-panel">
+                <div class="section-head">
+                  <div>
+                    <h2>Match Staging</h2>
+                    <p class="muted">Use the universal staging table to claim slots, configure setup fields, and launch the room.</p>
+                  </div>
+                  <span class="phase-pill">{{ store.room.code }}</span>
+                </div>
+
+                <div class="staging-shell">
+                  <section class="room-subsection staging-table-shell">
+                    <div class="panel-scroll room-table-wrap">
+                      <table class="room-table staging-table">
+                        <thead>
+                          <tr>
+                            <th>Slot</th>
+                            <th>Player</th>
+                            <th>Control</th>
+                            <th>Ready</th>
+                            <th>Status</th>
+                            <th v-for="column in stagingTable.extraColumns" :key="column.key">{{ column.label }}</th>
+                            <th>Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr v-for="row in stagingTable.rows" :key="row.seatIndex">
+                            <td><strong>{{ row.slotLabel }}</strong></td>
+                            <td>
+                              <div class="staging-player-cell">
+                                <strong>{{ row.playerLabel }}</strong>
+                                <span v-if="row.player?.isHost" class="phase-pill">Host</span>
+                              </div>
+                            </td>
+                            <td>{{ row.controlLabel }}</td>
+                            <td>{{ row.readyLabel }}</td>
+                            <td>{{ row.statusLabel }}</td>
+                            <td>
+                              <div v-if="row.colorCell.type === 'picker'" class="staging-color-picker">
+                                <button
+                                  v-for="option in row.colorCell.options"
+                                  :key="option.colorIndex"
+                                  class="color-picker-chip"
+                                  :class="{ active: row.colorCell.selectedColorIndex === option.colorIndex, blocked: option.blocked }"
+                                  :style="{ '--seat-color': option.fill }"
+                                  :disabled="option.disabled"
+                                  @click="applySetupPatch(option.patch)"
+                                >
+                                  <span class="seat-color-dot" :style="{ '--seat-color': option.fill }" />
+                                  <span>{{ option.name }}</span>
+                                </button>
+                              </div>
+                              <span v-else class="muted">{{ row.colorCell.text }}</span>
+                            </td>
+                            <td>{{ row.cornerCell.text }}</td>
+                            <td>
+                              <div class="room-table-actions">
+                                <button v-if="row.canClaimSeat && currentMember?.role !== 'player'" class="secondary" @click="claimSeat(row.seatIndex)">Take seat</button>
+                                <span v-else-if="row.canToggleReady" class="muted">Use header controls</span>
+                                <span v-else class="muted">Waiting</span>
+                              </div>
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </section>
+                </div>
+              </article>
+
+              <article v-else class="panel panel-fill">
+                <div class="section-head">
+                  <div>
+                    <h2>{{ store.room.phase === "FINISHED" ? "Room Ready For Rematch" : "Room State" }}</h2>
+                    <p class="muted">This route is for staging and room lifecycle only. Live play and replay open on match routes.</p>
+                  </div>
+                  <span class="phase-pill">{{ store.room.phase }}</span>
+                </div>
+
+                <div class="room-state-grid">
+                  <article class="room-subsection stack">
+                    <h3>Members</h3>
+                    <div class="panel-scroll list">
+                      <div v-for="member in store.room.members" :key="member.id" class="list-row static">
+                        <span>{{ member.name }}</span>
+                        <strong>{{ member.role }} · {{ member.connectionState }}</strong>
+                      </div>
+                    </div>
+                  </article>
+
+                  <article class="room-subsection stack">
+                    <h3>Latest Match</h3>
+                    <p class="muted">Current match: {{ store.room.currentMatchId || "None" }}</p>
+                    <p class="muted">Status: {{ store.room.currentMatchStatus || "No active match" }}</p>
+                    <div class="action-row">
+                      <button
+                        v-if="store.room.currentMatchId"
+                        class="secondary"
+                        @click="router.push(`/matches/${store.room.currentMatchId}`)"
+                      >
+                        Open match
+                      </button>
+                      <button
+                        v-if="store.room.currentMatchId"
+                        class="secondary"
+                        @click="openReplay(store.room.currentMatchId)"
+                      >
+                        Replay
+                      </button>
+                    </div>
+                  </article>
+                </div>
+              </article>
             </section>
-          </div>
-        </article>
 
-        <article v-else class="panel panel-fill">
-          <div class="section-head">
-            <div>
-              <h2>{{ store.room.phase === "FINISHED" ? "Room Ready For Rematch" : "Room State" }}</h2>
-              <p class="muted">This route is for staging and room lifecycle only. Live play and replay open on match routes.</p>
-            </div>
-            <span class="phase-pill">{{ store.room.phase }}</span>
-          </div>
-
-          <div class="room-state-grid">
-            <article class="room-subsection stack">
-              <h3>Members</h3>
-              <div class="panel-scroll list">
-                <div v-for="member in store.room.members" :key="member.id" class="list-row static">
-                  <span>{{ member.name }}</span>
-                  <strong>{{ member.role }} · {{ member.connectionState }}</strong>
+            <aside class="panel room-history-panel">
+              <div class="section-head">
+                <div>
+                  <h2>Recent Room Matches</h2>
+                  <p class="muted">{{ roomHistory.length }} finished matches</p>
                 </div>
               </div>
-            </article>
 
-            <article class="room-subsection stack">
-              <h3>Latest Match</h3>
-              <p class="muted">Current match: {{ store.room.currentMatchId || "None" }}</p>
-              <p class="muted">Status: {{ store.room.currentMatchStatus || "No active match" }}</p>
-              <div class="action-row">
+              <div v-if="roomHistory.length" class="panel-scroll list">
                 <button
-                  v-if="store.room.currentMatchId"
-                  class="secondary"
-                  @click="router.push(`/matches/${store.room.currentMatchId}`)"
+                  v-for="historyMatch in roomHistory"
+                  :key="historyMatch.id"
+                  class="list-row"
+                  @click="openReplay(historyMatch.id)"
                 >
-                  Open match
-                </button>
-                <button
-                  v-if="store.room.currentMatchId"
-                  class="secondary"
-                  @click="openReplay(store.room.currentMatchId)"
-                >
-                  Replay
+                  <span>{{ historyMatch.winnerName || "No winner" }} · {{ historyMatch.finishedAt || historyMatch.createdAt }}</span>
+                  <strong>{{ historyMatch.moveCount }} moves</strong>
                 </button>
               </div>
-            </article>
-          </div>
-        </article>
-      </section>
+              <p v-else class="muted">Finished matches from this room will appear here.</p>
+            </aside>
+          </section>
 
-      <aside class="panel room-history-panel">
-        <div class="section-head">
-          <div>
-            <h2>Recent Room Matches</h2>
-            <p class="muted">{{ roomHistory.length }} finished matches</p>
-          </div>
-        </div>
-
-        <div v-if="roomHistory.length" class="panel-scroll list">
-          <button
-            v-for="historyMatch in roomHistory"
-            :key="historyMatch.id"
-            class="list-row"
-            @click="openReplay(historyMatch.id)"
-          >
-            <span>{{ historyMatch.winnerName || "No winner" }} · {{ historyMatch.finishedAt || historyMatch.createdAt }}</span>
-            <strong>{{ historyMatch.moveCount }} moves</strong>
-          </button>
-        </div>
-        <p v-else class="muted">Finished matches from this room will appear here.</p>
-      </aside>
-    </section>
-
-    <section class="panel spectator-strip-panel">
-      <div class="spectator-strip">
-        <div class="spectator-strip-copy">
-          <strong>{{ spectatorSummaryLabel }}</strong>
-          <span class="muted">Hover the button to inspect spectator presence.</span>
-        </div>
-        <div class="spectator-hover">
-          <button
-            ref="spectatorButtonRef"
-            class="secondary"
-            :disabled="!spectatorMembers.length"
-            @mouseenter="openSpectatorPopup"
-            @mouseleave="closeSpectatorPopupSoon"
-            @focus="openSpectatorPopup"
-            @blur="closeSpectatorPopupSoon"
-          >
-            View spectators
-          </button>
+          <section class="panel spectator-strip-panel">
+            <div class="spectator-strip">
+              <div class="spectator-strip-copy">
+                <strong>{{ spectatorSummaryLabel }}</strong>
+                <span class="muted">Hover the button to inspect spectator presence.</span>
+              </div>
+              <div class="spectator-hover">
+                <button
+                  ref="spectatorButtonRef"
+                  class="secondary"
+                  :disabled="!spectatorMembers.length"
+                  @mouseenter="openSpectatorPopup"
+                  @mouseleave="closeSpectatorPopupSoon"
+                  @focus="openSpectatorPopup"
+                  @blur="closeSpectatorPopupSoon"
+                >
+                  View spectators
+                </button>
+              </div>
+            </div>
+          </section>
         </div>
       </div>
-    </section>
+    </div>
   </section>
 
   <section v-else class="panel">
