@@ -150,6 +150,24 @@ db.exec(`
     message text not null,
     created_at text not null
   );
+
+  create table if not exists room_message_reactions (
+    id text primary key,
+    message_id text not null,
+    profile_id text not null,
+    emoji text not null,
+    created_at text not null,
+    unique(message_id, profile_id)
+  );
+
+  create table if not exists world_message_reactions (
+    id text primary key,
+    message_id text not null,
+    profile_id text not null,
+    emoji text not null,
+    created_at text not null,
+    unique(message_id, profile_id)
+  );
 `);
 
 function columnExists(tableName, columnName) {
@@ -206,6 +224,12 @@ db.exec(`
 
   create index if not exists idx_reconnect_leases_room_status
   on reconnect_leases(room_id, status);
+
+  create index if not exists idx_room_message_reactions_message
+  on room_message_reactions(message_id);
+
+  create index if not exists idx_world_message_reactions_message
+  on world_message_reactions(message_id);
 `);
 
 db.prepare(`
@@ -248,6 +272,7 @@ const ROOM_CHAT_HISTORY_LIMIT = 300;
 const ROOM_CHAT_MESSAGE_MAX_LENGTH = 1000;
 const WORLD_CHAT_HISTORY_LIMIT = 300;
 const WORLD_CHAT_MESSAGE_MAX_LENGTH = 1000;
+const CHAT_REACTION_EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "😡"];
 db.prepare("update rooms set phase = ? where phase = 'LOBBY'").run(ROOM_PHASES.PREPARE);
 
 function nowIso() {
@@ -570,35 +595,107 @@ function getLatestMatch(roomId) {
   `).get(roomId) || null;
 }
 
-function getRoomMessages(roomId, limit = ROOM_CHAT_HISTORY_LIMIT) {
+function normalizeChatReactionEmoji(value) {
+  const emoji = String(value || "").trim();
+  return CHAT_REACTION_EMOJIS.includes(emoji) ? emoji : "";
+}
+
+function buildChatMessage(row, reactions = []) {
+  return {
+    id: row.id,
+    profileId: row.profile_id,
+    profileName: row.profile_name,
+    message: row.message,
+    createdAt: row.created_at,
+    reactions
+  };
+}
+
+function buildReactionSummary(rows, viewerProfileId) {
+  const counts = new Map();
+  let viewerEmoji = "";
+  rows.forEach((row) => {
+    const emoji = normalizeChatReactionEmoji(row.emoji);
+    if (!emoji) return;
+    counts.set(emoji, (counts.get(emoji) || 0) + 1);
+    if (viewerProfileId && row.profile_id === viewerProfileId) {
+      viewerEmoji = emoji;
+    }
+  });
+  return CHAT_REACTION_EMOJIS.flatMap((emoji) => {
+    const count = counts.get(emoji) || 0;
+    if (!count) return [];
+    return [{
+      emoji,
+      count,
+      reactedByMe: viewerEmoji === emoji
+    }];
+  });
+}
+
+function inClausePlaceholders(values) {
+  return values.map(() => "?").join(", ");
+}
+
+function getReactionRows(tableName, messageIds) {
+  if (!messageIds.length) return [];
   return db.prepare(`
+    select message_id, profile_id, emoji
+    from ${tableName}
+    where message_id in (${inClausePlaceholders(messageIds)})
+  `).all(...messageIds);
+}
+
+function enrichMessagesWithReactions(rows, reactionTableName, viewerProfileId) {
+  if (!rows.length) return [];
+  const messageIds = rows.map((row) => row.id);
+  const reactionRows = getReactionRows(reactionTableName, messageIds);
+  const reactionsByMessageId = new Map(messageIds.map((messageId) => [messageId, []]));
+  reactionRows.forEach((row) => {
+    reactionsByMessageId.get(row.message_id)?.push(row);
+  });
+  return rows.map((row) => buildChatMessage(
+    row,
+    buildReactionSummary(reactionsByMessageId.get(row.id) || [], viewerProfileId)
+  ));
+}
+
+function getRoomMessages(roomId, viewerProfileId = null, limit = ROOM_CHAT_HISTORY_LIMIT) {
+  const rows = db.prepare(`
     select *
     from room_messages
     where room_id = ?
     order by created_at desc
     limit ?
-  `).all(roomId, limit).reverse().map((row) => ({
-    id: row.id,
-    profileId: row.profile_id,
-    profileName: row.profile_name,
-    message: row.message,
-    createdAt: row.created_at
-  }));
+  `).all(roomId, limit).reverse();
+  return enrichMessagesWithReactions(rows, "room_message_reactions", viewerProfileId);
 }
 
-function getWorldMessages(limit = WORLD_CHAT_HISTORY_LIMIT) {
-  return db.prepare(`
+function getWorldMessages(viewerProfileId = null, limit = WORLD_CHAT_HISTORY_LIMIT) {
+  const rows = db.prepare(`
     select *
     from world_messages
     order by created_at desc
     limit ?
-  `).all(limit).reverse().map((row) => ({
-    id: row.id,
-    profileId: row.profile_id,
-    profileName: row.profile_name,
-    message: row.message,
-    createdAt: row.created_at
-  }));
+  `).all(limit).reverse();
+  return enrichMessagesWithReactions(rows, "world_message_reactions", viewerProfileId);
+}
+
+function getMessageReactionSummary(tableName, messageId, viewerProfileId = null) {
+  const rows = db.prepare(`
+    select profile_id, emoji
+    from ${tableName}
+    where message_id = ?
+  `).all(messageId);
+  return buildReactionSummary(rows, viewerProfileId);
+}
+
+function getRoomMessageReactionSummary(messageId, viewerProfileId = null) {
+  return getMessageReactionSummary("room_message_reactions", messageId, viewerProfileId);
+}
+
+function getWorldMessageReactionSummary(messageId, viewerProfileId = null) {
+  return getMessageReactionSummary("world_message_reactions", messageId, viewerProfileId);
 }
 
 function insertRoomMessage(room, session, rawMessage) {
@@ -623,7 +720,8 @@ function insertRoomMessage(room, session, rawMessage) {
     profileId: session.profile_id,
     profileName: session.profile_name,
     message: trimmedMessage,
-    createdAt: nowIso()
+    createdAt: nowIso(),
+    reactions: []
   };
   db.prepare(`
     insert into room_messages (id, room_id, profile_id, profile_name, message, created_at)
@@ -655,7 +753,8 @@ function insertWorldMessage(session, rawMessage) {
     profileId: session.profile_id,
     profileName: session.profile_name,
     message: trimmedMessage,
-    createdAt: nowIso()
+    createdAt: nowIso(),
+    reactions: []
   };
   db.prepare(`
     insert into world_messages (id, profile_id, profile_name, message, created_at)
@@ -668,6 +767,90 @@ function insertWorldMessage(session, rawMessage) {
     chatMessage.createdAt
   );
   return chatMessage;
+}
+
+function reactToRoomMessage(room, session, messageId, emoji) {
+  const normalizedEmoji = normalizeChatReactionEmoji(emoji);
+  if (!normalizedEmoji) {
+    throw new Error("Unsupported reaction.");
+  }
+  const membership = db.prepare(`
+    select id
+    from room_members
+    where room_id = ? and profile_id = ?
+  `).get(room.id, session.profile_id);
+  if (!membership) {
+    throw new Error("You must be in the room to react.");
+  }
+  const message = db.prepare(`
+    select id
+    from room_messages
+    where id = ? and room_id = ?
+  `).get(messageId, room.id);
+  if (!message) {
+    throw new Error("Message not found.");
+  }
+  const existing = db.prepare(`
+    select id, emoji
+    from room_message_reactions
+    where message_id = ? and profile_id = ?
+  `).get(messageId, session.profile_id);
+  if (existing?.emoji === normalizedEmoji) {
+    db.prepare("delete from room_message_reactions where id = ?").run(existing.id);
+  } else if (existing) {
+    db.prepare(`
+      update room_message_reactions
+      set emoji = ?, created_at = ?
+      where id = ?
+    `).run(normalizedEmoji, nowIso(), existing.id);
+  } else {
+    db.prepare(`
+      insert into room_message_reactions (id, message_id, profile_id, emoji, created_at)
+      values (?, ?, ?, ?, ?)
+    `).run(makeId("room_message_reaction"), messageId, session.profile_id, normalizedEmoji, nowIso());
+  }
+  return {
+    messageId,
+    roomCode: room.code
+  };
+}
+
+function reactToWorldMessage(session, messageId, emoji) {
+  if (!session?.profile_id) {
+    throw new Error("Select a profile before reacting.");
+  }
+  const normalizedEmoji = normalizeChatReactionEmoji(emoji);
+  if (!normalizedEmoji) {
+    throw new Error("Unsupported reaction.");
+  }
+  const message = db.prepare(`
+    select id
+    from world_messages
+    where id = ?
+  `).get(messageId);
+  if (!message) {
+    throw new Error("Message not found.");
+  }
+  const existing = db.prepare(`
+    select id, emoji
+    from world_message_reactions
+    where message_id = ? and profile_id = ?
+  `).get(messageId, session.profile_id);
+  if (existing?.emoji === normalizedEmoji) {
+    db.prepare("delete from world_message_reactions where id = ?").run(existing.id);
+  } else if (existing) {
+    db.prepare(`
+      update world_message_reactions
+      set emoji = ?, created_at = ?
+      where id = ?
+    `).run(normalizedEmoji, nowIso(), existing.id);
+  } else {
+    db.prepare(`
+      insert into world_message_reactions (id, message_id, profile_id, emoji, created_at)
+      values (?, ?, ?, ?, ?)
+    `).run(makeId("world_message_reaction"), messageId, session.profile_id, normalizedEmoji, nowIso());
+  }
+  return { messageId };
 }
 
 function getActiveReconnectLease(roomId, profileId) {
@@ -2116,14 +2299,39 @@ function emitRoomChatInit(roomCode, socket) {
   if (!room) return;
   socket.emit("state:room-chat:init", {
     roomCode,
-    messages: getRoomMessages(room.id)
+    messages: getRoomMessages(room.id, socket.data.session?.profile_id || null)
   });
 }
 
 function emitWorldChatInit(socket) {
   if (!socket.data.session?.profile_id) return;
   socket.emit("state:world-chat:init", {
-    messages: getWorldMessages()
+    messages: getWorldMessages(socket.data.session.profile_id)
+  });
+}
+
+async function emitRoomChatReactionUpdate(roomCode, messageId) {
+  const room = getRoomByCode(roomCode);
+  if (!room) return;
+  const sockets = await io.in(roomCode).fetchSockets();
+  sockets.forEach((socket) => {
+    socket.emit("state:room-chat:reaction", {
+      roomCode,
+      messageId,
+      reactions: getRoomMessageReactionSummary(messageId, socket.data.session?.profile_id || null)
+    });
+  });
+}
+
+async function emitWorldChatReactionUpdate(messageId) {
+  const sockets = await io.fetchSockets();
+  sockets.forEach((socket) => {
+    const viewerProfileId = socket.data.session?.profile_id || null;
+    if (!viewerProfileId) return;
+    socket.emit("state:world-chat:reaction", {
+      messageId,
+      reactions: getWorldMessageReactionSummary(messageId, viewerProfileId)
+    });
   });
 }
 
@@ -2192,7 +2400,7 @@ app.get("/api/bootstrap", (req, res) => {
     rooms: listPublicRooms(activeSession?.room_code ? getRoomByCode(activeSession.room_code)?.game_type || null : null),
     leaderboard: buildLeaderboard(),
     recentMatches: buildRecentFinishedMatches(),
-    worldChatMessages: activeSession?.profile_id ? getWorldMessages() : [],
+    worldChatMessages: activeSession?.profile_id ? getWorldMessages(activeSession.profile_id) : [],
     room: activeSession?.room_code ? buildRoomSnapshot(activeSession.room_code) : null,
     match: activeSession?.room_code ? buildMatchSnapshot(activeSession.room_code) : null,
     gameView: activeSession?.room_code ? buildGameView(activeSession.room_code, activeSession.profile_id) : null
@@ -2301,7 +2509,7 @@ app.post("/api/session/select-profile", (req, res) => {
     session: sessionPayload(session),
     profiles: listProfilesForBrowser(browserContainer.token),
     rooms: listPublicRooms(),
-    worldChatMessages: getWorldMessages(),
+    worldChatMessages: getWorldMessages(session.profile_id),
     room: session.room_code ? buildRoomSnapshot(session.room_code) : null,
     match: session.room_code ? buildMatchSnapshot(session.room_code) : null,
     gameView: session.room_code ? buildGameView(session.room_code, session.profile_id) : null
@@ -2480,11 +2688,36 @@ io.on("connection", (socket) => {
     });
   });
 
+  socket.on("room:chat:react", ({ roomCode, messageId, emoji }, ack) => {
+    ackHandler(ack, () => {
+      const session = requireSession(socket);
+      const targetRoomCode = String(roomCode || session.room_code || "").toUpperCase();
+      const room = getRoomByCode(targetRoomCode);
+      if (!room) throw new Error("Room not found.");
+      const reactionUpdate = reactToRoomMessage(room, session, String(messageId || ""), emoji);
+      emitRoomChatReactionUpdate(targetRoomCode, reactionUpdate.messageId).catch((error) => {
+        console.error(error);
+      });
+      return {};
+    });
+  });
+
   socket.on("world:chat:send", ({ message }, ack) => {
     ackHandler(ack, () => {
       const session = requireSession(socket);
       const chatMessage = insertWorldMessage(session, message);
       io.emit("state:world-chat:message", { message: chatMessage });
+      return {};
+    });
+  });
+
+  socket.on("world:chat:react", ({ messageId, emoji }, ack) => {
+    ackHandler(ack, () => {
+      const session = requireSession(socket);
+      const reactionUpdate = reactToWorldMessage(session, String(messageId || ""), emoji);
+      emitWorldChatReactionUpdate(reactionUpdate.messageId).catch((error) => {
+        console.error(error);
+      });
       return {};
     });
   });

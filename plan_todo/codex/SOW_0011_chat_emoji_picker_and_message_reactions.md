@@ -1,6 +1,8 @@
 # SOW_0011_chat_emoji_picker_and_message_reactions
 
-- **Status**: PROPOSED
+- **Status**: APPROVED
+- **Approved-By**: Viet
+- **Approved-On**: 2026-03-13
 - **Task**: Add emoji insertion in chat composers and Facebook/Zalo-style message reactions for both room chat and world chat.
 - **Location**:
   - `/Users/maihoangviet/Projects/blokus/src/platform/client/components/RoomChatPanel.vue`

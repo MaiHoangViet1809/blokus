@@ -9,12 +9,53 @@ const CLIENT_INSTANCE_STORAGE_KEY = "blokus-client-instance-id";
 const LEGACY_BROWSER_TOKEN_KEY = "blokus-device-token";
 const LEGACY_SESSION_TOKEN_KEY = "blokus-session-token";
 const ACTIVE_GAME_STORAGE_KEY = "board-platform-active-game";
+const CHAT_REACTION_EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "😡"];
 
 function makeClientInstanceId() {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
     return `client_${crypto.randomUUID()}`;
   }
   return `client_${Math.random().toString(16).slice(2)}${Date.now().toString(16)}`;
+}
+
+function normalizeChatReactions(reactions) {
+  if (!Array.isArray(reactions)) return [];
+  const entriesByEmoji = new Map();
+  reactions.forEach((entry) => {
+    const emoji = String(entry?.emoji || "").trim();
+    if (!CHAT_REACTION_EMOJIS.includes(emoji)) return;
+    const count = Number(entry?.count || 0);
+    if (count <= 0) return;
+    entriesByEmoji.set(emoji, {
+      emoji,
+      count,
+      reactedByMe: !!entry?.reactedByMe
+    });
+  });
+  return CHAT_REACTION_EMOJIS.flatMap((emoji) => entriesByEmoji.has(emoji) ? [entriesByEmoji.get(emoji)] : []);
+}
+
+function normalizeChatMessage(message) {
+  if (!message) return null;
+  return {
+    ...message,
+    reactions: normalizeChatReactions(message.reactions)
+  };
+}
+
+function normalizeChatMessages(messages) {
+  return Array.isArray(messages) ? messages.map(normalizeChatMessage).filter(Boolean) : [];
+}
+
+function patchChatMessageReactions(messages, messageId, reactions) {
+  return messages.map((message) => (
+    message.id === messageId
+      ? {
+        ...message,
+        reactions: normalizeChatReactions(reactions)
+      }
+      : message
+  ));
 }
 
 export const useAppStore = defineStore("app", {
@@ -130,7 +171,7 @@ export const useAppStore = defineStore("app", {
       this.room = data.room || null;
       this.match = data.match || null;
       this.gameView = data.gameView || null;
-      this.worldChatMessages = this.session?.profileId ? (data.worldChatMessages || []) : [];
+      this.worldChatMessages = this.session?.profileId ? normalizeChatMessages(data.worldChatMessages) : [];
       if (!this.session?.profileId) {
         this.worldChatOpen = false;
         this.worldChatUnreadCount = 0;
@@ -221,28 +262,41 @@ export const useAppStore = defineStore("app", {
           const roomCode = String(payload?.roomCode || "").trim().toUpperCase();
           if (!roomCode) return;
           this.roomChatRoomCode = roomCode;
-          this.roomChatMessages = payload.messages || [];
+          this.roomChatMessages = normalizeChatMessages(payload.messages);
           this.roomChatUnreadCount = 0;
         });
         this.socket.on("state:room-chat:message", (payload) => {
           const roomCode = String(payload?.roomCode || "").trim().toUpperCase();
           if (!roomCode || roomCode !== this.roomChatRoomCode || !payload?.message) return;
-          this.roomChatMessages = [...this.roomChatMessages, payload.message];
-          if (!this.roomChatOpen && payload.message.profileId !== this.session?.profileId) {
+          const message = normalizeChatMessage(payload.message);
+          if (!message) return;
+          this.roomChatMessages = [...this.roomChatMessages, message];
+          if (!this.roomChatOpen && message.profileId !== this.session?.profileId) {
             this.roomChatUnreadCount += 1;
           }
         });
+        this.socket.on("state:room-chat:reaction", (payload) => {
+          const roomCode = String(payload?.roomCode || "").trim().toUpperCase();
+          if (!roomCode || roomCode !== this.roomChatRoomCode || !payload?.messageId) return;
+          this.roomChatMessages = patchChatMessageReactions(this.roomChatMessages, payload.messageId, payload.reactions);
+        });
         this.socket.on("state:world-chat:init", (payload) => {
           if (!this.session?.profileId) return;
-          this.worldChatMessages = payload?.messages || [];
+          this.worldChatMessages = normalizeChatMessages(payload?.messages);
           this.worldChatUnreadCount = 0;
         });
         this.socket.on("state:world-chat:message", (payload) => {
           if (!this.session?.profileId || !payload?.message) return;
-          this.worldChatMessages = [...this.worldChatMessages, payload.message];
-          if (!this.worldChatOpen && payload.message.profileId !== this.session?.profileId) {
+          const message = normalizeChatMessage(payload.message);
+          if (!message) return;
+          this.worldChatMessages = [...this.worldChatMessages, message];
+          if (!this.worldChatOpen && message.profileId !== this.session?.profileId) {
             this.worldChatUnreadCount += 1;
           }
+        });
+        this.socket.on("state:world-chat:reaction", (payload) => {
+          if (!this.session?.profileId || !payload?.messageId) return;
+          this.worldChatMessages = patchChatMessageReactions(this.worldChatMessages, payload.messageId, payload.reactions);
         });
         this.socket.on("error", (payload) => {
           this.error = payload?.message || "Unexpected error";
@@ -434,8 +488,21 @@ export const useAppStore = defineStore("app", {
         message
       });
     },
+    async reactToRoomChat(messageId, emoji) {
+      return this.emit("room:chat:react", {
+        roomCode: this.roomChatRoomCode || this.room?.code,
+        messageId,
+        emoji
+      });
+    },
     async sendWorldChat(message) {
       return this.emit("world:chat:send", { message });
+    },
+    async reactToWorldChat(messageId, emoji) {
+      return this.emit("world:chat:react", {
+        messageId,
+        emoji
+      });
     }
   }
 });
