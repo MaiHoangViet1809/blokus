@@ -139,3 +139,70 @@ src/games/exploding_kittens/
   - Hands are private to the owning player; spectators do not see private cards.
   - Full reaction windows are in scope, including `Nope` chaining.
   - Defuse reinsertion uses exact draw-pile position selection, not top/middle/bottom shortcuts.
+
+---
+
+## Extension: Include Generic Match Command Dispatch and Platform Orchestration Touchpoints
+
+- **Status**: APPROVED
+- **Approved-By**: Viet
+- **Approved-On**: 2026-03-13
+- **Task**: Expand `SOW_0010` scope to include the platform store and platform server orchestration files required to implement Exploding Kittens without hacking around the current match-command flow.
+- **Location**:
+  - `/Users/maihoangviet/Projects/blokus/src/games/exploding_kittens/`
+  - `/Users/maihoangviet/Projects/blokus/src/platform/client/registry.js`
+  - `/Users/maihoangviet/Projects/blokus/src/platform/server/registry.js`
+  - `/Users/maihoangviet/Projects/blokus/src/platform/client/views/HomeView.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/platform/client/store.js`
+  - `/Users/maihoangviet/Projects/blokus/src/platform/server/index.js`
+  - `/Users/maihoangviet/Projects/blokus/src/style.css`
+  - `/Users/maihoangviet/Projects/blokus/plan_todo/codex/SOW_0010_exploding_kittens_v1.md`
+- **Why**: EK is the first hidden-information reaction game on the platform. The current client store still hardcodes Blokus-style `place_piece` transport, and the actual authoritative room/match orchestration lives in the platform server layer. Without including these files, EK implementation would be forced into brittle workarounds.
+
+### As-Is Diagram (ASCII)
+```text
+Match live UI
+  -> store.placeMove(move)
+  -> emits match:command with commandType = place_piece
+
+Good for board placement games
+  -> blokus
+
+Not enough for EK
+  -> draw
+  -> play card
+  -> nope
+  -> choose target
+  -> defuse reinsertion
+```
+
+### To-Be Diagram (ASCII)
+```text
+Match live UI
+  -> store.sendMatchCommand(commandType, commandPayload)
+  -> emits generic match:command
+
+Platform server
+  -> routes command to EK driver
+  -> driver projects viewer-specific private/public state
+```
+
+- **Deliverables**:
+  - add generic match-command dispatch in the platform client store
+  - keep existing Blokus/Chess call sites working
+  - allow EK live view to send arbitrary driver commands cleanly
+  - include platform server orchestration file in SoW scope for EK integration
+- **Done Criteria**:
+  - `SOW_0010` covers all files actually required for EK implementation
+  - no platform shell hack is needed to fake EK actions through `place_piece`
+  - `node --check server.js` passes after implementation
+  - `npm run build` passes after implementation
+- **Out-of-Scope**:
+  - changing room/create shells
+  - redesigning platform routes
+  - plugin loading
+- **Proposed-By**: Codex GPT-5
+- **plan**: exploding-kittens-v1-platform-game
+- **Cautions / Risks**:
+  - this extension broadens scope into platform orchestration, but only where strictly necessary
+  - the generic match-command path must not regress Blokus or Chess
