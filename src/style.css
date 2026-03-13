@@ -39,7 +39,8 @@ body {
 }
 
 button,
-input {
+input,
+textarea {
   font: inherit;
 }
 
@@ -74,7 +75,8 @@ button:disabled {
   transform: none;
 }
 
-input {
+input,
+textarea {
   width: 100%;
   border: 1px solid var(--line);
   background: rgba(255, 255, 255, 0.04);
@@ -969,6 +971,11 @@ p {
 .room-chat-panel__composer-main {
   flex: 1 1 auto;
   min-width: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.room-chat-panel__composer-row {
   display: flex;
   align-items: flex-end;
   gap: 10px;
@@ -1023,8 +1030,55 @@ p {
   border-color: rgba(88, 178, 255, 0.34);
 }
 
-.room-chat-panel__composer input {
+.room-chat-panel__composer textarea {
   flex: 1 1 auto;
+  min-height: 42px;
+  max-height: 140px;
+  resize: none;
+  line-height: 1.35;
+}
+
+.room-chat-panel__composer-quote {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 14px;
+  border: 1px solid rgba(144, 193, 255, 0.22);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.room-chat-panel__composer-quote-body {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.room-chat-panel__composer-quote-author {
+  font-size: 0.74rem;
+  color: rgba(236, 244, 255, 0.92);
+}
+
+.room-chat-panel__composer-quote-text {
+  font-size: 0.8rem;
+  line-height: 1.35;
+  color: rgba(236, 244, 255, 0.8);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.room-chat-panel__composer-quote-clear {
+  min-width: 24px;
+  width: 24px;
+  min-height: 24px;
+  height: 24px;
+  padding: 0;
+  border-radius: 999px;
+  display: inline-grid;
+  place-items: center;
+  font-size: 0.95rem;
+  line-height: 1;
 }
 
 .room-chat-message__action-btn {

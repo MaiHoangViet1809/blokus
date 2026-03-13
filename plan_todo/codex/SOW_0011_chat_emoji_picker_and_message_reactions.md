@@ -245,3 +245,29 @@ Init payload:
   - quote insertion produces a visibly styled quote block on sent/rendered messages
   - room chat and world chat stay behaviorally aligned
   - `npm run build` passes
+
+## Extension: Composer Quote Block as Readonly UI + Shift+Enter Multi-Line Input
+- **Status**: APPROVED
+- **Approved-By**: Viet
+- **Approved-On**: 2026-03-14
+- **Task**: Refactor chat composer quote behavior so quote is a separate readonly block pinned above the editable body, and support `Shift+Enter` for multi-line chat input.
+- **Location**:
+  - `/Users/maihoangviet/Projects/blokus/src/platform/client/components/RoomChatPanel.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/platform/client/components/WorldChatPanel.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/style.css`
+  - `/Users/maihoangviet/Projects/blokus/plan_todo/codex/SOW_0011_chat_emoji_picker_and_message_reactions.md`
+- **Why**:
+  - quote currently lives in editable composer text and can be modified accidentally
+  - desired UX is quote always pinned above and body typing always starts on the next line
+  - composer currently uses single-line input; users need `Shift+Enter` for multiline messages
+- **Deliverables**:
+  - introduce quote state in composer, rendered as a readonly quote preview box
+  - switch composer body field from `input` to `textarea`
+  - keep `Enter` to send and enable `Shift+Enter` to insert newline
+  - serialize outgoing message as quote block first, then blank line, then body text
+  - keep rendered quote UI in bubbles compatible with previous parser
+- **Done Criteria**:
+  - quote is shown in a separate readonly box and is not directly editable in text area
+  - typed body content is always below quote block
+  - `Shift+Enter` inserts newline, `Enter` sends
+  - `npm run build` passes

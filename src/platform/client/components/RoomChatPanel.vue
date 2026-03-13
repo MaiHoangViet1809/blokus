@@ -4,6 +4,7 @@ import { useAppStore } from "../store";
 
 const COMPOSER_EMOJIS = ["🙂", "😀", "😁", "😂", "🤣", "😊", "😍", "😘", "🤔", "😮", "😢", "😭", "😡", "🤯", "😴", "👍", "👎", "👏", "🙏", "🔥", "🎉", "💯", "❤️", "💔"];
 const REACTION_EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "😡"];
+const CHAT_MESSAGE_MAX_LENGTH = 1000;
 
 const store = useAppStore();
 const draftMessage = ref("");
@@ -16,6 +17,7 @@ const activeReactionMessageId = ref("");
 const activeMoreMessageId = ref("");
 const selectionStart = ref(0);
 const selectionEnd = ref(0);
+const quotedComposerMessage = ref(null);
 const activeReactionPickerStyle = ref({});
 const reactionAnchorRefs = new Map();
 const QUOTE_PREVIEW_MAX = 96;
@@ -29,6 +31,11 @@ const renderedMessages = computed(() => messages.value.map((message) => ({
   reactionOverview: reactionSummary(message)
 })));
 const activeReactionMessage = computed(() => renderedMessages.value.find((message) => message.id === activeReactionMessageId.value) || null);
+const composerMaxLength = computed(() => {
+  const quoteHeader = buildQuoteHeader(quotedComposerMessage.value);
+  if (!quoteHeader) return CHAT_MESSAGE_MAX_LENGTH;
+  return Math.max(0, CHAT_MESSAGE_MAX_LENGTH - quoteHeader.length - 2);
+});
 
 function messageInitial(name) {
   return String(name || "?").trim().charAt(0).toUpperCase() || "?";
@@ -69,10 +76,11 @@ function scrollToBottom() {
 }
 
 async function sendMessage() {
-  const message = draftMessage.value.trim();
-  if (!message) return;
+  const message = composeOutgoingMessage();
+  if (!message || message.length > CHAT_MESSAGE_MAX_LENGTH) return;
   await store.sendRoomChat(message);
   draftMessage.value = "";
+  quotedComposerMessage.value = null;
   selectionStart.value = 0;
   selectionEnd.value = 0;
   closeTransientMenus();
@@ -82,7 +90,9 @@ async function sendMessage() {
 function insertEmoji(emoji) {
   const start = selectionStart.value ?? draftMessage.value.length;
   const end = selectionEnd.value ?? start;
-  draftMessage.value = `${draftMessage.value.slice(0, start)}${emoji}${draftMessage.value.slice(end)}`;
+  const nextDraft = `${draftMessage.value.slice(0, start)}${emoji}${draftMessage.value.slice(end)}`;
+  if (nextDraft.length > composerMaxLength.value) return;
+  draftMessage.value = nextDraft;
   emojiPickerOpen.value = false;
   nextTick(() => {
     const input = composerInputRef.value;
@@ -218,9 +228,15 @@ function updateReactionPickerPosition() {
 function insertQuotedMessage(message) {
   const preview = quotePreviewText(message);
   if (!preview) return;
-  const quoteBlock = `> ${String(message.profileName || "Unknown").trim() || "Unknown"}\n> ${preview}`;
-  const existingBody = draftMessage.value.trim();
-  draftMessage.value = existingBody ? `${quoteBlock}\n\n${existingBody}` : `${quoteBlock}\n\n`;
+  const nextQuote = {
+    author: String(message.profileName || "Unknown").trim() || "Unknown",
+    text: preview
+  };
+  quotedComposerMessage.value = nextQuote;
+  const maxBodyLength = Math.max(0, CHAT_MESSAGE_MAX_LENGTH - buildQuoteHeader(nextQuote).length - 2);
+  if (draftMessage.value.length > maxBodyLength) {
+    draftMessage.value = draftMessage.value.slice(0, maxBodyLength);
+  }
   closeTransientMenus();
   nextTick(() => {
     const input = composerInputRef.value;
@@ -230,6 +246,31 @@ function insertQuotedMessage(message) {
     input.setSelectionRange(caret, caret);
     selectionStart.value = caret;
     selectionEnd.value = caret;
+  });
+}
+
+function buildQuoteHeader(quotePayload) {
+  if (!quotePayload) return "";
+  const author = String(quotePayload.author || "Unknown").trim() || "Unknown";
+  const text = String(quotePayload.text || "").trim();
+  if (!text) return "";
+  return `> ${author}\n> ${text}`;
+}
+
+function composeOutgoingMessage() {
+  const body = draftMessage.value.trim();
+  const quoteHeader = buildQuoteHeader(quotedComposerMessage.value);
+  if (!quoteHeader && !body) return "";
+  if (!quoteHeader) return body;
+  if (!body) return quoteHeader;
+  return `${quoteHeader}\n\n${body}`;
+}
+
+function clearQuotedComposerMessage() {
+  quotedComposerMessage.value = null;
+  nextTick(() => {
+    composerInputRef.value?.focus();
+    captureSelection();
   });
 }
 
@@ -280,6 +321,8 @@ watch(() => store.roomChatOpen, (open) => {
     return;
   }
   closeTransientMenus();
+  quotedComposerMessage.value = null;
+  draftMessage.value = "";
 });
 
 watch(() => messages.value.length, () => {
@@ -418,31 +461,49 @@ watch(() => activeReactionMessageId.value, (messageId) => {
 
     <footer class="room-chat-panel__composer">
       <div class="room-chat-panel__composer-main">
-        <div class="room-chat-panel__emoji-shell">
-          <button class="secondary room-chat-panel__emoji-toggle" type="button" @click="toggleEmojiPicker()">🙂</button>
-          <div v-if="emojiPickerOpen" class="room-chat-panel__emoji-picker">
-            <button
-              v-for="emoji in COMPOSER_EMOJIS"
-              :key="emoji"
-              class="room-chat-panel__emoji-option"
-              type="button"
-              @click="insertEmoji(emoji)"
-            >
-              {{ emoji }}
-            </button>
+        <div v-if="quotedComposerMessage" class="room-chat-panel__composer-quote">
+          <div class="room-chat-panel__composer-quote-body">
+            <strong class="room-chat-panel__composer-quote-author">{{ quotedComposerMessage.author }}</strong>
+            <p class="room-chat-panel__composer-quote-text">{{ quotedComposerMessage.text }}</p>
           </div>
+          <button
+            class="secondary room-chat-panel__composer-quote-clear"
+            type="button"
+            aria-label="Remove quote"
+            @click="clearQuotedComposerMessage()"
+          >
+            ×
+          </button>
         </div>
-        <input
-          ref="composerInputRef"
-          v-model="draftMessage"
-          maxlength="1000"
-          placeholder="Write a message..."
-          @click="captureSelection"
-          @focus="captureSelection"
-          @keydown="handleComposerKeydown"
-          @keyup="captureSelection"
-          @select="captureSelection"
-        />
+        <div class="room-chat-panel__composer-row">
+          <div class="room-chat-panel__emoji-shell">
+            <button class="secondary room-chat-panel__emoji-toggle" type="button" @click="toggleEmojiPicker()">🙂</button>
+            <div v-if="emojiPickerOpen" class="room-chat-panel__emoji-picker">
+              <button
+                v-for="emoji in COMPOSER_EMOJIS"
+                :key="emoji"
+                class="room-chat-panel__emoji-option"
+                type="button"
+                @click="insertEmoji(emoji)"
+              >
+                {{ emoji }}
+              </button>
+            </div>
+          </div>
+          <textarea
+            ref="composerInputRef"
+            v-model="draftMessage"
+            :maxlength="composerMaxLength || undefined"
+            rows="1"
+            placeholder="Write a message..."
+            @click="captureSelection"
+            @focus="captureSelection"
+            @input="captureSelection"
+            @keydown="handleComposerKeydown"
+            @keyup="captureSelection"
+            @select="captureSelection"
+          />
+        </div>
       </div>
       <button type="button" @click="sendMessage">Send</button>
     </footer>
