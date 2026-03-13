@@ -913,6 +913,8 @@ p {
 }
 
 .room-chat-message__bubble {
+  display: grid;
+  gap: 8px;
   max-width: 100%;
   padding: 0.78rem 0.92rem;
   border-radius: 18px 18px 18px 6px;
@@ -922,6 +924,29 @@ p {
   line-height: 1.35;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.room-chat-message__quote-block {
+  display: grid;
+  gap: 4px;
+  padding: 0.5rem 0.65rem;
+  border-radius: 12px;
+  border-left: 2px solid rgba(255, 255, 255, 0.34);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.room-chat-message__quote-author {
+  font-size: 0.74rem;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.room-chat-message__quote-text,
+.room-chat-message__bubble-text {
+  white-space: pre-wrap;
+}
+
+.room-chat-message__quote-text {
+  color: rgba(236, 244, 255, 0.84);
 }
 
 .room-chat-message--mine .room-chat-message__bubble {
@@ -1024,58 +1049,64 @@ p {
 }
 
 .room-chat-message__reaction-anchor {
+  --reaction-anchor-offset: 61.8%;
   position: absolute;
-  right: 16px;
-  bottom: -13px;
-  min-height: 30px;
-  min-width: 30px;
+  left: var(--reaction-anchor-offset);
+  bottom: -9px;
+  min-height: 21px;
+  min-width: 21px;
+  height: 21px;
   padding: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 4px;
+  gap: 3px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.98);
-  border: 1px solid rgba(16, 25, 36, 0.08);
-  color: #0b65c6;
-  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.22);
+  background: rgba(255, 255, 255, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  color: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.18);
+  transform: translateX(-50%);
   z-index: 2;
 }
 
 .room-chat-message--mine .room-chat-message__reaction-anchor {
-  left: 16px;
-  right: auto;
+  left: auto;
+  right: var(--reaction-anchor-offset);
+  transform: translateX(50%);
 }
 
 .room-chat-message__reaction-anchor svg {
-  width: 14px;
-  height: 14px;
+  width: 10px;
+  height: 10px;
   fill: currentColor;
 }
 
 .room-chat-message__reaction-anchor--summary {
   min-width: auto;
-  padding: 0.18rem 0.56rem;
-  color: #1e2a35;
+  height: 21px;
+  padding: 0.12rem 0.4rem;
+  color: rgba(255, 255, 255, 0.96);
 }
 
 .room-chat-message__reaction-anchor--mine {
-  border-color: rgba(88, 178, 255, 0.2);
-  color: #0b65c6;
+  border-color: rgba(255, 255, 255, 0.26);
+  color: rgba(255, 255, 255, 0.98);
 }
 
 .room-chat-message__reaction-anchor-emojis {
   display: inline-flex;
   align-items: center;
   gap: 2px;
-  font-size: 0.86rem;
+  font-size: 0.72rem;
   line-height: 1;
 }
 
 .room-chat-message__reaction-anchor-count {
-  font-size: 0.74rem;
+  font-size: 0.63rem;
   font-weight: 700;
   line-height: 1;
+  color: rgba(255, 255, 255, 0.92);
 }
 
 .room-chat-panel__overlay {
@@ -1087,15 +1118,15 @@ p {
 }
 
 .room-chat-message__reaction-picker {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 14px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.98);
-  border: 1px solid rgba(16, 25, 36, 0.06);
+  display: grid;
+  gap: 10px;
+  min-width: min(320px, calc(100% - 24px));
+  padding: 12px 14px;
+  border-radius: 20px;
+  background: rgba(8, 16, 25, 0.96);
+  border: 1px solid rgba(144, 193, 255, 0.18);
   box-shadow: 0 18px 34px rgba(0, 0, 0, 0.22);
-  color: #1d2630;
+  color: var(--text);
   pointer-events: auto;
   z-index: 6;
 }
@@ -1108,9 +1139,15 @@ p {
   width: 18px;
   height: 18px;
   border-radius: 0 0 16px 0;
-  background: rgba(255, 255, 255, 0.98);
+  background: rgba(8, 16, 25, 0.96);
   transform: translateX(-50%) rotate(45deg);
   box-shadow: 6px 6px 12px rgba(0, 0, 0, 0.04);
+}
+
+.room-chat-message__reaction-picker-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
 .room-chat-message__reaction-option {
@@ -1125,6 +1162,36 @@ p {
 .room-chat-message__reaction-option:hover {
   border: 0;
   transform: translateY(-2px) scale(1.08);
+}
+
+.room-chat-message__reaction-details {
+  display: grid;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(144, 193, 255, 0.14);
+}
+
+.room-chat-message__reaction-detail-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+}
+
+.room-chat-message__reaction-detail-emoji {
+  font-size: 1rem;
+  line-height: 1.2;
+}
+
+.room-chat-message__reaction-detail-people,
+.room-chat-message__reaction-empty {
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: rgba(236, 244, 255, 0.84);
+}
+
+.room-chat-message__reaction-empty {
+  margin: 0;
 }
 
 .room-chat-message__more-menu {

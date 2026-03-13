@@ -215,3 +215,33 @@ Init payload:
   - the reaction button/chip sits on the bubble edge instead of in a row below the bubble
   - the reaction tray no longer clips inside the message scroll viewport
   - `npm run build` passes
+
+## Extension: Refine Reaction Anchor Scale, Reveal Reactor Names, and Render True Quote Blocks
+- **Status**: APPROVED
+- **Approved-By**: Viet
+- **Approved-On**: 2026-03-14
+- **Task**: Refine the chat reaction anchor placement and styling, expose who reacted in the floating overlay, and render inserted quotes as actual quote blocks in chat bubbles.
+- **Location**:
+  - `/Users/maihoangviet/Projects/blokus/src/platform/client/components/RoomChatPanel.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/platform/client/components/WorldChatPanel.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/platform/client/store.js`
+  - `/Users/maihoangviet/Projects/blokus/src/platform/server/index.js`
+  - `/Users/maihoangviet/Projects/blokus/src/style.css`
+  - `/Users/maihoangviet/Projects/blokus/plan_todo/codex/SOW_0011_chat_emoji_picker_and_message_reactions.md`
+- **Why**:
+  - the current reaction anchor is still too large and visually noisy
+  - the anchor should sit closer to a golden-ratio placement on the lower bubble edge
+  - users need to see who liked/reacted when opening the reaction overlay
+  - quote insertion currently renders as plain text instead of a styled quote block
+- **Deliverables**:
+  - reduce reaction anchor/chip size to roughly two-thirds of the current footprint and simplify it to a quieter monochrome treatment
+  - reposition the reaction anchor/chip using a golden-ratio style placement along the lower bubble edge, mirrored for own vs other messages
+  - extend chat reaction payloads so each emoji entry carries reactor identity data for rendering
+  - show reactor names grouped by emoji in the floating reaction overlay
+  - insert quoted text in a deterministic multi-line format and render leading quote text as a styled quote block inside the message bubble
+- **Done Criteria**:
+  - the reaction anchor/chip is smaller, quieter, and positioned on the lower bubble edge using the new phi-style offset
+  - clicking a reacted message shows who reacted in the floating overlay
+  - quote insertion produces a visibly styled quote block on sent/rendered messages
+  - room chat and world chat stay behaviorally aligned
+  - `npm run build` passes

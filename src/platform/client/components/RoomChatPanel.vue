@@ -23,6 +23,12 @@ const QUOTE_PREVIEW_MAX = 96;
 const canRender = computed(() => !!store.roomChatRoomCode && !!store.currentMember);
 const roomCode = computed(() => store.roomChatRoomCode || store.room?.code || "");
 const messages = computed(() => store.roomChatMessages || []);
+const renderedMessages = computed(() => messages.value.map((message) => ({
+  ...message,
+  parsedContent: parseQuotedMessage(message.message),
+  reactionOverview: reactionSummary(message)
+})));
+const activeReactionMessage = computed(() => renderedMessages.value.find((message) => message.id === activeReactionMessageId.value) || null);
 
 function messageInitial(name) {
   return String(name || "?").trim().charAt(0).toUpperCase() || "?";
@@ -122,8 +128,44 @@ function toggleMoreMenu(messageId) {
   }
 }
 
+function parseQuotedMessage(rawMessage) {
+  const normalized = String(rawMessage || "").replace(/\r\n/g, "\n");
+  const lines = normalized.split("\n");
+  const quoteLines = [];
+  let index = 0;
+  while (index < lines.length && lines[index].startsWith("> ")) {
+    quoteLines.push(lines[index].slice(2));
+    index += 1;
+  }
+  if (!quoteLines.length) {
+    return {
+      quoteAuthor: "",
+      quoteText: "",
+      bodyText: normalized
+    };
+  }
+  while (index < lines.length && !lines[index].trim()) {
+    index += 1;
+  }
+  const bodyText = lines.slice(index).join("\n").trim();
+  if (quoteLines.length === 1) {
+    return {
+      quoteAuthor: "",
+      quoteText: quoteLines[0].trim(),
+      bodyText
+    };
+  }
+  return {
+    quoteAuthor: quoteLines[0].trim(),
+    quoteText: quoteLines.slice(1).join("\n").trim(),
+    bodyText
+  };
+}
+
 function quotePreviewText(message) {
-  const condensed = String(message?.message || "").replace(/\s+/g, " ").trim();
+  const parsed = parseQuotedMessage(message?.message);
+  const source = parsed.bodyText || parsed.quoteText || String(message?.message || "");
+  const condensed = source.replace(/\s+/g, " ").trim();
   if (!condensed) return "";
   if (condensed.length <= QUOTE_PREVIEW_MAX) return condensed;
   return `${condensed.slice(0, QUOTE_PREVIEW_MAX - 3).trimEnd()}...`;
@@ -176,9 +218,9 @@ function updateReactionPickerPosition() {
 function insertQuotedMessage(message) {
   const preview = quotePreviewText(message);
   if (!preview) return;
-  const quoteLine = `> ${String(message.profileName || "Unknown")}: ${preview}`;
-  const before = draftMessage.value && !draftMessage.value.endsWith("\n") ? "\n" : "";
-  draftMessage.value = `${draftMessage.value}${before}${quoteLine}\n`;
+  const quoteBlock = `> ${String(message.profileName || "Unknown").trim() || "Unknown"}\n> ${preview}`;
+  const existingBody = draftMessage.value.trim();
+  draftMessage.value = existingBody ? `${quoteBlock}\n\n${existingBody}` : `${quoteBlock}\n\n`;
   closeTransientMenus();
   nextTick(() => {
     const input = composerInputRef.value;
@@ -210,6 +252,12 @@ function handleMessagesViewportMutation() {
     activeMoreMessageId.value = "";
     activeReactionPickerStyle.value = {};
   }
+}
+
+function reactionPeopleLabel(reaction) {
+  const reactors = Array.isArray(reaction?.reactors) ? reaction.reactors : [];
+  if (!reactors.length) return "";
+  return reactors.map((reactor) => reactor.reactedByMe ? "You" : reactor.profileName).join(", ");
 }
 
 onMounted(() => {
@@ -263,7 +311,7 @@ watch(() => activeReactionMessageId.value, (messageId) => {
 
     <div ref="messagesRef" class="room-chat-panel__messages" @scroll="handleMessagesViewportMutation">
       <article
-        v-for="message in messages"
+        v-for="message in renderedMessages"
         :key="message.id"
         class="room-chat-message"
         :class="{ 'room-chat-message--mine': isMine(message) }"
@@ -276,23 +324,33 @@ watch(() => activeReactionMessageId.value, (messageId) => {
           </div>
           <div class="room-chat-message__bubble-wrap">
             <div class="room-chat-message__balloon-shell">
-              <div class="room-chat-message__bubble">{{ message.message }}</div>
+              <div class="room-chat-message__bubble">
+                <div v-if="message.parsedContent.quoteText" class="room-chat-message__quote-block">
+                  <strong v-if="message.parsedContent.quoteAuthor" class="room-chat-message__quote-author">
+                    {{ message.parsedContent.quoteAuthor }}
+                  </strong>
+                  <div class="room-chat-message__quote-text">{{ message.parsedContent.quoteText }}</div>
+                </div>
+                <div v-if="message.parsedContent.bodyText" class="room-chat-message__bubble-text">
+                  {{ message.parsedContent.bodyText }}
+                </div>
+              </div>
               <button
                 :ref="(element) => setReactionAnchorRef(message.id, element)"
                 class="secondary room-chat-message__reaction-anchor"
                 :class="{
-                  'room-chat-message__reaction-anchor--summary': !!reactionSummary(message),
-                  'room-chat-message__reaction-anchor--mine': reactionSummary(message)?.reactedByMe
+                  'room-chat-message__reaction-anchor--summary': !!message.reactionOverview,
+                  'room-chat-message__reaction-anchor--mine': message.reactionOverview?.reactedByMe
                 }"
                 type="button"
-                :aria-label="reactionSummary(message) ? 'View reactions' : 'React to message'"
+                :aria-label="message.reactionOverview ? 'View reactions' : 'React to message'"
                 @click="toggleReactionPicker(message.id)"
               >
-                <template v-if="reactionSummary(message)">
+                <template v-if="message.reactionOverview">
                   <span class="room-chat-message__reaction-anchor-emojis">
-                    <span v-for="emoji in reactionSummary(message).emojis" :key="`${message.id}-${emoji}`">{{ emoji }}</span>
+                    <span v-for="emoji in message.reactionOverview.emojis" :key="`${message.id}-${emoji}`">{{ emoji }}</span>
                   </span>
-                  <span class="room-chat-message__reaction-anchor-count">{{ reactionSummary(message).count }}</span>
+                  <span class="room-chat-message__reaction-anchor-count">{{ message.reactionOverview.count }}</span>
                 </template>
                 <svg v-else viewBox="0 0 24 24" aria-hidden="true">
                   <path d="M9.75 21H6.5A2.5 2.5 0 0 1 4 18.5v-6A2.5 2.5 0 0 1 6.5 10h3.25v11ZM19.27 10.24c.45.55.73 1.3.73 2.11v.15c0 .76-.2 1.5-.58 2.16l-2.2 3.82A3 3 0 0 1 14.61 20H11.25V10.66l2.7-5.07a1.74 1.74 0 0 1 3.25.82c0 .16-.02.32-.07.48L16.4 10h1.36c.6 0 1.16.27 1.51.74Z" />
@@ -333,15 +391,28 @@ watch(() => activeReactionMessageId.value, (messageId) => {
 
     <div v-if="activeReactionMessageId" class="room-chat-panel__overlay">
       <div ref="reactionPickerRef" class="room-chat-message__reaction-picker" :style="activeReactionPickerStyle">
-        <button
-          v-for="emoji in REACTION_EMOJIS"
-          :key="`${activeReactionMessageId}-${emoji}`"
-          class="room-chat-message__reaction-option"
-          type="button"
-          @click="reactToMessage(activeReactionMessageId, emoji)"
-        >
-          {{ emoji }}
-        </button>
+        <div class="room-chat-message__reaction-picker-row">
+          <button
+            v-for="emoji in REACTION_EMOJIS"
+            :key="`${activeReactionMessageId}-${emoji}`"
+            class="room-chat-message__reaction-option"
+            type="button"
+            @click="reactToMessage(activeReactionMessageId, emoji)"
+          >
+            {{ emoji }}
+          </button>
+        </div>
+        <div v-if="activeReactionMessage?.reactions?.length" class="room-chat-message__reaction-details">
+          <div
+            v-for="reaction in activeReactionMessage.reactions"
+            :key="`${activeReactionMessage.id}-${reaction.emoji}-details`"
+            class="room-chat-message__reaction-detail-row"
+          >
+            <span class="room-chat-message__reaction-detail-emoji">{{ reaction.emoji }}</span>
+            <span class="room-chat-message__reaction-detail-people">{{ reactionPeopleLabel(reaction) }}</span>
+          </div>
+        </div>
+        <p v-else class="room-chat-message__reaction-empty">No reactions yet</p>
       </div>
     </div>
 

@@ -24,12 +24,23 @@ function normalizeChatReactions(reactions) {
   reactions.forEach((entry) => {
     const emoji = String(entry?.emoji || "").trim();
     if (!CHAT_REACTION_EMOJIS.includes(emoji)) return;
-    const count = Number(entry?.count || 0);
+    const reactors = Array.isArray(entry?.reactors)
+      ? entry.reactors
+        .map((reactor) => ({
+          profileId: String(reactor?.profileId || "").trim(),
+          profileName: String(reactor?.profileName || "").trim(),
+          reactedByMe: !!reactor?.reactedByMe
+        }))
+        .filter((reactor) => reactor.profileId && reactor.profileName)
+      : [];
+    const count = Math.max(Number(entry?.count || 0), reactors.length);
     if (count <= 0) return;
+    const reactedByMe = !!entry?.reactedByMe || reactors.some((reactor) => reactor.reactedByMe);
     entriesByEmoji.set(emoji, {
       emoji,
       count,
-      reactedByMe: !!entry?.reactedByMe
+      reactedByMe,
+      reactors
     });
   });
   return CHAT_REACTION_EMOJIS.flatMap((emoji) => entriesByEmoji.has(emoji) ? [entriesByEmoji.get(emoji)] : []);

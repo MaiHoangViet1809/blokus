@@ -612,23 +612,27 @@ function buildChatMessage(row, reactions = []) {
 }
 
 function buildReactionSummary(rows, viewerProfileId) {
-  const counts = new Map();
-  let viewerEmoji = "";
+  const grouped = new Map();
   rows.forEach((row) => {
     const emoji = normalizeChatReactionEmoji(row.emoji);
     if (!emoji) return;
-    counts.set(emoji, (counts.get(emoji) || 0) + 1);
-    if (viewerProfileId && row.profile_id === viewerProfileId) {
-      viewerEmoji = emoji;
+    if (!grouped.has(emoji)) {
+      grouped.set(emoji, []);
     }
+    grouped.get(emoji).push({
+      profileId: row.profile_id,
+      profileName: row.profile_name || "Unknown",
+      reactedByMe: !!viewerProfileId && row.profile_id === viewerProfileId
+    });
   });
   return CHAT_REACTION_EMOJIS.flatMap((emoji) => {
-    const count = counts.get(emoji) || 0;
-    if (!count) return [];
+    const reactors = grouped.get(emoji) || [];
+    if (!reactors.length) return [];
     return [{
       emoji,
-      count,
-      reactedByMe: viewerEmoji === emoji
+      count: reactors.length,
+      reactedByMe: reactors.some((reactor) => reactor.reactedByMe),
+      reactors
     }];
   });
 }
@@ -640,9 +644,11 @@ function inClausePlaceholders(values) {
 function getReactionRows(tableName, messageIds) {
   if (!messageIds.length) return [];
   return db.prepare(`
-    select message_id, profile_id, emoji
-    from ${tableName}
-    where message_id in (${inClausePlaceholders(messageIds)})
+    select reactions.message_id, reactions.profile_id, reactions.emoji, coalesce(profiles.name, '') as profile_name
+    from ${tableName} reactions
+    left join profiles on profiles.id = reactions.profile_id
+    where reactions.message_id in (${inClausePlaceholders(messageIds)})
+    order by reactions.created_at asc
   `).all(...messageIds);
 }
 
@@ -683,9 +689,11 @@ function getWorldMessages(viewerProfileId = null, limit = WORLD_CHAT_HISTORY_LIM
 
 function getMessageReactionSummary(tableName, messageId, viewerProfileId = null) {
   const rows = db.prepare(`
-    select profile_id, emoji
-    from ${tableName}
-    where message_id = ?
+    select reactions.profile_id, reactions.emoji, coalesce(profiles.name, '') as profile_name
+    from ${tableName} reactions
+    left join profiles on profiles.id = reactions.profile_id
+    where reactions.message_id = ?
+    order by reactions.created_at asc
   `).all(messageId);
   return buildReactionSummary(rows, viewerProfileId);
 }
