@@ -25,6 +25,7 @@ const isSpectator = computed(() => !viewerPlayer.value || viewerPlayer.value.end
 const discardPile = computed(() => props.gameView?.discardPile || []);
 const discardPreview = computed(() => discardPile.value.slice(-8).reverse());
 const hand = computed(() => me.value?.hand || []);
+const stash = computed(() => me.value?.stash || []);
 const handGroups = computed(() => {
   const counts = new Map();
   for (const cardId of hand.value) {
@@ -52,7 +53,11 @@ const statusPlayers = computed(() => {
       ...player,
       statusLabel: player.endState === "active"
         ? (player.profileId === turnProfileId ? "Taking turn" : "Waiting")
-        : player.endState
+        : player.endState,
+      extras: [
+        player.stashCount ? `stash ${player.stashCount}` : "",
+        player.armedBarking ? `barking ${player.armedBarking}` : ""
+      ].filter(Boolean)
     }));
 });
 
@@ -131,6 +136,9 @@ onMounted(() => {
               <span>{{ handCountText(player.handCount) }}</span>
               <span>{{ player.statusLabel }}</span>
             </div>
+            <div v-if="player.extras.length" class="ek-player-card__meta ek-player-card__meta--extras">
+              <span v-for="extra in player.extras" :key="extra">{{ extra }}</span>
+            </div>
           </article>
         </div>
       </section>
@@ -191,6 +199,26 @@ onMounted(() => {
         </div>
 
         <div v-if="!isSpectator" class="ek-hand-grid panel-scroll">
+          <article
+            v-if="stash.length"
+            class="ek-hand-card ek-hand-card--stash"
+            data-accent="success"
+          >
+            <div class="stack stack-tight">
+              <strong>Tower Stash</strong>
+              <span class="muted">{{ handCountText(stash.length) }}</span>
+            </div>
+            <div class="ek-card-chip-list">
+              <span
+                v-for="(cardId, index) in stash"
+                :key="`${cardId}-${index}`"
+                class="ek-card-chip"
+                :data-accent="cardMeta(cardId).accent"
+              >
+                {{ cardMeta(cardId).label }}
+              </span>
+            </div>
+          </article>
           <article
             v-for="entry in handGroups"
             :key="entry.cardId"

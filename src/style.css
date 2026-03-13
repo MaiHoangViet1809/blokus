@@ -1321,6 +1321,13 @@ p {
   gap: 8px;
 }
 
+.ek-player-card__meta--extras {
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
 .ek-event-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -1359,6 +1366,15 @@ p {
   border-radius: 16px;
   background: rgba(8, 16, 25, 0.72);
   border: 1px solid rgba(144, 193, 255, 0.12);
+}
+
+.ek-hand-card--stash {
+  grid-template-columns: 1fr;
+  align-items: start;
+}
+
+.ek-hand-card--stash .ek-card-chip-list {
+  margin-top: 4px;
 }
 
 .ek-hand-card[data-accent="danger"] {
