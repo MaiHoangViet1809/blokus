@@ -476,3 +476,79 @@ EK gameplay branch
 - **Cautions / Risks**:
   - keep fix narrow and mechanical
   - need to catch all remaining `nowIso` function-reference returns in EK server logic
+
+---
+
+## Extension: Open Nope Stack and Confirm-to-Resolve Reaction Model for Exploding Kittens
+
+- **Status**: APPROVED
+- **Approved-By**: Viet
+- **Approved-On**: 2026-03-13
+- **Task**: Replace the current seat-ordered EK reaction queue with an open reaction stack where any eligible player may play `Nope` at any time before the reaction window is explicitly resolved by all active players.
+- **Location**:
+  - `/Users/maihoangviet/Projects/blokus/src/games/exploding_kittens/server.js`
+  - `/Users/maihoangviet/Projects/blokus/src/games/exploding_kittens/shared.js`
+  - `/Users/maihoangviet/Projects/blokus/src/games/exploding_kittens/LiveView.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/games/exploding_kittens/ReplayView.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/platform/client/store.js`
+  - `/Users/maihoangviet/Projects/blokus/src/style.css`
+  - `/Users/maihoangviet/Projects/blokus/plan_todo/codex/SOW_0010_exploding_kittens_v1.md`
+- **Why**: The current EK reaction model serializes responders by seat order, which is deterministic but not faithful to the feel of the physical game. The correct digital-faithful model is an open reaction stack: any player with `Nope` may respond, the server resolves by command arrival order, and the table explicitly confirms before the stack resolves.
+
+### As-Is Diagram (ASCII)
+```text
+[EFFECT_PLAYED]
+  -> queueReaction()
+  -> responders ordered by seat sequence
+  -> currentResponder only
+  -> each player reacts one at a time
+
+Result:
+- deterministic
+- easier to implement
+- not faithful to EK reaction feel
+```
+
+### To-Be Diagram (ASCII)
+```text
+[EFFECT_PLAYED]
+  -> push effect onto reaction stack
+  -> open REACTION_WINDOW for all active players
+
+[REACTION_WINDOW]
+  -> any eligible player may:
+     - play Nope
+     - confirm reaction window
+  -> each Nope appends to stack in server receive order
+  -> each Nope flips effect parity
+  -> confirmations reset when a new Nope is played
+  -> when all active players confirm:
+       resolve stack by final Nope parity
+       continue turn flow
+```
+
+- **Deliverables**:
+  - remove seat-order responder queue logic from EK
+  - add open reaction stack logic
+  - add `confirm_reaction_window`
+  - expose a public reaction stack in EK live `gameView`
+  - render that stack in the EK live view
+- **Done Criteria**:
+  - EK no longer uses seat-order responder queue for reactions
+  - any eligible player with `Nope` can respond during an open reaction window
+  - multiple `Nope` plays resolve in the exact order received by the server
+  - reaction window resolves only after all active players confirm
+  - a newly played `Nope` resets confirmations
+  - `node --check server.js` passes
+  - `node --check /Users/maihoangviet/Projects/blokus/src/games/exploding_kittens/server.js` passes
+  - `npm run build` passes
+- **Out-of-Scope**:
+  - changing non-reaction EK rules unless required by this refactor
+  - timers/timeouts for auto-resolve
+  - chat/social features
+  - animation polish beyond stack visibility
+- **Proposed-By**: Codex GPT-5
+- **plan**: exploding-kittens-v1-platform-game
+- **Cautions / Risks**:
+  - this is a reaction-subsystem rewrite, not a small bugfix
+  - nopeatable action paths must be retested after the refactor

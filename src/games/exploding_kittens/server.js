@@ -160,10 +160,6 @@ function playerByProfile(players, profileId) {
   return players.find((player) => player.profile_id === profileId) || null;
 }
 
-function playerIndexByProfile(players, profileId) {
-  return players.findIndex((player) => player.profile_id === profileId);
-}
-
 function clonePlayers(players) {
   return players.map((player) => ({
     ...player,
@@ -352,40 +348,56 @@ function permutationChoices(cards) {
   return results;
 }
 
-function buildReactionOrder(players, startProfileId) {
-  const startIndex = Math.max(0, playerIndexByProfile(players, startProfileId));
-  const responderIndexes = [];
-  for (let step = 1; step <= players.length; step += 1) {
-    const index = (startIndex + step) % players.length;
-    if (players[index]?.end_state === "active") responderIndexes.push(index);
-  }
-  return responderIndexes.map((index) => players[index].profile_id);
+function buildReactionConfirmations(players) {
+  return Object.fromEntries(activePlayers(players).map((player) => [player.profile_id, false]));
 }
 
-function queueReaction(state, players, actorProfileId, effect) {
+function openReactionWindow(state, players, actorProfileId, effect) {
   state.reaction = {
     effect,
     actorProfileId,
     nopesPlayed: 0,
-    responders: buildReactionOrder(players, actorProfileId),
-    responderIndex: 0
+    stack: [
+      {
+        type: "effect",
+        actorProfileId,
+        cardId: effect.cardId,
+        effectType: effect.effectType
+      }
+    ],
+    confirmations: buildReactionConfirmations(players)
   };
 }
 
-function currentResponder(state) {
-  if (!state.reaction) return null;
-  return state.reaction.responders[state.reaction.responderIndex] || null;
+function resetReactionConfirmations(state, players) {
+  if (!state.reaction) return;
+  state.reaction.confirmations = buildReactionConfirmations(players);
 }
 
-function advanceReaction(state, players) {
-  if (!state.reaction) return;
-  state.reaction.responderIndex += 1;
-  while (state.reaction.responderIndex < state.reaction.responders.length) {
-    const candidate = state.reaction.responders[state.reaction.responderIndex];
-    const player = playerByProfile(players, candidate);
-    if (player && player.end_state === "active") return;
-    state.reaction.responderIndex += 1;
-  }
+function reactionConfirmationCount(state, players) {
+  if (!state.reaction) return { confirmed: 0, total: 0 };
+  const eligible = activePlayers(players).map((player) => player.profile_id);
+  const confirmed = eligible.filter((profileId) => state.reaction.confirmations?.[profileId]).length;
+  return {
+    confirmed,
+    total: eligible.length
+  };
+}
+
+function allReactionConfirmed(state, players) {
+  const { confirmed, total } = reactionConfirmationCount(state, players);
+  return total > 0 && confirmed === total;
+}
+
+function buildPublicReactionStack(state, players) {
+  if (!state.reaction) return [];
+  return (state.reaction.stack || []).map((entry, index) => ({
+    id: `${entry.type}:${entry.actorProfileId || "system"}:${entry.cardId || entry.effectType || "unknown"}:${index}`,
+    type: entry.type,
+    actorProfileId: entry.actorProfileId || "",
+    actorName: playerLabel(playerByProfile(players, entry.actorProfileId)),
+    label: entry.type === "nope" ? "Nope" : cardLabel(entry.cardId || entry.effectType)
+  }));
 }
 
 function buildPublicPlayer(player) {
@@ -417,8 +429,9 @@ function buildAvailableActions(state, players, viewerProfileId) {
   }
 
   if (state.reaction) {
-    if (currentResponder(state) !== viewerProfileId) return [];
-    const actions = [buildPromptAction("pass_reaction", "Pass")];
+    const confirmed = !!state.reaction.confirmations?.[viewerProfileId];
+    if (confirmed) return [];
+    const actions = [buildPromptAction("confirm_reaction_window", "Confirm")];
     if (viewer.remainingPieces.includes("nope")) {
       actions.unshift(buildPromptAction("reaction_nope", "Play Nope"));
     }
@@ -927,7 +940,7 @@ function recordPlayableCard(player, state, players, events, cardId, payload = {}
     cardId,
     ...payload
   });
-  queueReaction(state, players, player.profile_id, {
+  openReactionWindow(state, players, player.profile_id, {
     effectType,
     cardId,
     actorProfileId: player.profile_id,
@@ -962,21 +975,28 @@ function buildViewerPrompt(state, viewerProfileId) {
 
 function buildReactionPrompt(state, players, viewerProfileId) {
   if (!state.reaction) return null;
-  const responderId = currentResponder(state);
-  if (responderId !== viewerProfileId) {
+  const { confirmed, total } = reactionConfirmationCount(state, players);
+  const viewer = playerByProfile(players, viewerProfileId);
+  if (!viewer || viewer.end_state !== "active") {
     return {
       type: "waiting",
-      label: `${playerLabel(playerByProfile(players, responderId))} can respond with Nope.`
+      label: `Reaction window open · ${confirmed}/${total} confirmed.`
     };
   }
-  const viewer = playerByProfile(players, viewerProfileId);
-  const actions = [buildPromptAction("pass_reaction", "Pass")];
+  const viewerConfirmed = !!state.reaction.confirmations?.[viewerProfileId];
+  if (viewerConfirmed) {
+    return {
+      type: "waiting",
+      label: `Reaction window open · ${confirmed}/${total} confirmed. Waiting for the table.`
+    };
+  }
+  const actions = [buildPromptAction("confirm_reaction_window", "Confirm")];
   if (viewer.remainingPieces.includes("nope")) {
     actions.unshift(buildPromptAction("reaction_nope", "Play Nope"));
   }
   return {
     type: "reaction",
-    label: `Respond to ${cardLabel(state.reaction.effect.cardId)}?`,
+    label: `Reaction window open · ${confirmed}/${total} confirmed.`,
     actions
   };
 }
@@ -984,7 +1004,8 @@ function buildReactionPrompt(state, players, viewerProfileId) {
 function buildStatusText(state, players) {
   const current = players[state.turnIndex];
   if (state.reaction) {
-    return `${playerLabel(playerByProfile(players, currentResponder(state)))} can play Nope.`;
+    const { confirmed, total } = reactionConfirmationCount(state, players);
+    return `Reaction window open · ${confirmed}/${total} confirmed.`;
   }
   if (state.prompt?.waitingLabel) return state.prompt.waitingLabel;
   if (state.lastActionText) return state.lastActionText;
@@ -1179,6 +1200,8 @@ export function createExplodingKittensDriver() {
         drawPileCount: state.drawPile.length,
         discardPile: state.discardPile,
         prompt: buildViewerPrompt(state, viewerProfileId) || buildReactionPrompt(state, players, viewerProfileId),
+        reactionStack: buildPublicReactionStack(state, players),
+        reactionSummary: reactionConfirmationCount(state, players),
         players: players.map((player) => buildPlayerProjection(player, viewerProfileId, state)),
         me: playerByProfile(players, viewerProfileId)
           ? {
@@ -1354,17 +1377,21 @@ export function createExplodingKittensDriver() {
       }
 
       if (state.reaction) {
-        if (currentResponder(state) !== profileId) {
-          throw new Error("It is another player's reaction window.");
-        }
         if (commandType === "reaction_nope") {
+          if (state.reaction.confirmations?.[profileId]) {
+            throw new Error("You already confirmed this reaction window.");
+          }
           const removal = removeCardFromHand(actor.remainingPieces, "nope", 1);
           if (!removal.removedCount) throw new Error("You do not have Nope.");
           actor.remainingPieces = removal.hand;
           appendDiscard(state, "nope");
           state.reaction.nopesPlayed += 1;
-          state.reaction.responders = buildReactionOrder(nextPlayers, profileId);
-          state.reaction.responderIndex = 0;
+          state.reaction.stack.push({
+            type: "nope",
+            actorProfileId: profileId,
+            cardId: "nope"
+          });
+          resetReactionConfirmations(state, nextPlayers);
           state.lastActionText = `${playerLabel(actor)} played Nope.`;
           pushEvent(events, state, nextPlayers, profileId, "reaction_nope", {
             playerName: actor.name,
@@ -1372,9 +1399,10 @@ export function createExplodingKittensDriver() {
           });
           return finalize();
         }
-        if (commandType === "pass_reaction") {
-          advanceReaction(state, nextPlayers);
-          if (!currentResponder(state)) {
+        if (commandType === "confirm_reaction_window") {
+          state.reaction.confirmations[profileId] = true;
+          state.lastActionText = `${playerLabel(actor)} is ready to resolve the reaction.`;
+          if (allReactionConfirmed(state, nextPlayers)) {
             const result = finishReaction(state, nextPlayers, events, nowIso);
             return finalize(result);
           }
@@ -1402,7 +1430,7 @@ export function createExplodingKittensDriver() {
           playerName: actor.name,
           cardId: payload.cardId
         });
-        queueReaction(state, nextPlayers, profileId, {
+        openReactionWindow(state, nextPlayers, profileId, {
           effectType: "pair",
           cardId: payload.cardId,
           actorProfileId: profileId,

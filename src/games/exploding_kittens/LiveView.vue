@@ -17,6 +17,8 @@ const timelineLoading = ref(false);
 
 const statusText = computed(() => props.gameView?.statusText || "Waiting for the next action.");
 const prompt = computed(() => props.gameView?.prompt || null);
+const reactionStack = computed(() => props.gameView?.reactionStack || []);
+const reactionSummary = computed(() => props.gameView?.reactionSummary || { confirmed: 0, total: 0 });
 const players = computed(() => props.gameView?.players || []);
 const activeTurnPlayer = computed(() => players.value[props.gameView?.turnIndex || 0] || null);
 const me = computed(() => props.gameView?.me || null);
@@ -144,6 +146,24 @@ onMounted(() => {
       </section>
 
       <section class="panel ek-column ek-table-column">
+        <section v-if="reactionStack.length" class="ek-reaction-stack">
+          <div class="ek-column-head">
+            <strong>Effect Stack</strong>
+            <span class="muted">{{ reactionSummary.confirmed }}/{{ reactionSummary.total }} confirmed</span>
+          </div>
+          <div class="ek-stack-track">
+            <article
+              v-for="entry in reactionStack"
+              :key="entry.id"
+              class="ek-stack-card"
+              :data-kind="entry.type"
+            >
+              <strong>{{ entry.label }}</strong>
+              <span class="muted">{{ entry.actorName }}</span>
+            </article>
+          </div>
+        </section>
+
         <div class="ek-status-banner">
           <strong>{{ prompt?.label || statusText }}</strong>
           <span class="muted">

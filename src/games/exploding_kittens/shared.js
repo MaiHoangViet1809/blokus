@@ -165,8 +165,8 @@ export function actionLabel(action) {
       return "Draw";
     case "reaction_nope":
       return "Play Nope";
-    case "pass_reaction":
-      return "Pass";
+    case "confirm_reaction_window":
+      return "Confirm";
     case "resolve_prompt":
       return action.choiceLabel || "Choose";
     default:

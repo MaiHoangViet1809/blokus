@@ -1183,7 +1183,7 @@ p {
 }
 
 .ek-table-column {
-  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-rows: auto auto auto minmax(0, 1fr);
 }
 
 .ek-hand-column {
@@ -1204,6 +1204,41 @@ p {
   border-radius: 16px;
   background: rgba(255, 221, 167, 0.08);
   border: 1px solid rgba(255, 196, 128, 0.18);
+}
+
+.ek-reaction-stack {
+  display: grid;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: rgba(255, 244, 224, 0.05);
+  border: 1px solid rgba(255, 196, 128, 0.2);
+}
+
+.ek-stack-track {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ek-stack-card {
+  display: inline-grid;
+  gap: 4px;
+  min-width: 116px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(8, 16, 25, 0.78);
+  border: 1px solid rgba(144, 193, 255, 0.12);
+}
+
+.ek-stack-card[data-kind="effect"] {
+  border-color: rgba(255, 196, 128, 0.28);
+  background: rgba(255, 196, 128, 0.08);
+}
+
+.ek-stack-card[data-kind="nope"] {
+  border-color: rgba(255, 107, 107, 0.34);
+  background: rgba(255, 107, 107, 0.08);
 }
 
 .ek-public-piles {
