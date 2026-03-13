@@ -49,6 +49,13 @@ export const EK_CARD_META = {
   imploding_kitten: { label: "Imploding Kitten", kind: "kitten", accent: "danger" },
   streaking_kitten: { label: "Streaking Kitten", kind: "passive", accent: "warning" },
   barking_kitten: { label: "Barking Kitten", kind: "action", accent: "warning" },
+  tower_of_power: { label: "Tower of Power", kind: "action", accent: "warning" },
+  alter_the_future_now: { label: "Alter The Future NOW", kind: "action", accent: "accent" },
+  personal_attack: { label: "Personal Attack", kind: "action", accent: "danger" },
+  share_the_future: { label: "Share The Future", kind: "action", accent: "accent" },
+  ill_take_that: { label: "I'll Take That", kind: "action", accent: "warning" },
+  super_skip: { label: "Super Skip", kind: "action", accent: "warning" },
+  potluck: { label: "Potluck", kind: "action", accent: "neutral" },
   reverse: { label: "Reverse", kind: "action", accent: "accent" },
   draw_from_bottom: { label: "Draw From Bottom", kind: "action", accent: "neutral" },
   alter_the_future: { label: "Alter The Future", kind: "action", accent: "accent" },
@@ -104,7 +111,14 @@ export const EK_EXPANSION_SUPPLY = {
   },
   barking: {
     barking_kitten: 2,
-    bury: 4
+    tower_of_power: 1,
+    alter_the_future_now: 2,
+    bury: 2,
+    personal_attack: 4,
+    share_the_future: 2,
+    ill_take_that: 4,
+    super_skip: 1,
+    potluck: 2
   }
 };
 

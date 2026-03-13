@@ -70,9 +70,19 @@ function takeCards(deck, cardId, count) {
 
 function buildInitialDeck(ruleset, playerCount) {
   const supply = buildDeckSupply(ruleset);
+  let stash = [];
+  if (ruleset.ruleset === "barking" && supply.tower_of_power) {
+    supply.tower_of_power -= 1;
+  }
   let deck = Object.entries(supply).flatMap(([cardId, count]) => repeat(cardId, count));
   deck = shuffle(deck);
+  if (ruleset.ruleset === "barking") {
+    stash = deck.splice(0, Math.min(6, deck.length));
+    deck.push("tower_of_power");
+    deck = shuffle(deck);
+  }
   return {
+    stash,
     actionDeck: takeCards(takeCards(deck, "defuse", playerCount), "exploding_kitten", playerCount - 1)
   };
 }
@@ -88,6 +98,8 @@ function createInitialState(roomConfig) {
     pendingDraws: 1,
     reaction: null,
     prompt: null,
+    sharedStash: [],
+    zones: {},
     lastActionText: "Match ready.",
     implodingFaceUpIndex: null
   };
@@ -106,8 +118,22 @@ function parseState(boardJson, roomConfig) {
     turnDirection: parsed?.turnDirection === -1 ? -1 : 1,
     reaction: parsed?.reaction || null,
     prompt: parsed?.prompt || null,
+    sharedStash: Array.isArray(parsed?.sharedStash) ? [...parsed.sharedStash] : [],
+    zones: parsed?.zones && typeof parsed.zones === "object" ? parsed.zones : {},
     implodingFaceUpIndex: Number.isInteger(parsed?.implodingFaceUpIndex) ? parsed.implodingFaceUpIndex : null
   };
+}
+
+function zoneFor(state, profileId) {
+  if (!state.zones[profileId]) {
+    state.zones[profileId] = {
+      stash: [],
+      armedBarking: 0,
+      extraTurns: 0,
+      pendingTakeThatFrom: null
+    };
+  }
+  return state.zones[profileId];
 }
 
 function activePlayers(players) {
@@ -239,6 +265,20 @@ function buildReplayLabel(eventType, payload = {}) {
       return `${payload.playerName || "Player"} played Nope`;
     case "draw_card":
       return `${payload.playerName || "Player"} drew a card`;
+    case "defuse_reinserted":
+      return `${payload.playerName || "Player"} reinserted a kitten`;
+    case "imploding_reinserted":
+      return `${payload.playerName || "Player"} reinserted the Imploding Kitten`;
+    case "favor_resolved":
+      return `${payload.playerName || "Player"} resolved Favor`;
+    case "future_altered":
+      return `${payload.playerName || "Player"} altered the future`;
+    case "card_buried":
+      return `${payload.playerName || "Player"} buried ${cardLabel(payload.cardId)}`;
+    case "potluck_resolved":
+      return `${payload.playerName || "Player"} resolved Potluck`;
+    case "barking_resolved":
+      return `${payload.playerName || "Player"} resolved a Barking Kitten`;
     case "player_eliminated":
       return `${payload.playerName || "Player"} exploded`;
     case "match_finished":
@@ -253,6 +293,15 @@ function buildPromptAction(type, label, commandPayload = {}) {
 }
 
 function passTurn(state, players, pendingDraws = 1) {
+  const currentPlayer = players[state.turnIndex];
+  if (currentPlayer) {
+    const currentZone = zoneFor(state, currentPlayer.profile_id);
+    if (currentPlayer.end_state === "active" && currentZone.extraTurns > 0) {
+      currentZone.extraTurns -= 1;
+      state.pendingDraws = pendingDraws;
+      return;
+    }
+  }
   state.turnIndex = nextActiveIndex(players, state.turnIndex, state.turnDirection);
   state.pendingDraws = pendingDraws;
 }
@@ -350,6 +399,12 @@ function buildPublicPlayer(player) {
   };
 }
 
+function stealableCards(state, player) {
+  const zone = zoneFor(state, player.profile_id);
+  if (zone.stash.length) return zone.stash;
+  return player.remainingPieces;
+}
+
 function buildAvailableActions(state, players, viewerProfileId) {
   const viewer = playerByProfile(players, viewerProfileId);
   if (!viewer || viewer.end_state !== "active") return [];
@@ -370,10 +425,20 @@ function buildAvailableActions(state, players, viewerProfileId) {
     return actions;
   }
 
-  if (players[state.turnIndex]?.profile_id !== viewerProfileId) return [];
+  const isCurrentTurn = players[state.turnIndex]?.profile_id === viewerProfileId;
+  if (!isCurrentTurn) {
+    const actions = [];
+    if (viewer.remainingPieces.includes("alter_the_future_now")) {
+      actions.push(buildPromptAction("play_card", "Alter The Future NOW", { cardId: "alter_the_future_now" }));
+    }
+    return actions;
+  }
 
   const actions = [buildPromptAction("draw_card", state.pendingDraws > 1 ? `Draw (${state.pendingDraws} turns left)` : "Draw to End Turn")];
   const hand = viewer.remainingPieces;
+  const targetablePlayers = activePlayers(players)
+    .filter((player) => player.profile_id !== viewerProfileId)
+    .map((player) => ({ profileId: player.profile_id, name: player.name }));
 
   if (hand.includes("skip")) {
     actions.push(buildPromptAction("play_card", "Play Skip", { cardId: "skip" }));
@@ -402,10 +467,39 @@ function buildAvailableActions(state, players, viewerProfileId) {
   if (hand.includes("bury")) {
     actions.push(buildPromptAction("play_card", "Bury", { cardId: "bury" }));
   }
-
-  const targetablePlayers = activePlayers(players)
-    .filter((player) => player.profile_id !== viewerProfileId)
-    .map((player) => ({ profileId: player.profile_id, name: player.name }));
+  if (hand.includes("tower_of_power")) {
+    actions.push(buildPromptAction("play_card", "Play Tower of Power", { cardId: "tower_of_power" }));
+  }
+  if (hand.includes("personal_attack")) {
+    actions.push(buildPromptAction("play_card", "Play Personal Attack", { cardId: "personal_attack" }));
+  }
+  if (hand.includes("share_the_future")) {
+    actions.push(buildPromptAction("play_card", "Share The Future", { cardId: "share_the_future" }));
+  }
+  if (hand.includes("ill_take_that")) {
+    targetablePlayers.forEach((target) => {
+      actions.push(buildPromptAction("play_card", `I'll Take That → ${target.name}`, {
+        cardId: "ill_take_that",
+        targetProfileId: target.profileId
+      }));
+    });
+  }
+  if (hand.includes("super_skip")) {
+    actions.push(buildPromptAction("play_card", "Play Super Skip", { cardId: "super_skip" }));
+  }
+  if (hand.includes("potluck")) {
+    actions.push(buildPromptAction("play_card", "Play Potluck", { cardId: "potluck" }));
+  }
+  if (hand.filter((entry) => entry === "barking_kitten").length >= 2) {
+    targetablePlayers.forEach((target) => {
+      actions.push(buildPromptAction("play_barking_pair", `Barking Kittens vs ${target.name}`, {
+        targetProfileId: target.profileId
+      }));
+    });
+  }
+  if (hand.includes("barking_kitten")) {
+    actions.push(buildPromptAction("play_card", "Play Barking Kitten", { cardId: "barking_kitten" }));
+  }
 
   if (hand.includes("favor")) {
     targetablePlayers.forEach((target) => {
@@ -529,6 +623,21 @@ function resolveDrawResult(state, players, player, drawResult, events, nowIso) {
   if (!drawnCard) {
     state.lastActionText = "The draw pile is empty.";
     return { finished: false };
+  }
+  const playerZone = zoneFor(state, player.profile_id);
+  const takeThatReceiver = playerZone.pendingTakeThatFrom
+    ? playerByProfile(players, playerZone.pendingTakeThatFrom)
+    : null;
+
+  if (takeThatReceiver && takeThatReceiver.end_state === "active") {
+    playerZone.pendingTakeThatFrom = null;
+    state.lastActionText = `${playerLabel(player)} handed the drawn card to ${playerLabel(takeThatReceiver)}.`;
+    pushEvent(events, state, players, player.profile_id, "draw_card", {
+      playerName: player.name,
+      cardId: drawnCard,
+      transferredTo: takeThatReceiver.name
+    });
+    return resolveDrawResult(state, players, takeThatReceiver, drawResult, events, nowIso);
   }
   pushEvent(events, state, players, player.profile_id, "draw_card", {
     playerName: player.name,
@@ -684,14 +793,103 @@ function resolveEffect(state, players, effect, events, nowIso) {
       state.lastActionText = `${playerLabel(actor)} is burying the top card.`;
       return { finished: false };
     }
+    case "alter_the_future_now": {
+      applyAlterFuturePrompt(state, actor.profile_id);
+      state.lastActionText = `${playerLabel(actor)} changed the future out of turn.`;
+      return { finished: false };
+    }
+    case "tower_of_power": {
+      const zone = zoneFor(state, actor.profile_id);
+      if (!state.sharedStash.length) {
+        state.lastActionText = `${playerLabel(actor)} found no stash inside the tower.`;
+        return { finished: false };
+      }
+      zone.stash.push(...state.sharedStash);
+      state.sharedStash = [];
+      state.lastActionText = `${playerLabel(actor)} claimed the Tower of Power stash.`;
+      return { finished: false };
+    }
+    case "personal_attack": {
+      zoneFor(state, actor.profile_id).extraTurns += 2;
+      state.lastActionText = `${playerLabel(actor)} stacked two extra turns.`;
+      return { finished: false };
+    }
+    case "share_the_future": {
+      const cards = topPreview(state.drawPile, 3);
+      const targetIndex = nextActiveIndex(players, state.turnIndex, state.turnDirection);
+      const target = players[targetIndex];
+      state.prompt = promptDismiss(actor.profile_id, cards.length
+        ? `Top cards: ${cards.map(cardLabel).join(" · ")}`
+        : "The draw pile is empty.");
+      if (target && target.profile_id !== actor.profile_id) {
+        zoneFor(state, target.profile_id).sharedFuturePreview = cards;
+      }
+      state.lastActionText = `${playerLabel(actor)} shared the future.`;
+      return { finished: false };
+    }
+    case "ill_take_that": {
+      const target = playerByProfile(players, effect.targetProfileId);
+      if (!target || target.end_state !== "active") {
+        state.lastActionText = "I'll Take That fizzled because the target is no longer active.";
+        return { finished: false };
+      }
+      zoneFor(state, target.profile_id).pendingTakeThatFrom = actor.profile_id;
+      state.lastActionText = `${playerLabel(actor)} will take the next card ${playerLabel(target)} draws.`;
+      return { finished: false };
+    }
+    case "super_skip": {
+      zoneFor(state, actor.profile_id).extraTurns = 0;
+      state.pendingDraws = 0;
+      passTurn(state, players, 1);
+      state.lastActionText = `${playerLabel(actor)} ended every owed turn with Super Skip.`;
+      return { finished: false };
+    }
+    case "potluck": {
+      const order = [];
+      let cursor = state.turnIndex;
+      for (let step = 0; step < players.length; step += 1) {
+        const candidate = players[cursor];
+        if (candidate?.end_state === "active" && candidate.remainingPieces.length) {
+          order.push(candidate.profile_id);
+        }
+        cursor = nextActiveIndex(players, cursor, state.turnDirection);
+      }
+      const currentPicker = playerByProfile(players, order[0] || actor.profile_id);
+      state.prompt = {
+        type: "potluck",
+        profileId: currentPicker?.profile_id || actor.profile_id,
+        label: "Choose one card to add to the top of the draw pile.",
+        order,
+        selected: [],
+        actions: (currentPicker?.remainingPieces || []).map((cardId, index) => buildPromptAction("resolve_prompt", `Add ${cardLabel(cardId)}`, {
+          promptType: "potluck",
+          order,
+          cardIndex: index,
+          selected: []
+        }))
+      };
+      state.lastActionText = `${playerLabel(actor)} started Potluck.`;
+      return { finished: false };
+    }
+    case "barking_kitten": {
+      const target = resolveBarkingTarget(state, players, actor.profile_id);
+      if (!target) {
+        zoneFor(state, actor.profile_id).armedBarking += 1;
+        state.lastActionText = `${playerLabel(actor)} armed a Barking Kitten face-up.`;
+        return { finished: false };
+      }
+      state.lastActionText = `${playerLabel(actor)} unleashed a Barking Kitten on ${playerLabel(target)}.`;
+      return resolveBarkingAttack(state, players, actor, target, events);
+    }
     case "pair": {
       const target = playerByProfile(players, effect.targetProfileId);
-      if (!target || !target.remainingPieces.length) {
+      if (!target || !stealableCards(state, target).length) {
         state.lastActionText = `${playerLabel(actor)} found no card to steal.`;
         return { finished: false };
       }
-      const randomIndex = Math.floor(Math.random() * target.remainingPieces.length);
-      const [stolenCard] = target.remainingPieces.splice(randomIndex, 1);
+      const targetCards = stealableCards(state, target);
+      const randomIndex = Math.floor(Math.random() * targetCards.length);
+      const [stolenCard] = targetCards.splice(randomIndex, 1);
       actor.remainingPieces.push(stolenCard);
       state.lastActionText = `${playerLabel(actor)} stole a card from ${playerLabel(target)}.`;
       pushEvent(events, state, players, actor.profile_id, "pair_stole_card", {
@@ -737,7 +935,8 @@ function recordPlayableCard(player, state, players, events, cardId, payload = {}
   });
 }
 
-function buildPlayerProjection(player, viewerProfileId) {
+function buildPlayerProjection(player, viewerProfileId, state) {
+  const zone = zoneFor(state, player.profile_id);
   return {
     profileId: player.profile_id,
     name: player.name,
@@ -745,12 +944,20 @@ function buildPlayerProjection(player, viewerProfileId) {
     handCount: Array.isArray(player.remainingPieces) ? player.remainingPieces.length : 0,
     isMe: player.profile_id === viewerProfileId,
     disconnected: !!player.disconnected,
-    endState: player.end_state
+    endState: player.end_state,
+    stashCount: zone.stash.length,
+    armedBarking: zone.armedBarking
   };
 }
 
 function buildViewerPrompt(state, viewerProfileId) {
-  return publicPrompt(state.prompt, viewerProfileId);
+  const basePrompt = publicPrompt(state.prompt, viewerProfileId);
+  if (basePrompt) return basePrompt;
+  const preview = zoneFor(state, viewerProfileId).sharedFuturePreview;
+  if (preview?.length) {
+    return promptDismiss(viewerProfileId, `Shared future: ${preview.map(cardLabel).join(" · ")}`);
+  }
+  return null;
 }
 
 function buildReactionPrompt(state, players, viewerProfileId) {
@@ -785,11 +992,68 @@ function buildStatusText(state, players) {
 }
 
 function buildAvailableActionsForViewer(state, players, viewerProfileId) {
+  const directPrompt = buildViewerPrompt(state, viewerProfileId);
+  if (directPrompt?.actions?.length) {
+    return directPrompt.actions;
+  }
   if (state.reaction) {
     const prompt = buildReactionPrompt(state, players, viewerProfileId);
     return prompt?.actions || [];
   }
   return buildAvailableActions(state, players, viewerProfileId);
+}
+
+function resolveBarkingTarget(state, players, actorProfileId) {
+  const armed = activePlayers(players)
+    .filter((player) => player.profile_id !== actorProfileId && zoneFor(state, player.profile_id).armedBarking > 0);
+  if (armed.length) return armed[0];
+  const hidden = activePlayers(players)
+    .filter((player) => player.profile_id !== actorProfileId && player.remainingPieces.includes("barking_kitten"));
+  return hidden[0] || null;
+}
+
+function resolveBarkingAttack(state, players, actor, target, events) {
+  const targetZone = zoneFor(state, target.profile_id);
+  if (targetZone.armedBarking > 0) {
+    targetZone.armedBarking = Math.max(0, targetZone.armedBarking - 1);
+    appendDiscard(state, "barking_kitten");
+  } else {
+    const hiddenRemoval = removeCardFromHand(target.remainingPieces, "barking_kitten", 1);
+    target.remainingPieces = hiddenRemoval.hand;
+    appendDiscard(state, ...hiddenRemoval.removed);
+  }
+
+  if (target.remainingPieces.includes("defuse")) {
+    const defuseRemoval = removeCardFromHand(target.remainingPieces, "defuse", 1);
+    target.remainingPieces = defuseRemoval.hand;
+    appendDiscard(state, "defuse");
+    state.lastActionText = `${playerLabel(target)} defused the Barking Kitten threat.`;
+    pushEvent(events, state, players, actor.profile_id, "barking_resolved", {
+      playerName: actor.name,
+      targetName: target.name,
+      outcome: "defused"
+    });
+    return { finished: false };
+  }
+
+  target.end_state = "eliminated";
+  appendDiscard(state, ...target.remainingPieces);
+  target.remainingPieces = [];
+  state.lastActionText = `${playerLabel(target)} could not stop the Barking Kitten blast.`;
+  pushEvent(events, state, players, actor.profile_id, "player_eliminated", {
+    playerName: target.name,
+    cardId: "barking_kitten"
+  });
+  const winnerProfileId = maybeFinish(state, players);
+  if (winnerProfileId) {
+    const winner = playerByProfile(players, winnerProfileId);
+    pushEvent(events, state, players, winnerProfileId, "match_finished", {
+      winnerProfileId,
+      winnerName: winner?.name || null
+    });
+    return { finished: true, winnerProfileId };
+  }
+  return { finished: false };
 }
 
 export function createExplodingKittensDriver() {
@@ -836,7 +1100,7 @@ export function createExplodingKittensDriver() {
       const players = members
         .filter((member) => member.role === "player")
         .sort((a, b) => a.seat_index - b.seat_index);
-      const { actionDeck } = buildInitialDeck(resolveEkRuleset(roomConfig), players.length);
+      const { actionDeck, stash } = buildInitialDeck(resolveEkRuleset(roomConfig), players.length);
       const shuffledActionDeck = shuffle(actionDeck);
       const matchPlayers = [];
       for (const player of players) {
@@ -863,6 +1127,7 @@ export function createExplodingKittensDriver() {
 
       const state = createInitialState(roomConfig);
       state.drawPile = shuffle(shuffledActionDeck);
+      state.sharedStash = stash;
       state.lastActionText = `${playerLabel(players[0])} goes first.`;
       const events = [{
         profileId: null,
@@ -907,10 +1172,11 @@ export function createExplodingKittensDriver() {
         drawPileCount: state.drawPile.length,
         discardPile: state.discardPile,
         prompt: buildViewerPrompt(state, viewerProfileId) || buildReactionPrompt(state, players, viewerProfileId),
-        players: players.map((player) => buildPlayerProjection(player, viewerProfileId)),
+        players: players.map((player) => buildPlayerProjection(player, viewerProfileId, state)),
         me: playerByProfile(players, viewerProfileId)
           ? {
-              hand: [...playerByProfile(players, viewerProfileId).remainingPieces]
+              hand: [...playerByProfile(players, viewerProfileId).remainingPieces],
+              stash: [...zoneFor(state, viewerProfileId).stash]
             }
           : null,
         availableActions: buildAvailableActionsForViewer(state, players, viewerProfileId)
@@ -965,6 +1231,7 @@ export function createExplodingKittensDriver() {
       });
 
       if (state.prompt?.profileId === profileId && commandType === "dismiss_prompt") {
+        zoneFor(state, profileId).sharedFuturePreview = null;
         state.prompt = null;
         return finalize();
       }
@@ -1036,6 +1303,43 @@ export function createExplodingKittensDriver() {
           });
           return finalize();
         }
+        if (promptType === "potluck") {
+          const order = Array.isArray(payload.order) ? payload.order : [];
+          const actingPlayer = playerByProfile(nextPlayers, profileId);
+          const selected = Array.isArray(payload.selected) ? [...payload.selected] : [];
+          const card = actingPlayer?.remainingPieces?.[payload.cardIndex];
+          if (!actingPlayer || !card) throw new Error("That card is no longer available.");
+          actingPlayer.remainingPieces.splice(payload.cardIndex, 1);
+          selected.unshift(card);
+          const nextOrder = order.filter((entry) => entry !== profileId);
+          if (nextOrder.length) {
+            const nextProfileId = nextOrder[0];
+            const nextPlayer = playerByProfile(nextPlayers, nextProfileId);
+            state.prompt = {
+              type: "potluck",
+              profileId: nextProfileId,
+              label: "Choose one card to add to the top of the draw pile.",
+              order: nextOrder,
+              selected,
+              waitingLabel: `${playerLabel(nextPlayer)} is choosing a Potluck card.`,
+              actions: (nextPlayer?.remainingPieces || []).map((cardId, index) => buildPromptAction("resolve_prompt", `Add ${cardLabel(cardId)}`, {
+                promptType: "potluck",
+                order: nextOrder,
+                cardIndex: index,
+                selected
+              }))
+            };
+          } else {
+            state.drawPile.unshift(...selected);
+            state.prompt = null;
+            state.lastActionText = `${playerLabel(actor)} finished Potluck.`;
+            pushEvent(events, state, nextPlayers, profileId, "potluck_resolved", {
+              playerName: actor.name,
+              cards: selected
+            });
+          }
+          return finalize();
+        }
       }
 
       if (state.reaction) {
@@ -1096,10 +1400,29 @@ export function createExplodingKittensDriver() {
         return finalize();
       }
 
+      if (commandType === "play_barking_pair") {
+        const removal = removeCardFromHand(actor.remainingPieces, "barking_kitten", 2);
+        if (removal.removedCount < 2) {
+          throw new Error("You need both Barking Kittens to play that pair.");
+        }
+        actor.remainingPieces = removal.hand;
+        appendDiscard(state, ...removal.removed);
+        pushEvent(events, state, nextPlayers, profileId, "pair_played", {
+          playerName: actor.name,
+          cardId: "barking_kitten"
+        });
+        const target = playerByProfile(nextPlayers, payload.targetProfileId);
+        if (!target || target.end_state !== "active") {
+          throw new Error("Choose a valid target for the Barking Kittens.");
+        }
+        const result = resolveBarkingAttack(state, nextPlayers, actor, target, events);
+        return finalize(result);
+      }
+
       if (commandType === "play_card") {
         const cardId = String(payload.cardId || "").trim();
         if (!cardId) throw new Error("Missing card.");
-        if (["skip", "attack", "shuffle", "see_the_future", "favor", "reverse", "draw_from_bottom", "alter_the_future", "swap_top_bottom", "bury"].includes(cardId)) {
+        if (["skip", "attack", "shuffle", "see_the_future", "favor", "reverse", "draw_from_bottom", "alter_the_future", "swap_top_bottom", "bury", "tower_of_power", "personal_attack", "share_the_future", "ill_take_that", "super_skip", "potluck", "barking_kitten", "alter_the_future_now"].includes(cardId)) {
           recordPlayableCard(actor, state, nextPlayers, events, cardId, payload, cardId);
           return finalize();
         }
