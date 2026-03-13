@@ -148,3 +148,27 @@ Init payload:
   - reaction tray opens above the bubble with a floating rounded appearance
   - aggregated reaction chips appear attached to the bubble corner
   - `npm run build` passes
+
+## Extension: Add Zalo-Style Quote and POC More Actions Beside Like
+- **Status**: APPROVED
+- **Approved-By**: Viet
+- **Approved-On**: 2026-03-13
+- **Task**: Refine the message action cluster to use a small thumb-like reaction trigger, add a double-quote mention action, and add a POC three-dots menu trigger.
+- **Location**:
+  - `/Users/maihoangviet/Projects/blokus/src/platform/client/components/RoomChatPanel.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/platform/client/components/WorldChatPanel.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/style.css`
+  - `/Users/maihoangviet/Projects/blokus/plan_todo/codex/SOW_0011_chat_emoji_picker_and_message_reactions.md`
+- **Why**: The current reaction helper still does not match the Zalo-style action cluster the product needs. The bubble should expose a small thumb-like react action plus quote and more affordances grouped near the bubble edge.
+- **Deliverables**:
+  - replace the current reaction helper icon with a compact thumb-like icon
+  - add a double-quote icon that inserts quoted text into the composer input
+  - add a three-dots icon with a minimal POC popup or stub state only
+  - keep all three actions grouped near the trailing edge of the bubble
+  - keep quote insertion client-only with no server/schema changes
+- **Done Criteria**:
+  - the visible action cluster includes quote, like, and more icons
+  - clicking quote inserts a deterministic plain-text quote snippet into composer
+  - the like icon still opens the existing reaction tray
+  - the three-dots icon renders and opens a minimal POC affordance without detailed actions
+  - `npm run build` passes

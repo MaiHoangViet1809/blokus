@@ -12,8 +12,10 @@ const panelRef = ref(null);
 const composerInputRef = ref(null);
 const emojiPickerOpen = ref(false);
 const activeReactionMessageId = ref("");
+const activeMoreMessageId = ref("");
 const selectionStart = ref(0);
 const selectionEnd = ref(0);
+const QUOTE_PREVIEW_MAX = 96;
 
 const canRender = computed(() => !!store.roomChatRoomCode && !!store.currentMember);
 const roomCode = computed(() => store.roomChatRoomCode || store.room?.code || "");
@@ -45,6 +47,7 @@ function captureSelection() {
 function closeTransientMenus() {
   emojiPickerOpen.value = false;
   activeReactionMessageId.value = "";
+  activeMoreMessageId.value = "";
 }
 
 function scrollToBottom() {
@@ -93,12 +96,46 @@ function toggleReactionPicker(messageId) {
   activeReactionMessageId.value = activeReactionMessageId.value === messageId ? "" : messageId;
   if (activeReactionMessageId.value) {
     emojiPickerOpen.value = false;
+    activeMoreMessageId.value = "";
   }
 }
 
 async function reactToMessage(messageId, emoji) {
   await store.reactToRoomChat(messageId, emoji);
   activeReactionMessageId.value = "";
+}
+
+function toggleMoreMenu(messageId) {
+  activeMoreMessageId.value = activeMoreMessageId.value === messageId ? "" : messageId;
+  if (activeMoreMessageId.value) {
+    emojiPickerOpen.value = false;
+    activeReactionMessageId.value = "";
+  }
+}
+
+function quotePreviewText(message) {
+  const condensed = String(message?.message || "").replace(/\s+/g, " ").trim();
+  if (!condensed) return "";
+  if (condensed.length <= QUOTE_PREVIEW_MAX) return condensed;
+  return `${condensed.slice(0, QUOTE_PREVIEW_MAX - 3).trimEnd()}...`;
+}
+
+function insertQuotedMessage(message) {
+  const preview = quotePreviewText(message);
+  if (!preview) return;
+  const quoteLine = `> ${String(message.profileName || "Unknown")}: ${preview}`;
+  const before = draftMessage.value && !draftMessage.value.endsWith("\n") ? "\n" : "";
+  draftMessage.value = `${draftMessage.value}${before}${quoteLine}\n`;
+  closeTransientMenus();
+  nextTick(() => {
+    const input = composerInputRef.value;
+    if (!input) return;
+    const caret = draftMessage.value.length;
+    input.focus();
+    input.setSelectionRange(caret, caret);
+    selectionStart.value = caret;
+    selectionEnd.value = caret;
+  });
 }
 
 function handleComposerKeydown(event) {
@@ -165,18 +202,39 @@ watch(() => messages.value.length, () => {
             <span>{{ formatTimestamp(message.createdAt) }}</span>
           </div>
           <div class="room-chat-message__bubble-wrap">
+            <div class="room-chat-message__action-rail">
+              <button
+                class="secondary room-chat-message__action-btn"
+                type="button"
+                aria-label="Quote message"
+                @click="insertQuotedMessage(message)"
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M10.5 7H7.75A2.75 2.75 0 0 0 5 9.75v2.5A2.75 2.75 0 0 0 7.75 15h1.06A4.5 4.5 0 0 1 5 19.25a.75.75 0 0 0 .25 1.47a6 6 0 0 0 6-6V9.75A2.75 2.75 0 0 0 8.5 7Zm7.75 0H15.5a2.75 2.75 0 0 0-2.75 2.75v2.5A2.75 2.75 0 0 0 15.5 15h1.06a4.5 4.5 0 0 1-3.81 4.25a.75.75 0 0 0 .25 1.47a6 6 0 0 0 6-6V9.75A2.75 2.75 0 0 0 18.25 7Z" />
+                </svg>
+              </button>
+              <button
+                class="secondary room-chat-message__action-btn room-chat-message__action-btn--like"
+                type="button"
+                aria-label="React to message"
+                @click="toggleReactionPicker(message.id)"
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M9.75 21H6.5A2.5 2.5 0 0 1 4 18.5v-6A2.5 2.5 0 0 1 6.5 10h3.25v11ZM19.27 10.24c.45.55.73 1.3.73 2.11v.15c0 .76-.2 1.5-.58 2.16l-2.2 3.82A3 3 0 0 1 14.61 20H11.25V10.66l2.7-5.07a1.74 1.74 0 0 1 3.25.82c0 .16-.02.32-.07.48L16.4 10h1.36c.6 0 1.16.27 1.51.74Z" />
+                </svg>
+              </button>
+              <button
+                class="secondary room-chat-message__action-btn"
+                type="button"
+                aria-label="More message actions"
+                @click="toggleMoreMenu(message.id)"
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M6.75 12a1.75 1.75 0 1 1-3.5 0a1.75 1.75 0 0 1 3.5 0Zm7 0a1.75 1.75 0 1 1-3.5 0a1.75 1.75 0 0 1 3.5 0Zm7 0a1.75 1.75 0 1 1-3.5 0a1.75 1.75 0 0 1 3.5 0Z" />
+                </svg>
+              </button>
+            </div>
             <div class="room-chat-message__bubble">{{ message.message }}</div>
-            <button
-              class="secondary room-chat-message__react-toggle"
-              type="button"
-              aria-label="React to message"
-              @click="toggleReactionPicker(message.id)"
-            >
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M12 21c-4.971 0-9-3.813-9-8.5S7.029 4 12 4s9 3.813 9 8.5c0 4.687-4.029 8.5-9 8.5Zm0-11.75a1 1 0 0 0-1 1v3.75a1 1 0 0 0 .553.894l2.5 1.25a1 1 0 1 0 .894-1.788L13 13.691V10.25a1 1 0 0 0-1-1Z" />
-                <path d="m12 8.4l-.952-.97a2.55 2.55 0 0 0-3.652 0 2.66 2.66 0 0 0 0 3.72L12 15.8l4.604-4.65a2.66 2.66 0 0 0 0-3.72 2.55 2.55 0 0 0-3.652 0L12 8.4Z" />
-              </svg>
-            </button>
             <div v-if="activeReactionMessageId === message.id" class="room-chat-message__reaction-picker">
               <button
                 v-for="emoji in REACTION_EMOJIS"
@@ -186,6 +244,11 @@ watch(() => messages.value.length, () => {
                 @click="reactToMessage(message.id, emoji)"
               >
                 {{ emoji }}
+              </button>
+            </div>
+            <div v-if="activeMoreMessageId === message.id" class="room-chat-message__more-menu">
+              <button class="secondary room-chat-message__more-menu-item" type="button" disabled>
+                More actions POC
               </button>
             </div>
             <div v-if="message.reactions?.length" class="room-chat-message__reactions">

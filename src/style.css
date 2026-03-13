@@ -880,6 +880,7 @@ p {
   display: grid;
   justify-items: start;
   padding-bottom: 18px;
+  padding-top: 12px;
 }
 
 .room-chat-message--mine .room-chat-message__bubble-wrap {
@@ -1009,10 +1010,17 @@ p {
   color: #0b65c6;
 }
 
-.room-chat-message__react-toggle {
+.room-chat-message__action-rail {
   position: absolute;
-  right: -14px;
-  bottom: 18px;
+  top: 0;
+  right: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transform: translateY(-50%);
+}
+
+.room-chat-message__action-btn {
   min-height: 30px;
   min-width: 30px;
   padding: 0;
@@ -1021,11 +1029,15 @@ p {
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.96);
   border: 1px solid rgba(16, 25, 36, 0.08);
-  color: #df4969;
+  color: #425466;
   box-shadow: 0 10px 22px rgba(0, 0, 0, 0.22);
 }
 
-.room-chat-message__react-toggle svg {
+.room-chat-message__action-btn--like {
+  color: #0b65c6;
+}
+
+.room-chat-message__action-btn svg {
   width: 14px;
   height: 14px;
   fill: currentColor;
@@ -1033,7 +1045,8 @@ p {
 }
 
 .room-chat-message__reaction-picker {
-  left: -2px;
+  right: 10px;
+  left: auto;
   bottom: calc(100% + 10px);
   display: flex;
   align-items: center;
@@ -1049,7 +1062,7 @@ p {
 .room-chat-message__reaction-picker::after {
   content: "";
   position: absolute;
-  right: 26px;
+  right: 50px;
   bottom: -7px;
   width: 18px;
   height: 18px;
@@ -1073,24 +1086,47 @@ p {
   transform: translateY(-2px) scale(1.08);
 }
 
+.room-chat-message__more-menu {
+  position: absolute;
+  top: calc(100% - 6px);
+  right: 10px;
+  z-index: 4;
+  min-width: 150px;
+  padding: 8px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.98);
+  border: 1px solid rgba(16, 25, 36, 0.08);
+  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.18);
+}
+
+.room-chat-message__more-menu-item {
+  width: 100%;
+  justify-content: center;
+}
+
 .room-chat-message--mine .room-chat-message__reactions {
   left: 10px;
   right: auto;
   justify-content: flex-start;
 }
 
-.room-chat-message--mine .room-chat-message__reaction-picker {
-  left: auto;
-  right: -2px;
-}
-
-.room-chat-message--mine .room-chat-message__reaction-picker::after {
-  left: 26px;
+.room-chat-message--mine .room-chat-message__action-rail {
+  left: 10px;
   right: auto;
 }
 
-.room-chat-message--mine .room-chat-message__react-toggle {
-  left: -14px;
+.room-chat-message--mine .room-chat-message__reaction-picker {
+  left: 10px;
+  right: auto;
+}
+
+.room-chat-message--mine .room-chat-message__reaction-picker::after {
+  left: 50px;
+  right: auto;
+}
+
+.room-chat-message--mine .room-chat-message__more-menu {
+  left: 10px;
   right: auto;
 }
 
