@@ -11,7 +11,7 @@ const LEGACY_SESSION_TOKEN_KEY = "blokus-session-token";
 const ACTIVE_GAME_STORAGE_KEY = "board-platform-active-game";
 const UI_SETTINGS_STORAGE_KEY = "board-platform-ui-settings";
 const CHAT_REACTION_EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "😡"];
-const DEFAULT_PASSIVE_CHAT_OPACITY = 0.2;
+const DEFAULT_PASSIVE_CHAT_OPACITY = 0.1;
 
 function readUiSettings() {
   try {
@@ -35,7 +35,7 @@ function readUiSettings() {
 function clampPassiveChatOpacity(value) {
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) return DEFAULT_PASSIVE_CHAT_OPACITY;
-  return Math.min(0.6, Math.max(0.1, Math.round(numeric * 20) / 20));
+  return Math.min(0.3, Math.max(0, Math.round(numeric * 20) / 20));
 }
 
 function makeClientInstanceId() {

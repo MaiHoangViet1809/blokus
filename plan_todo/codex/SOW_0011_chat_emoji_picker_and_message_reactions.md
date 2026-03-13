@@ -369,3 +369,29 @@ Init payload:
   - the passive opacity slider still adjusts tint intensity immediately
   - full interactive chat appearance remains unchanged
   - `npm run build` passes
+
+## Extension: Convert Passive Chat to a True Text-Only HUD
+- **Status**: APPROVED
+- **Approved-By**: Viet
+- **Approved-On**: 2026-03-14
+- **Task**: Replace the current passive chat overlay with a true text-first HUD so inactive chat stops looking like a translucent panel and instead reads as lightweight overlay text over gameplay.
+- **Location**:
+  - `/Users/maihoangviet/Projects/blokus/src/App.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/platform/client/store.js`
+  - `/Users/maihoangviet/Projects/blokus/src/style.css`
+  - `/Users/maihoangviet/Projects/blokus/plan_todo/codex/SOW_0011_chat_emoji_picker_and_message_reactions.md`
+- **Why**:
+  - the passive chat overlay still feels like a card/panel and obscures gameplay more than intended
+  - the current opacity range and default are too high for a true HUD presentation
+  - passive chat should prioritize gameplay visibility while remaining legible
+- **Deliverables**:
+  - remove passive panel chrome in inactive mode and render passive chat as a text-first HUD
+  - mute or hide non-essential passive elements, including avatars and action affordances
+  - retune passive opacity control to `0%..30%` with a `10%` default
+  - update the settings copy so it describes passive HUD tint intensity rather than generic opacity
+- **Done Criteria**:
+  - passive chat reads like overlay text instead of a translucent panel
+  - users can set passive tint as low as `0%`
+  - full interactive chat remains unchanged
+  - passive opacity changes persist and update immediately
+  - `npm run build` passes

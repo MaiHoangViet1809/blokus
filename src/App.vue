@@ -11,12 +11,12 @@ const settingsButtonRef = ref(null);
 const settingsPopupRef = ref(null);
 const settingsMenuStyle = ref({});
 const shellStyle = computed(() => ({
-  "--passive-chat-opacity": String(store.uiSettings?.passiveChatOpacity || 0.2)
+  "--passive-chat-opacity": String(store.uiSettings?.passiveChatOpacity ?? 0.1)
 }));
 
 const profileName = computed(() => store.activeProfile?.name || "No profile");
 const connectionStatus = computed(() => (store.connected ? "Realtime connected" : "Realtime offline"));
-const passiveChatOpacityPercent = computed(() => Math.round((store.uiSettings?.passiveChatOpacity || 0.2) * 100));
+const passiveChatOpacityPercent = computed(() => Math.round((store.uiSettings?.passiveChatOpacity ?? 0.1) * 100));
 const isRoomRoute = computed(() => route.path.startsWith("/rooms/") && !!store.room);
 const isMatchRoute = computed(() => route.path.startsWith("/matches/") && (!!store.match || !!store.replay));
 const roomHeaderContext = computed(() => {
@@ -181,13 +181,13 @@ watch(() => settingsMenuOpen.value, (open) => {
       <input
         class="app-settings-menu__slider"
         type="range"
-        min="10"
-        max="60"
+        min="0"
+        max="30"
         step="5"
         :value="passiveChatOpacityPercent"
         @input="store.setPassiveChatOpacity(Number($event.target.value) / 100)"
       />
-      <p class="muted app-settings-menu__hint">Affects chat when it is visible but not active/open.</p>
+      <p class="muted app-settings-menu__hint">Controls passive HUD tint only when chat is visible but not active.</p>
     </div>
   </Teleport>
 </template>
