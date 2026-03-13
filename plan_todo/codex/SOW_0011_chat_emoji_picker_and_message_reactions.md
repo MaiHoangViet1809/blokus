@@ -172,3 +172,21 @@ Init payload:
   - the like icon still opens the existing reaction tray
   - the three-dots icon renders and opens a minimal POC affordance without detailed actions
   - `npm run build` passes
+
+## Extension: Keep Chat Messages Bottom-Anchored and Move Action Cluster Below the Bubble
+- **Status**: APPROVED
+- **Approved-By**: Viet
+- **Approved-On**: 2026-03-13
+- **Task**: Correct the chat layout so sparse message lists stay bottom-aligned and the per-message action cluster sits below the bubble instead of above it.
+- **Location**:
+  - `/Users/maihoangviet/Projects/blokus/src/style.css`
+  - `/Users/maihoangviet/Projects/blokus/plan_todo/codex/SOW_0011_chat_emoji_picker_and_message_reactions.md`
+- **Why**: The current action cluster placement makes new messages read as if they appear at the top of the chat item, and sparse chats visually stack from the top of the panel instead of building upward from the bottom like common messengers.
+- **Deliverables**:
+  - bottom-anchor the chat message list when there are only a few messages
+  - move the quote/like/more action cluster from above the bubble to below it
+  - keep the reaction chip and picker behavior intact after the repositioning
+- **Done Criteria**:
+  - new/sparse messages sit visually at the bottom of the panel
+  - action icons render below the bubble instead of above it
+  - `npm run build` passes

@@ -840,6 +840,7 @@ p {
   overflow: auto;
   display: flex;
   flex-direction: column;
+  justify-content: flex-end;
   gap: 12px;
   padding-right: 4px;
 }
@@ -879,8 +880,7 @@ p {
   position: relative;
   display: grid;
   justify-items: start;
-  padding-bottom: 18px;
-  padding-top: 12px;
+  padding-bottom: 58px;
 }
 
 .room-chat-message--mine .room-chat-message__bubble-wrap {
@@ -1012,12 +1012,11 @@ p {
 
 .room-chat-message__action-rail {
   position: absolute;
-  top: 0;
+  bottom: 24px;
   right: 10px;
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  transform: translateY(-50%);
 }
 
 .room-chat-message__action-btn {
@@ -1047,7 +1046,7 @@ p {
 .room-chat-message__reaction-picker {
   right: 10px;
   left: auto;
-  bottom: calc(100% + 10px);
+  bottom: 58px;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -1088,7 +1087,7 @@ p {
 
 .room-chat-message__more-menu {
   position: absolute;
-  top: calc(100% - 6px);
+  bottom: 42px;
   right: 10px;
   z-index: 4;
   min-width: 150px;
