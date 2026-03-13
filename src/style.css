@@ -1051,38 +1051,52 @@ p {
   position: relative;
 }
 
-.spectator-hover-card {
-  position: absolute;
-  right: 0;
-  top: calc(100% + 8px);
-  min-width: 320px;
-  display: grid;
-  gap: 8px;
-  padding: 12px;
-  border-radius: 16px;
-  border: 1px solid var(--line);
-  background: rgba(10, 19, 33, 0.96);
-  backdrop-filter: blur(12px);
-  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.35);
-  opacity: 0;
-  pointer-events: none;
-  transform: translateY(6px);
-  transition: opacity 140ms ease, transform 140ms ease;
-  z-index: 10;
-}
-
-.spectator-hover:hover .spectator-hover-card,
-.spectator-hover:focus-within .spectator-hover-card {
-  opacity: 1;
-  pointer-events: auto;
-  transform: translateY(0);
-}
-
 .spectator-hover-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto;
   gap: 10px;
   align-items: center;
+}
+
+.spectator-floating-card {
+  position: fixed;
+  z-index: 130;
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: rgba(10, 19, 33, 0.96);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.42);
+}
+
+.spectator-floating-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.spectator-floating-card__body {
+  display: grid;
+  gap: 8px;
+  min-height: 0;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.icon-button {
+  min-width: 32px;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 999px;
+  font-size: 1.1rem;
+  line-height: 1;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--line);
+  color: var(--text);
 }
 
 .chess-live-panel {

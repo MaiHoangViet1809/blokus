@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import RoomChatFab from "../components/RoomChatFab.vue";
 import RoomChatPanel from "../components/RoomChatPanel.vue";
@@ -33,6 +33,10 @@ const canToggleReady = computed(() => store.room?.phase === "PREPARE" && current
 const canLeaveSeat = computed(() => store.room?.phase === "PREPARE" && currentMember.value?.role === "player");
 const currentReadyLabel = computed(() => currentMember.value?.isReady ? "Unready" : "Ready");
 const spectatorSummaryLabel = computed(() => `Spectators: ${spectatorMembers.value.length}`);
+const spectatorButtonRef = ref(null);
+const spectatorPopupOpen = ref(false);
+const spectatorPopupStyle = ref({});
+let spectatorCloseTimer = null;
 
 function formatLastOnline(member) {
   if (member.connectionState === "online") return "Online now";
@@ -43,6 +47,46 @@ function formatLastOnline(member) {
     hour: "2-digit",
     minute: "2-digit"
   });
+}
+
+function clearSpectatorCloseTimer() {
+  if (!spectatorCloseTimer) return;
+  clearTimeout(spectatorCloseTimer);
+  spectatorCloseTimer = null;
+}
+
+function updateSpectatorPopupPosition() {
+  const trigger = spectatorButtonRef.value;
+  if (!trigger) return;
+  const rect = trigger.getBoundingClientRect();
+  const panelWidth = 320;
+  const right = Math.max(16, window.innerWidth - rect.right);
+  const top = Math.min(window.innerHeight - 16, rect.top - 10);
+  spectatorPopupStyle.value = {
+    top: `${top}px`,
+    right: `${right}px`,
+    maxHeight: `${Math.max(180, window.innerHeight - 64)}px`,
+    width: `${Math.min(panelWidth, window.innerWidth - 32)}px`
+  };
+}
+
+function openSpectatorPopup() {
+  if (!spectatorMembers.value.length) return;
+  clearSpectatorCloseTimer();
+  updateSpectatorPopupPosition();
+  spectatorPopupOpen.value = true;
+}
+
+function closeSpectatorPopupSoon() {
+  clearSpectatorCloseTimer();
+  spectatorCloseTimer = setTimeout(() => {
+    spectatorPopupOpen.value = false;
+  }, 120);
+}
+
+function closeSpectatorPopupNow() {
+  clearSpectatorCloseTimer();
+  spectatorPopupOpen.value = false;
 }
 
 async function hydrateRoom() {
@@ -106,6 +150,14 @@ onMounted(async () => {
   if (!isPreparePhase.value && store.room?.currentMatchId) {
     await router.replace(`/matches/${store.room.currentMatchId}`);
   }
+  window.addEventListener("resize", updateSpectatorPopupPosition);
+  window.addEventListener("scroll", updateSpectatorPopupPosition, true);
+});
+
+onBeforeUnmount(() => {
+  clearSpectatorCloseTimer();
+  window.removeEventListener("resize", updateSpectatorPopupPosition);
+  window.removeEventListener("scroll", updateSpectatorPopupPosition, true);
 });
 </script>
 
@@ -267,17 +319,17 @@ onMounted(async () => {
           <span class="muted">Hover the button to inspect spectator presence.</span>
         </div>
         <div class="spectator-hover">
-          <button class="secondary" :disabled="!spectatorMembers.length">View spectators</button>
-          <div class="spectator-hover-card">
-            <template v-if="spectatorMembers.length">
-              <div v-for="member in spectatorMembers" :key="member.id" class="spectator-hover-row">
-                <span>{{ member.name }}</span>
-                <span class="muted">{{ member.connectionState }}</span>
-                <span class="muted">{{ formatLastOnline(member) }}</span>
-              </div>
-            </template>
-            <p v-else class="muted">No spectators in this room.</p>
-          </div>
+          <button
+            ref="spectatorButtonRef"
+            class="secondary"
+            :disabled="!spectatorMembers.length"
+            @mouseenter="openSpectatorPopup"
+            @mouseleave="closeSpectatorPopupSoon"
+            @focus="openSpectatorPopup"
+            @blur="closeSpectatorPopupSoon"
+          >
+            View spectators
+          </button>
         </div>
       </div>
     </section>
@@ -289,4 +341,25 @@ onMounted(async () => {
 
   <RoomChatFab />
   <RoomChatPanel />
+  <Teleport to="body">
+    <div
+      v-if="spectatorPopupOpen && spectatorMembers.length"
+      class="spectator-floating-card"
+      :style="spectatorPopupStyle"
+      @mouseenter="openSpectatorPopup"
+      @mouseleave="closeSpectatorPopupSoon"
+    >
+      <div class="spectator-floating-card__head">
+        <strong>{{ spectatorSummaryLabel }}</strong>
+        <button class="icon-button" type="button" @click="closeSpectatorPopupNow">×</button>
+      </div>
+      <div class="spectator-floating-card__body">
+        <div v-for="member in spectatorMembers" :key="member.id" class="spectator-hover-row">
+          <span>{{ member.name }}</span>
+          <span class="muted">{{ member.connectionState }}</span>
+          <span class="muted">{{ formatLastOnline(member) }}</span>
+        </div>
+      </div>
+    </div>
+  </Teleport>
 </template>

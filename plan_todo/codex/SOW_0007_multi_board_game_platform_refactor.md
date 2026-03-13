@@ -2151,3 +2151,51 @@ live board
   - highlight must stay readable on all player colors
   - highlight should not be confused with the current hover shadow
   - best implemented from authoritative move event data, not inferred from the current board
+
+## Extension: Floating Spectator Presence Popup
+- **Status**: APPROVED
+- **Approved-By**: Viet
+- **Approved-On**: 2026-03-13
+- **Task**: Convert the room spectator popup from a clipped in-flow dropdown into a true floating overlay that renders above the staging layout.
+- **Location**:
+  - `/Users/maihoangviet/Projects/blokus/src/platform/client/views/RoomView.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/style.css`
+  - `/Users/maihoangviet/Projects/blokus/plan_todo/codex/SOW_0007_multi_board_game_platform_refactor.md`
+- **Why**: The current spectator popup is implemented like a local dropdown inside clipped containers, so it gets cut off by panel/layout overflow. It should behave like a floating overlay similar to the chat panel.
+- **As-Is Diagram (ASCII)**:
+```text
+spectator button
+  -> absolute dropdown below button
+  -> ancestor containers use overflow: hidden
+  -> popup clipped by room panel/container
+```
+- **To-Be Diagram (ASCII)**:
+```text
+spectator button
+  -> floating overlay panel
+  -> rendered above room layout
+  -> not clipped by staging container
+  -> behaves like a lightweight popover/chat-style overlay
+```
+- **Deliverables**:
+  - change spectator popup behavior to a true floating overlay
+  - avoid clipping by room/panel container overflow
+  - keep same spectator content:
+    - name
+    - status
+    - last online
+  - preserve compact one-line spectator summary row
+- **Done Criteria**:
+  - spectator popup is not clipped by the room container
+  - popup appears above surrounding layout
+  - hover/focus interaction still works
+  - `npm run build` passes
+- **Out-of-Scope**:
+  - changing spectator data
+  - chat redesign
+  - room layout redesign beyond this popup
+- **Proposed-By**: Codex GPT-5
+- **plan**: multi-board-game-platform-refactor-v1
+- **Cautions / Risks**:
+  - hover-only behavior can be brittle if the floating panel is detached too far from the trigger
+  - fix should stay local to spectator popup, not weaken all overflow rules globally
