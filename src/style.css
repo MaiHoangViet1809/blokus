@@ -1410,9 +1410,9 @@ p {
 
 .mini-scoreboard__card {
   display: grid;
-  gap: 10px;
-  padding: 12px;
-  border-radius: 16px;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 14px;
   background: rgba(14, 26, 42, 0.88);
   border: 1px solid var(--line);
   box-shadow: inset 4px 0 0 var(--player-color, transparent);
@@ -1449,7 +1449,7 @@ p {
 .mini-scoreboard__card-title {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   min-width: 0;
 }
 
@@ -1458,32 +1458,28 @@ p {
 }
 
 .mini-scoreboard__card-meta {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  display: flex;
+  flex-wrap: wrap;
   gap: 8px;
-}
-
-.mini-scoreboard__metric {
-  display: grid;
-  gap: 3px;
   min-width: 0;
-  padding: 8px 10px;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.06);
 }
 
-.mini-scoreboard__metric--wide {
-  grid-column: 1 / -1;
+.mini-scoreboard__card-meta--compact {
+  font-size: 0.84rem;
+  line-height: 1.25;
+}
+
+.mini-scoreboard__card-meta--compact span {
+  white-space: nowrap;
 }
 
 .mini-scoreboard__rank {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 34px;
-  min-height: 24px;
-  padding: 0 8px;
+  min-width: 30px;
+  min-height: 22px;
+  padding: 0 7px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.08);
   color: var(--text);
@@ -2565,7 +2561,7 @@ p {
   }
 
   .viewport-fit-route .mini-scoreboard__card {
-    padding: 10px;
+    padding: 9px;
   }
 }
 

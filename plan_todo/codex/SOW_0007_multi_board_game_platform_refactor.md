@@ -2503,3 +2503,25 @@ Result:
   - topbar identity/status pills read with labels instead of bare values
   - Blokus turns follow color/corner order instead of join order
   - `npm run build` passes
+
+## Extension: Compact the Blokus Left-Rail Player Cards
+- **Status**: APPROVED
+- **Approved-By**: Viet
+- **Approved-On**: 2026-03-14
+- **Task**: Make the live Blokus left-rail player cards denser and shorter without losing the information moved there from the deleted footer strip.
+- **Location**:
+  - `/Users/maihoangviet/Projects/blokus/src/games/blokus/LiveView.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/style.css`
+  - `/Users/maihoangviet/Projects/blokus/plan_todo/codex/SOW_0007_multi_board_game_platform_refactor.md`
+- **Why**:
+  - the new player cards still waste vertical space in the left rail
+  - the left support rail is narrow and benefits from denser cards that keep the board dominant
+- **Deliverables**:
+  - compact the player-card layout while preserving rank, color, cells, pieces, and state
+  - replace the roomy lower metric boxes with denser metadata presentation
+  - keep the stronger active-player highlight intact
+- **Done Criteria**:
+  - player cards are visibly shorter and denser
+  - no player footer strip returns
+  - key player information remains readable
+  - `npm run build` passes

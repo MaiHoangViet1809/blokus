@@ -225,19 +225,10 @@ watch(availablePieceIds, (pieces) => {
               </div>
               <span class="phase-pill">{{ player.statusLabel }}</span>
             </div>
-            <div class="mini-scoreboard__card-meta">
-              <div class="mini-scoreboard__metric">
-                <span class="muted">Cells</span>
-                <strong>{{ player.remainingCells }}</strong>
-              </div>
-              <div class="mini-scoreboard__metric">
-                <span class="muted">Pieces</span>
-                <strong>{{ player.remainingPieces?.length || 0 }}</strong>
-              </div>
-              <div class="mini-scoreboard__metric mini-scoreboard__metric--wide">
-                <span class="muted">State</span>
-                <strong>{{ player.stateLabel }}</strong>
-              </div>
+            <div class="mini-scoreboard__card-meta mini-scoreboard__card-meta--compact">
+              <span><span class="muted">Cells</span> <strong>{{ player.remainingCells }}</strong></span>
+              <span><span class="muted">Pieces</span> <strong>{{ player.remainingPieces?.length || 0 }}</strong></span>
+              <span><span class="muted">State</span> <strong>{{ player.stateLabel }}</strong></span>
             </div>
           </div>
         </div>
