@@ -1,6 +1,23 @@
-import { buildEkRoomConfig, EXPLODING_KITTENS_GAME_TYPE, resolveEkRuleset } from "./shared.js";
+import {
+  buildEkRoomConfig,
+  canFormCatPair,
+  cardLabel,
+  EK_BASE_SUPPLY,
+  EK_CARD_META,
+  EK_CAT_CARDS,
+  EK_EXPANSION_SUPPLY,
+  EXPLODING_KITTENS_GAME_TYPE,
+  hasFeralCat,
+  pairableGroups,
+  playerLabel,
+  resolveEkRuleset
+} from "./shared.js";
 
 export { EXPLODING_KITTENS_GAME_TYPE };
+
+const MATCH_ACTIVE = "active";
+const MATCH_FINISHED = "finished";
+const MATCH_STARTING = "starting";
 
 function parseJson(value, fallback) {
   try {
@@ -10,47 +27,769 @@ function parseJson(value, fallback) {
   }
 }
 
+function cloneState(state) {
+  return JSON.parse(JSON.stringify(state));
+}
+
+function shuffle(input) {
+  const items = [...input];
+  for (let index = items.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [items[index], items[swapIndex]] = [items[swapIndex], items[index]];
+  }
+  return items;
+}
+
+function repeat(cardId, count) {
+  return Array.from({ length: count }, () => cardId);
+}
+
+function buildDeckSupply(ruleset) {
+  const supply = { ...EK_BASE_SUPPLY };
+  const expansion = EK_EXPANSION_SUPPLY[ruleset.ruleset];
+  if (expansion) {
+    for (const [cardId, count] of Object.entries(expansion)) {
+      supply[cardId] = (supply[cardId] || 0) + count;
+    }
+  }
+  return supply;
+}
+
+function takeCards(deck, cardId, count) {
+  let remaining = count;
+  const nextDeck = [];
+  for (const entry of deck) {
+    if (remaining > 0 && entry === cardId) {
+      remaining -= 1;
+    } else {
+      nextDeck.push(entry);
+    }
+  }
+  return nextDeck;
+}
+
+function buildInitialDeck(ruleset, playerCount) {
+  const supply = buildDeckSupply(ruleset);
+  let deck = Object.entries(supply).flatMap(([cardId, count]) => repeat(cardId, count));
+  deck = shuffle(deck);
+  return {
+    actionDeck: takeCards(takeCards(deck, "defuse", playerCount), "exploding_kitten", playerCount - 1)
+  };
+}
+
 function createInitialState(roomConfig) {
   return {
     ruleset: roomConfig.ruleset,
-    statusText: "Waiting for the first EK action implementation.",
-    turnIndex: 0,
-    playersAlive: roomConfig.maxPlayers,
-    drawPileCount: 0,
-    discardPile: [],
-    prompt: {
-      type: "not_ready",
-      label: "Exploding Kittens v1 implementation is being wired in."
-    }
-  };
-}
-
-function buildSetupPlayer(member) {
-  return {
-    profileId: member.profile_id,
-    name: member.name,
-    seatIndex: member.seat_index,
-    isReady: !!member.is_ready,
-    isHost: !!member.isHost,
-    connectionState: member.connection_state
-  };
-}
-
-function projectSetup(room, members, viewerProfileId) {
-  const roomConfig = buildEkRoomConfig(parseJson(room.config_json, {}));
-  const players = members
-    .filter((member) => member.role === "player")
-    .sort((a, b) => a.seat_index - b.seat_index)
-    .map(buildSetupPlayer);
-  return {
-    gameType: EXPLODING_KITTENS_GAME_TYPE,
-    ruleset: roomConfig.ruleset,
     modeLabel: roomConfig.modeLabel,
-    minPlayers: roomConfig.minPlayers,
-    maxPlayers: roomConfig.maxPlayers,
-    viewerProfileId,
-    players
+    drawPile: [],
+    discardPile: [],
+    turnIndex: 0,
+    turnDirection: 1,
+    pendingDraws: 1,
+    reaction: null,
+    prompt: null,
+    lastActionText: "Match ready.",
+    implodingFaceUpIndex: null
   };
+}
+
+function parseState(boardJson, roomConfig) {
+  const fallback = createInitialState(roomConfig);
+  const parsed = parseJson(boardJson, fallback);
+  return {
+    ...fallback,
+    ...parsed,
+    drawPile: Array.isArray(parsed?.drawPile) ? [...parsed.drawPile] : [],
+    discardPile: Array.isArray(parsed?.discardPile) ? [...parsed.discardPile] : [],
+    turnIndex: Number.isInteger(parsed?.turnIndex) ? parsed.turnIndex : 0,
+    pendingDraws: Number.isInteger(parsed?.pendingDraws) ? parsed.pendingDraws : 1,
+    turnDirection: parsed?.turnDirection === -1 ? -1 : 1,
+    reaction: parsed?.reaction || null,
+    prompt: parsed?.prompt || null,
+    implodingFaceUpIndex: Number.isInteger(parsed?.implodingFaceUpIndex) ? parsed.implodingFaceUpIndex : null
+  };
+}
+
+function activePlayers(players) {
+  return players.filter((player) => player.end_state === "active");
+}
+
+function activePlayerIndexes(players) {
+  return players
+    .map((player, index) => ({ player, index }))
+    .filter(({ player }) => player.end_state === "active");
+}
+
+function nextActiveIndex(players, startIndex, direction = 1) {
+  const active = activePlayerIndexes(players);
+  if (!active.length) return 0;
+  for (let step = 1; step <= players.length; step += 1) {
+    const candidate = (startIndex + (step * direction) + players.length) % players.length;
+    if (players[candidate]?.end_state === "active") return candidate;
+  }
+  return active[0].index;
+}
+
+function playerByProfile(players, profileId) {
+  return players.find((player) => player.profile_id === profileId) || null;
+}
+
+function playerIndexByProfile(players, profileId) {
+  return players.findIndex((player) => player.profile_id === profileId);
+}
+
+function clonePlayers(players) {
+  return players.map((player) => ({
+    ...player,
+    remainingPieces: Array.isArray(player.remainingPieces) ? [...player.remainingPieces] : []
+  }));
+}
+
+function appendDiscard(state, ...cards) {
+  state.discardPile.push(...cards.filter(Boolean));
+}
+
+function removeCardFromHand(hand, cardId, count = 1) {
+  let remaining = count;
+  const removed = [];
+  const nextHand = [];
+  for (const entry of hand) {
+    if (remaining > 0 && entry === cardId) {
+      removed.push(entry);
+      remaining -= 1;
+    } else {
+      nextHand.push(entry);
+    }
+  }
+  return {
+    hand: nextHand,
+    removed,
+    removedCount: removed.length
+  };
+}
+
+function removeCardsForPair(hand, cardId) {
+  if (hand.filter((entry) => entry === cardId).length >= 2) {
+    return removeCardFromHand(hand, cardId, 2);
+  }
+  if (EK_CAT_CARDS.includes(cardId) && hand.includes(cardId) && hasFeralCat(hand)) {
+    const firstPass = removeCardFromHand(hand, cardId, 1);
+    const secondPass = removeCardFromHand(firstPass.hand, "feral_cat", 1);
+    return {
+      hand: secondPass.hand,
+      removed: [...firstPass.removed, ...secondPass.removed],
+      removedCount: firstPass.removedCount + secondPass.removedCount
+    };
+  }
+  return {
+    hand,
+    removed: [],
+    removedCount: 0
+  };
+}
+
+function drawCard(state, fromBottom = false) {
+  if (!state.drawPile.length) return null;
+  if (fromBottom) {
+    const drawIndex = state.drawPile.length - 1;
+    const wasFaceUp = state.implodingFaceUpIndex === drawIndex;
+    const cardId = state.drawPile.pop();
+    if (wasFaceUp) {
+      state.implodingFaceUpIndex = null;
+    }
+    return { cardId, wasFaceUp };
+  }
+
+  const wasFaceUp = state.implodingFaceUpIndex === 0;
+  const cardId = state.drawPile.shift();
+  if (state.implodingFaceUpIndex !== null) {
+    state.implodingFaceUpIndex = wasFaceUp ? null : Math.max(0, state.implodingFaceUpIndex - 1);
+  }
+  return { cardId, wasFaceUp };
+}
+
+function insertIntoDrawPile(state, cardId, position) {
+  const normalized = Math.max(0, Math.min(position, state.drawPile.length));
+  state.drawPile.splice(normalized, 0, cardId);
+  if (state.implodingFaceUpIndex !== null && normalized <= state.implodingFaceUpIndex) {
+    state.implodingFaceUpIndex += 1;
+  }
+}
+
+function publicPrompt(prompt, viewerProfileId) {
+  if (!prompt) return null;
+  if (prompt.profileId && prompt.profileId !== viewerProfileId) {
+    return {
+      type: "waiting",
+      label: prompt.waitingLabel || "Waiting on another player."
+    };
+  }
+  return prompt;
+}
+
+function buildReplayLabel(eventType, payload = {}) {
+  switch (eventType) {
+    case "match_started":
+      return `Match started (${payload.ruleset || "base"})`;
+    case "card_played":
+      return `${payload.playerName || "Player"} played ${cardLabel(payload.cardId)}`;
+    case "pair_played":
+      return `${payload.playerName || "Player"} played a pair of ${cardLabel(payload.cardId)}`;
+    case "reaction_nope":
+      return `${payload.playerName || "Player"} played Nope`;
+    case "draw_card":
+      return `${payload.playerName || "Player"} drew a card`;
+    case "player_eliminated":
+      return `${payload.playerName || "Player"} exploded`;
+    case "match_finished":
+      return payload.winnerName ? `${payload.winnerName} won` : "Match finished";
+    default:
+      return eventType;
+  }
+}
+
+function buildPromptAction(type, label, commandPayload = {}) {
+  return { type, label, commandPayload };
+}
+
+function passTurn(state, players, pendingDraws = 1) {
+  state.turnIndex = nextActiveIndex(players, state.turnIndex, state.turnDirection);
+  state.pendingDraws = pendingDraws;
+}
+
+function eliminatePlayer(state, players, player, causeCardId) {
+  player.end_state = "eliminated";
+  appendDiscard(state, ...player.remainingPieces);
+  player.remainingPieces = [];
+  state.lastActionText = `${playerLabel(player)} exploded.`;
+  return causeCardId;
+}
+
+function maybeFinish(state, players) {
+  const alive = activePlayers(players);
+  if (alive.length <= 1) {
+    return alive[0]?.profile_id || null;
+  }
+  return null;
+}
+
+function topPreview(drawPile, count) {
+  return drawPile.slice(0, count);
+}
+
+function promptDismiss(profileId, label, extra = {}) {
+  return {
+    type: "info",
+    profileId,
+    label,
+    actions: [buildPromptAction("dismiss_prompt", "Continue")],
+    ...extra
+  };
+}
+
+function permutationChoices(cards) {
+  const results = [];
+  function permute(prefix, remaining) {
+    if (!remaining.length) {
+      results.push(prefix);
+      return;
+    }
+    remaining.forEach((entry, index) => {
+      const nextRemaining = remaining.filter((_, candidateIndex) => candidateIndex !== index);
+      permute([...prefix, entry], nextRemaining);
+    });
+  }
+  permute([], cards);
+  return results;
+}
+
+function buildReactionOrder(players, startProfileId) {
+  const startIndex = Math.max(0, playerIndexByProfile(players, startProfileId));
+  const responderIndexes = [];
+  for (let step = 1; step <= players.length; step += 1) {
+    const index = (startIndex + step) % players.length;
+    if (players[index]?.end_state === "active") responderIndexes.push(index);
+  }
+  return responderIndexes.map((index) => players[index].profile_id);
+}
+
+function queueReaction(state, players, actorProfileId, effect) {
+  state.reaction = {
+    effect,
+    actorProfileId,
+    nopesPlayed: 0,
+    responders: buildReactionOrder(players, actorProfileId),
+    responderIndex: 0
+  };
+}
+
+function currentResponder(state) {
+  if (!state.reaction) return null;
+  return state.reaction.responders[state.reaction.responderIndex] || null;
+}
+
+function advanceReaction(state, players) {
+  if (!state.reaction) return;
+  state.reaction.responderIndex += 1;
+  while (state.reaction.responderIndex < state.reaction.responders.length) {
+    const candidate = state.reaction.responders[state.reaction.responderIndex];
+    const player = playerByProfile(players, candidate);
+    if (player && player.end_state === "active") return;
+    state.reaction.responderIndex += 1;
+  }
+}
+
+function buildPublicPlayer(player) {
+  return {
+    profileId: player.profile_id,
+    name: player.name,
+    seatIndex: player.seat_index,
+    handCount: Array.isArray(player.remainingPieces) ? player.remainingPieces.length : 0,
+    disconnected: !!player.disconnected,
+    endState: player.end_state
+  };
+}
+
+function buildAvailableActions(state, players, viewerProfileId) {
+  const viewer = playerByProfile(players, viewerProfileId);
+  if (!viewer || viewer.end_state !== "active") return [];
+
+  if (state.prompt?.profileId === viewerProfileId) {
+    return (state.prompt.actions || []).map((action) => ({
+      ...action,
+      label: action.label
+    }));
+  }
+
+  if (state.reaction) {
+    if (currentResponder(state) !== viewerProfileId) return [];
+    const actions = [buildPromptAction("pass_reaction", "Pass")];
+    if (viewer.remainingPieces.includes("nope")) {
+      actions.unshift(buildPromptAction("reaction_nope", "Play Nope"));
+    }
+    return actions;
+  }
+
+  if (players[state.turnIndex]?.profile_id !== viewerProfileId) return [];
+
+  const actions = [buildPromptAction("draw_card", state.pendingDraws > 1 ? `Draw (${state.pendingDraws} turns left)` : "Draw to End Turn")];
+  const hand = viewer.remainingPieces;
+
+  if (hand.includes("skip")) {
+    actions.push(buildPromptAction("play_card", "Play Skip", { cardId: "skip" }));
+  }
+  if (hand.includes("attack")) {
+    actions.push(buildPromptAction("play_card", "Play Attack", { cardId: "attack" }));
+  }
+  if (hand.includes("shuffle")) {
+    actions.push(buildPromptAction("play_card", "Play Shuffle", { cardId: "shuffle" }));
+  }
+  if (hand.includes("see_the_future")) {
+    actions.push(buildPromptAction("play_card", "See The Future", { cardId: "see_the_future" }));
+  }
+  if (hand.includes("reverse")) {
+    actions.push(buildPromptAction("play_card", "Play Reverse", { cardId: "reverse" }));
+  }
+  if (hand.includes("draw_from_bottom")) {
+    actions.push(buildPromptAction("play_card", "Draw From Bottom", { cardId: "draw_from_bottom" }));
+  }
+  if (hand.includes("alter_the_future")) {
+    actions.push(buildPromptAction("play_card", "Alter The Future", { cardId: "alter_the_future" }));
+  }
+  if (hand.includes("swap_top_bottom")) {
+    actions.push(buildPromptAction("play_card", "Swap Top & Bottom", { cardId: "swap_top_bottom" }));
+  }
+  if (hand.includes("bury")) {
+    actions.push(buildPromptAction("play_card", "Bury", { cardId: "bury" }));
+  }
+
+  const targetablePlayers = activePlayers(players)
+    .filter((player) => player.profile_id !== viewerProfileId)
+    .map((player) => ({ profileId: player.profile_id, name: player.name }));
+
+  if (hand.includes("favor")) {
+    targetablePlayers.forEach((target) => {
+      actions.push(buildPromptAction("play_card", `Favor ${target.name}`, {
+        cardId: "favor",
+        targetProfileId: target.profileId
+      }));
+    });
+  }
+
+  const pairCandidates = new Set([...pairableGroups(hand), ...EK_CAT_CARDS.filter((cardId) => canFormCatPair(hand, cardId))]);
+  for (const cardId of pairCandidates) {
+    targetablePlayers.forEach((target) => {
+      actions.push(buildPromptAction("play_pair", `Pair ${cardLabel(cardId)} vs ${target.name}`, {
+        cardId,
+        targetProfileId: target.profileId
+      }));
+    });
+  }
+
+  return actions;
+}
+
+function buildStateForReplay(state, players) {
+  return {
+    turnIndex: state.turnIndex,
+    pendingDraws: state.pendingDraws,
+    drawPileCount: state.drawPile.length,
+    discardPile: [...state.discardPile],
+    players: players.map(buildPublicPlayer),
+    prompt: state.prompt ? { type: state.prompt.type, label: state.prompt.label } : null
+  };
+}
+
+function pushEvent(events, state, players, profileId, eventType, payload = {}) {
+  events.push({
+    profileId,
+    eventType,
+    payload: {
+      ...payload,
+      publicState: buildStateForReplay(state, players)
+    }
+  });
+}
+
+function applyFavorPrompt(state, players, actorProfileId, targetProfileId) {
+  const target = playerByProfile(players, targetProfileId);
+  if (!target || target.end_state !== "active") {
+    state.lastActionText = "Favor fizzled because the target is no longer active.";
+    return;
+  }
+  if (!target.remainingPieces.length) {
+    state.lastActionText = `${playerLabel(target)} had no cards to give.`;
+    return;
+  }
+  state.prompt = {
+    type: "favor_give",
+    profileId: targetProfileId,
+    actorProfileId,
+    targetProfileId,
+    label: `Choose one card to give ${playerByProfile(players, actorProfileId)?.name || "the attacker"}.`,
+    waitingLabel: `${playerLabel(target)} is choosing a card for Favor.`,
+    actions: target.remainingPieces.map((cardId, index) => buildPromptAction("resolve_prompt", `Give ${cardLabel(cardId)}`, {
+      promptType: "favor_give",
+      targetProfileId,
+      actorProfileId,
+      cardIndex: index
+    }))
+  };
+}
+
+function applySeeFuturePrompt(state, actorProfileId) {
+  const cards = topPreview(state.drawPile, 3);
+  state.prompt = promptDismiss(actorProfileId, cards.length
+    ? `Top cards: ${cards.map(cardLabel).join(" · ")}`
+    : "The draw pile is empty.");
+}
+
+function applyAlterFuturePrompt(state, actorProfileId) {
+  const cards = topPreview(state.drawPile, 3);
+  if (cards.length <= 1) {
+    state.prompt = promptDismiss(actorProfileId, cards.length ? `Top card stays ${cardLabel(cards[0])}.` : "The draw pile is empty.");
+    return;
+  }
+  const options = permutationChoices(cards);
+  state.prompt = {
+    type: "alter_future",
+    profileId: actorProfileId,
+    label: "Choose the new order for the top cards.",
+    cardsPreview: cards,
+    actions: options.map((ordered, index) => buildPromptAction("resolve_prompt", ordered.map(cardLabel).join(" → "), {
+      promptType: "alter_future",
+      order: ordered,
+      optionIndex: index
+    }))
+  };
+}
+
+function applyBuryPrompt(state, actorProfileId) {
+  if (!state.drawPile.length) {
+    state.prompt = promptDismiss(actorProfileId, "The draw pile is empty.");
+    return;
+  }
+  const cardId = state.drawPile.shift();
+  state.prompt = {
+    type: "bury",
+    profileId: actorProfileId,
+    label: `Choose where to bury ${cardLabel(cardId)}.`,
+    cardId,
+    actions: Array.from({ length: state.drawPile.length + 1 }, (_, index) =>
+      buildPromptAction("resolve_prompt", `Position ${index + 1}`, {
+        promptType: "bury",
+        cardId,
+        position: index
+      }))
+  };
+}
+
+function resolveDrawResult(state, players, player, drawResult, events, nowIso) {
+  const drawnCard = drawResult?.cardId || null;
+  if (!drawnCard) {
+    state.lastActionText = "The draw pile is empty.";
+    return { finished: false };
+  }
+  pushEvent(events, state, players, player.profile_id, "draw_card", {
+    playerName: player.name,
+    cardId: drawnCard
+  });
+
+  if (drawnCard === "exploding_kitten") {
+    const alreadyHoldingKitten = player.remainingPieces.includes("exploding_kitten");
+    if (player.remainingPieces.includes("streaking_kitten") && !alreadyHoldingKitten) {
+      player.remainingPieces.push(drawnCard);
+      state.lastActionText = `${playerLabel(player)} secretly held an Exploding Kitten with Streaking Kitten.`;
+    } else if (player.remainingPieces.includes("defuse")) {
+      const defuseRemoval = removeCardFromHand(player.remainingPieces, "defuse", 1);
+      player.remainingPieces = defuseRemoval.hand;
+      appendDiscard(state, "defuse");
+      state.prompt = {
+        type: "defuse_reinsert",
+        profileId: player.profile_id,
+        cardId: drawnCard,
+        label: "Choose the exact position to reinsert the Exploding Kitten.",
+        actions: Array.from({ length: state.drawPile.length + 1 }, (_, index) =>
+          buildPromptAction("resolve_prompt", `Position ${index + 1}`, {
+            promptType: "defuse_reinsert",
+            cardId: drawnCard,
+            position: index
+          }))
+      };
+      state.lastActionText = `${playerLabel(player)} used Defuse.`;
+      return { waiting: true };
+    } else {
+      eliminatePlayer(state, players, player, drawnCard);
+      appendDiscard(state, drawnCard);
+      pushEvent(events, state, players, player.profile_id, "player_eliminated", {
+        playerName: player.name,
+        cardId: drawnCard
+      });
+      const winnerProfileId = maybeFinish(state, players);
+      if (winnerProfileId) {
+        const winner = playerByProfile(players, winnerProfileId);
+        pushEvent(events, state, players, winnerProfileId, "match_finished", {
+          winnerProfileId,
+          winnerName: winner?.name || null
+        });
+        return { finished: true, winnerProfileId, finishedAt: nowIso };
+      }
+    }
+  } else if (drawnCard === "imploding_kitten") {
+    if (drawResult?.wasFaceUp) {
+      eliminatePlayer(state, players, player, drawnCard);
+      appendDiscard(state, drawnCard);
+      pushEvent(events, state, players, player.profile_id, "player_eliminated", {
+        playerName: player.name,
+        cardId: drawnCard
+      });
+      const winnerProfileId = maybeFinish(state, players);
+      if (winnerProfileId) {
+        const winner = playerByProfile(players, winnerProfileId);
+        pushEvent(events, state, players, winnerProfileId, "match_finished", {
+          winnerProfileId,
+          winnerName: winner?.name || null
+        });
+        return { finished: true, winnerProfileId, finishedAt: nowIso };
+      }
+    } else {
+      state.prompt = {
+        type: "imploding_reinsert",
+        profileId: player.profile_id,
+        cardId: drawnCard,
+        label: "Choose where to reinsert the face-up Imploding Kitten.",
+        actions: Array.from({ length: state.drawPile.length + 1 }, (_, index) =>
+          buildPromptAction("resolve_prompt", `Position ${index + 1}`, {
+            promptType: "imploding_reinsert",
+            cardId: drawnCard,
+            position: index
+          }))
+      };
+      state.lastActionText = `${playerLabel(player)} repositioned the Imploding Kitten.`;
+      return { waiting: true };
+    }
+  } else {
+    player.remainingPieces.push(drawnCard);
+    state.lastActionText = `${playerLabel(player)} drew ${cardLabel(drawnCard)}.`;
+  }
+
+  state.pendingDraws = Math.max(0, state.pendingDraws - 1);
+  if (state.pendingDraws === 0) {
+    passTurn(state, players, 1);
+  }
+  return { finished: false };
+}
+
+function resolveEffect(state, players, effect, events, nowIso) {
+  const actor = playerByProfile(players, effect.actorProfileId);
+  if (!actor || actor.end_state !== "active") return { finished: false };
+
+  switch (effect.effectType) {
+    case "skip": {
+      state.pendingDraws = Math.max(0, state.pendingDraws - 1);
+      state.lastActionText = `${playerLabel(actor)} skipped a draw.`;
+      if (state.pendingDraws === 0) passTurn(state, players, 1);
+      return { finished: false };
+    }
+    case "attack": {
+      passTurn(state, players, Math.max(2, state.pendingDraws + 1));
+      state.lastActionText = `${playerLabel(actor)} attacked the next player.`;
+      return { finished: false };
+    }
+    case "shuffle": {
+      state.drawPile = shuffle(state.drawPile);
+      if (state.implodingFaceUpIndex !== null && state.implodingFaceUpIndex >= 0) {
+        state.implodingFaceUpIndex = null;
+      }
+      state.lastActionText = `${playerLabel(actor)} shuffled the draw pile.`;
+      return { finished: false };
+    }
+    case "see_the_future": {
+      applySeeFuturePrompt(state, actor.profile_id);
+      state.lastActionText = `${playerLabel(actor)} peeked at the next cards.`;
+      return { finished: false };
+    }
+    case "favor": {
+      applyFavorPrompt(state, players, actor.profile_id, effect.targetProfileId);
+      state.lastActionText = `${playerLabel(actor)} requested a Favor from ${playerLabel(playerByProfile(players, effect.targetProfileId))}.`;
+      return { finished: false };
+    }
+    case "reverse": {
+      state.turnDirection *= -1;
+      passTurn(state, players, 1);
+      state.lastActionText = `${playerLabel(actor)} reversed turn order.`;
+      return { finished: false };
+    }
+    case "draw_from_bottom": {
+      state.lastActionText = `${playerLabel(actor)} drew from the bottom.`;
+      return resolveDrawResult(state, players, actor, drawCard(state, true), events, nowIso);
+    }
+    case "alter_the_future": {
+      applyAlterFuturePrompt(state, actor.profile_id);
+      state.lastActionText = `${playerLabel(actor)} is altering the future.`;
+      return { finished: false };
+    }
+    case "swap_top_bottom": {
+      if (state.drawPile.length >= 2) {
+        const first = state.drawPile[0];
+        const last = state.drawPile[state.drawPile.length - 1];
+        state.drawPile[0] = last;
+        state.drawPile[state.drawPile.length - 1] = first;
+      }
+      state.lastActionText = `${playerLabel(actor)} swapped the top and bottom cards.`;
+      return { finished: false };
+    }
+    case "bury": {
+      applyBuryPrompt(state, actor.profile_id);
+      state.lastActionText = `${playerLabel(actor)} is burying the top card.`;
+      return { finished: false };
+    }
+    case "pair": {
+      const target = playerByProfile(players, effect.targetProfileId);
+      if (!target || !target.remainingPieces.length) {
+        state.lastActionText = `${playerLabel(actor)} found no card to steal.`;
+        return { finished: false };
+      }
+      const randomIndex = Math.floor(Math.random() * target.remainingPieces.length);
+      const [stolenCard] = target.remainingPieces.splice(randomIndex, 1);
+      actor.remainingPieces.push(stolenCard);
+      state.lastActionText = `${playerLabel(actor)} stole a card from ${playerLabel(target)}.`;
+      pushEvent(events, state, players, actor.profile_id, "pair_stole_card", {
+        playerName: actor.name,
+        targetName: target.name,
+        cardId: effect.cardId
+      });
+      return { finished: false };
+    }
+    default:
+      return { finished: false };
+  }
+}
+
+function finishReaction(state, players, events, nowIso) {
+  const reaction = state.reaction;
+  state.reaction = null;
+  if (!reaction) return { finished: false };
+  if (reaction.nopesPlayed % 2 === 1) {
+    state.lastActionText = `${cardLabel(reaction.effect.cardId)} was noped.`;
+    return { finished: false };
+  }
+  return resolveEffect(state, players, reaction.effect, events, nowIso);
+}
+
+function recordPlayableCard(player, state, players, events, cardId, payload = {}, effectType = cardId) {
+  const removal = removeCardFromHand(player.remainingPieces, cardId, 1);
+  if (!removal.removedCount) {
+    throw new Error(`${cardLabel(cardId)} is not in your hand.`);
+  }
+  player.remainingPieces = removal.hand;
+  appendDiscard(state, ...removal.removed);
+  pushEvent(events, state, players, player.profile_id, "card_played", {
+    playerName: player.name,
+    cardId,
+    ...payload
+  });
+  queueReaction(state, players, player.profile_id, {
+    effectType,
+    cardId,
+    actorProfileId: player.profile_id,
+    ...payload
+  });
+}
+
+function buildPlayerProjection(player, viewerProfileId) {
+  return {
+    profileId: player.profile_id,
+    name: player.name,
+    seatIndex: player.seat_index,
+    handCount: Array.isArray(player.remainingPieces) ? player.remainingPieces.length : 0,
+    isMe: player.profile_id === viewerProfileId,
+    disconnected: !!player.disconnected,
+    endState: player.end_state
+  };
+}
+
+function buildViewerPrompt(state, viewerProfileId) {
+  return publicPrompt(state.prompt, viewerProfileId);
+}
+
+function buildReactionPrompt(state, players, viewerProfileId) {
+  if (!state.reaction) return null;
+  const responderId = currentResponder(state);
+  if (responderId !== viewerProfileId) {
+    return {
+      type: "waiting",
+      label: `${playerLabel(playerByProfile(players, responderId))} can respond with Nope.`
+    };
+  }
+  const viewer = playerByProfile(players, viewerProfileId);
+  const actions = [buildPromptAction("pass_reaction", "Pass")];
+  if (viewer.remainingPieces.includes("nope")) {
+    actions.unshift(buildPromptAction("reaction_nope", "Play Nope"));
+  }
+  return {
+    type: "reaction",
+    label: `Respond to ${cardLabel(state.reaction.effect.cardId)}?`,
+    actions
+  };
+}
+
+function buildStatusText(state, players) {
+  const current = players[state.turnIndex];
+  if (state.reaction) {
+    return `${playerLabel(playerByProfile(players, currentResponder(state)))} can play Nope.`;
+  }
+  if (state.prompt?.waitingLabel) return state.prompt.waitingLabel;
+  if (state.lastActionText) return state.lastActionText;
+  return `${playerLabel(current)} is taking a turn.`;
+}
+
+function buildAvailableActionsForViewer(state, players, viewerProfileId) {
+  if (state.reaction) {
+    const prompt = buildReactionPrompt(state, players, viewerProfileId);
+    return prompt?.actions || [];
+  }
+  return buildAvailableActions(state, players, viewerProfileId);
 }
 
 export function createExplodingKittensDriver() {
@@ -68,77 +807,121 @@ export function createExplodingKittensDriver() {
       }
     },
     projectRoomSetup(room, members, viewerProfileId) {
-      return projectSetup(room, members, viewerProfileId);
+      const roomConfig = buildEkRoomConfig(parseJson(room.config_json, {}));
+      return {
+        gameType: EXPLODING_KITTENS_GAME_TYPE,
+        ruleset: roomConfig.ruleset,
+        modeLabel: roomConfig.modeLabel,
+        minPlayers: roomConfig.minPlayers,
+        maxPlayers: roomConfig.maxPlayers,
+        viewerProfileId,
+        players: members
+          .filter((member) => member.role === "player")
+          .sort((a, b) => a.seat_index - b.seat_index)
+          .map((member) => ({
+            profileId: member.profile_id,
+            name: member.name,
+            seatIndex: member.seat_index,
+            isReady: !!member.is_ready,
+            isHost: !!member.isHost,
+            connectionState: member.connection_state
+          }))
+      };
     },
     applyRoomPatch() {
       throw new Error("Exploding Kittens does not use room setup patches in v1.");
     },
-    createMatch(room, members, makeId) {
+    createMatch(room, members, makeId, nowIso) {
       const roomConfig = buildEkRoomConfig(parseJson(room.config_json, {}));
       const players = members
         .filter((member) => member.role === "player")
         .sort((a, b) => a.seat_index - b.seat_index);
+      const { actionDeck } = buildInitialDeck(resolveEkRuleset(roomConfig), players.length);
+      const shuffledActionDeck = shuffle(actionDeck);
+      const matchPlayers = [];
+      for (const player of players) {
+        const hand = shuffledActionDeck.splice(0, 7);
+        hand.push("defuse");
+        matchPlayers.push({
+          id: makeId("match_player"),
+          profile_id: player.profile_id,
+          seatIndex: player.seat_index,
+          colorIndex: player.seat_index,
+          remainingPiecesJson: JSON.stringify(hand)
+        });
+      }
+
+      const extraDefuses = Math.max(0, 6 - players.length);
+      shuffledActionDeck.push(...repeat("defuse", extraDefuses));
+      const explodingCount = Math.max(1, players.length - 1);
+      if (roomConfig.ruleset === "imploding") {
+        shuffledActionDeck.push("imploding_kitten");
+        shuffledActionDeck.push(...repeat("exploding_kitten", Math.max(0, explodingCount - 1)));
+      } else {
+        shuffledActionDeck.push(...repeat("exploding_kitten", explodingCount));
+      }
+
       const state = createInitialState(roomConfig);
+      state.drawPile = shuffle(shuffledActionDeck);
+      state.lastActionText = `${playerLabel(players[0])} goes first.`;
+      const events = [{
+        profileId: null,
+        eventType: "match_started",
+        payload: {
+          ruleset: roomConfig.ruleset,
+          publicState: buildStateForReplay(state, matchPlayers.map((player, index) => ({
+            ...player,
+            name: players[index].name,
+            remainingPieces: parseJson(player.remainingPiecesJson, []),
+            end_state: "active",
+            profile_id: player.profile_id,
+            seat_index: player.seatIndex
+          })))
+        }
+      }];
+
       return {
         matchId: makeId("match"),
         boardJson: JSON.stringify(state),
         governanceJson: JSON.stringify({ endVotes: [], rematchVotes: [] }),
         turnIndex: 0,
-        status: "starting",
+        status: MATCH_STARTING,
         winnerProfileId: null,
         finishedAt: null,
         firstCommittedAt: null,
-        matchPlayers: players.map((player) => ({
-          id: makeId("match_player"),
-          profile_id: player.profile_id,
-          seatIndex: player.seat_index,
-          colorIndex: player.seat_index,
-          remainingPiecesJson: JSON.stringify([])
-        })),
-        events: [
-          {
-            profileId: null,
-            eventType: "match_started",
-            payload: { ruleset: roomConfig.ruleset }
-          }
-        ]
+        matchPlayers,
+        events
       };
     },
     projectMatch(room, match, players, viewerProfileId) {
-      const state = parseJson(match.board_json, createInitialState(buildEkRoomConfig(parseJson(room.config_json, {}))));
+      const roomConfig = buildEkRoomConfig(parseJson(room.config_json, {}));
+      const state = parseState(match.board_json, roomConfig);
       return {
         gameType: EXPLODING_KITTENS_GAME_TYPE,
-        ruleset: state.ruleset,
-        modeLabel: buildEkRoomConfig(parseJson(room.config_json, {})).modeLabel,
+        ruleset: roomConfig.ruleset,
+        modeLabel: roomConfig.modeLabel,
         viewerProfileId,
         status: match.status,
         turnIndex: state.turnIndex,
-        statusText: state.statusText,
-        drawPileCount: state.drawPileCount,
+        statusText: buildStatusText(state, players),
+        drawPileCount: state.drawPile.length,
         discardPile: state.discardPile,
-        prompt: state.prompt,
-        players: players.map((player) => ({
-          profileId: player.profile_id,
-          name: player.name,
-          seatIndex: player.seat_index,
-          handCount: Array.isArray(player.remainingPieces) ? player.remainingPieces.length : 0,
-          isMe: player.profile_id === viewerProfileId,
-          disconnected: !!player.disconnected,
-          endState: player.end_state
-        })),
-        me: players.find((player) => player.profile_id === viewerProfileId)
+        prompt: buildViewerPrompt(state, viewerProfileId) || buildReactionPrompt(state, players, viewerProfileId),
+        players: players.map((player) => buildPlayerProjection(player, viewerProfileId)),
+        me: playerByProfile(players, viewerProfileId)
           ? {
-              hand: []
+              hand: [...playerByProfile(players, viewerProfileId).remainingPieces]
             }
           : null,
-        availableActions: []
+        availableActions: buildAvailableActionsForViewer(state, players, viewerProfileId)
       };
     },
     buildReplay(room, match, players, moves) {
+      const roomConfig = buildEkRoomConfig(parseJson(room.config_json, {}));
       return {
         gameType: EXPLODING_KITTENS_GAME_TYPE,
-        ruleset: resolveEkRuleset(parseJson(room.config_json, {})).ruleset,
-        modeLabel: buildEkRoomConfig(parseJson(room.config_json, {})).modeLabel,
+        ruleset: roomConfig.ruleset,
+        modeLabel: roomConfig.modeLabel,
         id: match.id,
         roomCode: room.code,
         roomTitle: room.title,
@@ -151,23 +934,206 @@ export function createExplodingKittensDriver() {
         frames: moves.map((move, index) => ({
           step: index + 1,
           eventType: move.eventType,
-          label: move.eventType,
+          label: buildReplayLabel(move.eventType, move.payload),
           actorName: move.playerName,
+          createdAt: move.createdAt,
           payload: move.payload
         }))
       };
     },
-    handleCommand() {
-      throw new Error("Exploding Kittens v1 server actions are not wired yet.");
+    handleCommand(room, match, players, profileId, command, nowIso) {
+      const roomConfig = buildEkRoomConfig(parseJson(room.config_json, {}));
+      const state = cloneState(parseState(match.board_json, roomConfig));
+      const nextPlayers = clonePlayers(players);
+      const actor = playerByProfile(nextPlayers, profileId);
+      if (!actor) throw new Error("Only seated players can act in this match.");
+      if (actor.end_state !== "active") throw new Error("Eliminated players cannot act.");
+
+      const commandType = String(command?.commandType || "").trim();
+      const payload = command?.commandPayload || {};
+      const events = [];
+
+      const finalize = (result = {}) => ({
+        boardJson: JSON.stringify(state),
+        turnIndex: state.turnIndex,
+        firstCommittedAt: match.first_committed_at || nowIso,
+        status: result.finished ? MATCH_FINISHED : MATCH_ACTIVE,
+        winnerProfileId: result.winnerProfileId ?? null,
+        finishedAt: result.finished ? result.finishedAt : null,
+        players: nextPlayers,
+        events
+      });
+
+      if (state.prompt?.profileId === profileId && commandType === "dismiss_prompt") {
+        state.prompt = null;
+        return finalize();
+      }
+
+      if (state.prompt?.profileId === profileId && commandType === "resolve_prompt") {
+        const promptType = payload.promptType;
+        if (promptType === "defuse_reinsert") {
+          insertIntoDrawPile(state, payload.cardId, payload.position);
+          state.prompt = null;
+          state.pendingDraws = Math.max(0, state.pendingDraws - 1);
+          if (state.pendingDraws === 0) passTurn(state, nextPlayers, 1);
+          state.lastActionText = `${playerLabel(actor)} reinserted the Exploding Kitten.`;
+          pushEvent(events, state, nextPlayers, profileId, "defuse_reinserted", {
+            playerName: actor.name,
+            position: payload.position
+          });
+          return finalize();
+        }
+        if (promptType === "imploding_reinsert") {
+          insertIntoDrawPile(state, payload.cardId, payload.position);
+          state.implodingFaceUpIndex = payload.position;
+          state.prompt = null;
+          state.pendingDraws = Math.max(0, state.pendingDraws - 1);
+          if (state.pendingDraws === 0) passTurn(state, nextPlayers, 1);
+          state.lastActionText = `${playerLabel(actor)} reinserted the Imploding Kitten.`;
+          pushEvent(events, state, nextPlayers, profileId, "imploding_reinserted", {
+            playerName: actor.name,
+            position: payload.position
+          });
+          return finalize();
+        }
+        if (promptType === "favor_give") {
+          const target = playerByProfile(nextPlayers, profileId);
+          const receiver = playerByProfile(nextPlayers, payload.actorProfileId);
+          if (!target || !receiver) throw new Error("Favor target is no longer valid.");
+          const card = target.remainingPieces[payload.cardIndex];
+          if (!card) throw new Error("That card is no longer available.");
+          target.remainingPieces.splice(payload.cardIndex, 1);
+          receiver.remainingPieces.push(card);
+          state.prompt = null;
+          state.lastActionText = `${playerLabel(target)} gave ${cardLabel(card)} to ${playerLabel(receiver)}.`;
+          pushEvent(events, state, nextPlayers, profileId, "favor_resolved", {
+            playerName: target.name,
+            actorName: receiver.name,
+            cardId: card
+          });
+          return finalize();
+        }
+        if (promptType === "alter_future") {
+          const currentTop = topPreview(state.drawPile, payload.order.length);
+          state.drawPile.splice(0, payload.order.length, ...payload.order);
+          state.prompt = null;
+          state.lastActionText = `${playerLabel(actor)} reordered the future.`;
+          pushEvent(events, state, nextPlayers, profileId, "future_altered", {
+            playerName: actor.name,
+            before: currentTop,
+            after: payload.order
+          });
+          return finalize();
+        }
+        if (promptType === "bury") {
+          insertIntoDrawPile(state, payload.cardId, payload.position);
+          state.prompt = null;
+          state.lastActionText = `${playerLabel(actor)} buried ${cardLabel(payload.cardId)}.`;
+          pushEvent(events, state, nextPlayers, profileId, "card_buried", {
+            playerName: actor.name,
+            cardId: payload.cardId,
+            position: payload.position
+          });
+          return finalize();
+        }
+      }
+
+      if (state.reaction) {
+        if (currentResponder(state) !== profileId) {
+          throw new Error("It is another player's reaction window.");
+        }
+        if (commandType === "reaction_nope") {
+          const removal = removeCardFromHand(actor.remainingPieces, "nope", 1);
+          if (!removal.removedCount) throw new Error("You do not have Nope.");
+          actor.remainingPieces = removal.hand;
+          appendDiscard(state, "nope");
+          state.reaction.nopesPlayed += 1;
+          state.reaction.responders = buildReactionOrder(nextPlayers, profileId);
+          state.reaction.responderIndex = 0;
+          state.lastActionText = `${playerLabel(actor)} played Nope.`;
+          pushEvent(events, state, nextPlayers, profileId, "reaction_nope", {
+            playerName: actor.name,
+            cardId: "nope"
+          });
+          return finalize();
+        }
+        if (commandType === "pass_reaction") {
+          advanceReaction(state, nextPlayers);
+          if (!currentResponder(state)) {
+            const result = finishReaction(state, nextPlayers, events, nowIso);
+            return finalize(result);
+          }
+          return finalize();
+        }
+      }
+
+      if (nextPlayers[state.turnIndex]?.profile_id !== profileId) {
+        throw new Error("It is not your turn.");
+      }
+
+      if (commandType === "draw_card") {
+        const result = resolveDrawResult(state, nextPlayers, actor, drawCard(state), events, nowIso);
+        return finalize(result);
+      }
+
+      if (commandType === "play_pair") {
+        const removal = removeCardsForPair(actor.remainingPieces, payload.cardId);
+        if (!removal.removedCount || removal.removedCount < 2) {
+          throw new Error("You need a valid cat pair to play that combo.");
+        }
+        actor.remainingPieces = removal.hand;
+        appendDiscard(state, ...removal.removed);
+        pushEvent(events, state, nextPlayers, profileId, "pair_played", {
+          playerName: actor.name,
+          cardId: payload.cardId
+        });
+        queueReaction(state, nextPlayers, profileId, {
+          effectType: "pair",
+          cardId: payload.cardId,
+          actorProfileId: profileId,
+          targetProfileId: payload.targetProfileId
+        });
+        return finalize();
+      }
+
+      if (commandType === "play_card") {
+        const cardId = String(payload.cardId || "").trim();
+        if (!cardId) throw new Error("Missing card.");
+        if (["skip", "attack", "shuffle", "see_the_future", "favor", "reverse", "draw_from_bottom", "alter_the_future", "swap_top_bottom", "bury"].includes(cardId)) {
+          recordPlayableCard(actor, state, nextPlayers, events, cardId, payload, cardId);
+          return finalize();
+        }
+        throw new Error(`${cardLabel(cardId)} is not playable yet.`);
+      }
+
+      throw new Error("Unsupported Exploding Kittens command.");
     },
-    onReconnect(match, players) {
-      return { status: match.status, players };
+    onReconnect(match, players, profileId) {
+      return {
+        status: match.status,
+        players: players.map((player) => player.profile_id === profileId ? { ...player, disconnected: 0 } : player)
+      };
     },
-    onDisconnect(match, players) {
-      return { status: match.status, players };
+    onDisconnect(match, players, profileId) {
+      return {
+        status: match.status,
+        players: players.map((player) => player.profile_id === profileId ? { ...player, disconnected: 1 } : player)
+      };
     },
-    onReclaimExpired(_room, match, players) {
-      return { status: match.status, players };
+    onReclaimExpired(_room, match, players, profileId, nowIso) {
+      const nextPlayers = clonePlayers(players);
+      const player = playerByProfile(nextPlayers, profileId);
+      if (player && player.end_state === "active") {
+        player.end_state = "abandoned";
+        player.disconnected = 1;
+      }
+      const winnerProfileId = maybeFinish(createInitialState({ ruleset: "base", modeLabel: "Base" }), nextPlayers);
+      return {
+        status: winnerProfileId ? MATCH_FINISHED : match.status,
+        winnerProfileId,
+        finishedAt: winnerProfileId ? nowIso : null,
+        players: nextPlayers
+      };
     }
   };
 }
