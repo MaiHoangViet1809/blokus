@@ -895,8 +895,10 @@ function usedColorIndices(roomId, excludeMemberId = null) {
 }
 
 function firstAvailableColorIndex(roomId, excludeMemberId = null) {
+  const room = db.prepare("select * from rooms where id = ?").get(roomId);
   const taken = usedColorIndices(roomId, excludeMemberId);
-  for (let colorIndex = 0; colorIndex < MAX_PLAYERS; colorIndex += 1) {
+  const limit = room ? roomCapacity(room) : MAX_PLAYERS;
+  for (let colorIndex = 0; colorIndex < limit; colorIndex += 1) {
     if (!taken.has(colorIndex)) return colorIndex;
   }
   return null;

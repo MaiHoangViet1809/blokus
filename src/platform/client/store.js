@@ -404,14 +404,20 @@ export const useAppStore = defineStore("app", {
     async startRoom() {
       return this.emit("room:start", { roomCode: this.room?.code });
     },
-    async placeMove(move) {
+    async sendMatchCommand(commandType, commandPayload = {}) {
       return this.emit("match:command", {
         roomCode: this.room?.code,
         command: {
-          commandType: "place_piece",
-          commandPayload: move
+          commandType,
+          commandPayload
         }
       });
+    },
+    async placeMove(move) {
+      if (move?.commandType) {
+        return this.sendMatchCommand(move.commandType, move.commandPayload || {});
+      }
+      return this.sendMatchCommand("place_piece", move);
     },
     async rematch() {
       return this.emit("match:rematch", { roomCode: this.room?.code });
