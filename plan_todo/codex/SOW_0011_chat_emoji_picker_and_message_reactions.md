@@ -395,3 +395,23 @@ Init payload:
   - full interactive chat remains unchanged
   - passive opacity changes persist and update immediately
   - `npm run build` passes
+
+## Extension: Remove Shared Panel Glass From Passive Chat HUD
+- **Status**: APPROVED
+- **Approved-By**: Viet
+- **Approved-On**: 2026-03-14
+- **Task**: Remove the remaining shared `.panel` glass treatment from passive chat so inactive room/world chat no longer blur or fog gameplay.
+- **Location**:
+  - `/Users/maihoangviet/Projects/blokus/src/style.css`
+  - `/Users/maihoangviet/Projects/blokus/plan_todo/codex/SOW_0011_chat_emoji_picker_and_message_reactions.md`
+- **Why**:
+  - passive chat root still inherits the global `.panel` backdrop blur and panel chrome
+  - this shared shell styling keeps the passive HUD visually blurry even after passive-specific tint reductions
+- **Deliverables**:
+  - explicitly override shared `.panel` glass on `.room-chat-panel--passive`
+  - ensure passive chat root has no backdrop blur, fog sheet, or panel chrome
+  - keep full interactive chat on the normal panel styling
+- **Done Criteria**:
+  - inactive room/world chat no longer blur or fog the underlying game board
+  - active/open chat still uses the full panel treatment
+  - `npm run build` passes
