@@ -2199,3 +2199,79 @@ spectator button
 - **Cautions / Risks**:
   - hover-only behavior can be brittle if the floating panel is detached too far from the trigger
   - fix should stay local to spectator popup, not weaken all overflow rules globally
+
+## Extension: Room Chat with Messenger-Style Floating Panel
+- **Status**: APPROVED
+- **Approved-By**: Viet
+- **Approved-On**: 2026-03-13
+- **Task**: Add a platform-level world chat on the main lobby route `/` for users with an active profile, using the same Messenger-style floating interaction model as room chat.
+- **Location**:
+  - `/Users/maihoangviet/Projects/blokus/src/platform/server/index.js`
+  - `/Users/maihoangviet/Projects/blokus/src/platform/client/store.js`
+  - `/Users/maihoangviet/Projects/blokus/src/platform/client/views/HomeView.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/platform/client/components/WorldChatFab.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/platform/client/components/WorldChatPanel.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/style.css`
+  - `/Users/maihoangviet/Projects/blokus/plan_todo/codex/SOW_0007_multi_board_game_platform_refactor.md`
+- **Why**: The platform now has room-scoped chat, but the main lobby still has no shared communication layer. Profiles should be able to coordinate globally before joining or creating rooms, while anonymous/no-profile users should see no chat UI.
+- **As-Is Diagram (ASCII)**:
+```text
+/ lobby
+  -> profiles
+  -> game filter
+  -> room table
+  -> no shared global chat
+
+room routes
+  -> room-scoped chat exists
+```
+- **To-Be Diagram (ASCII)**:
+```text
+/ lobby
+  -> profiles
+  -> game filter
+  -> room table
+  -> world chat available if active profile exists
+
+No active profile
+  -> world chat hidden
+
+Active profile
+  -> floating world chat button/panel
+  -> global lobby thread shared by all profiles
+```
+- **Deliverables**:
+  - add durable global chat storage with a new `world_messages` table
+  - add realtime global chat transport:
+    - `world:chat:send`
+    - `state:world-chat:init`
+    - `state:world-chat:message`
+  - extend platform store with world chat state:
+    - messages
+    - open/closed
+    - unread count
+  - add floating world chat UI on `/`
+  - gate world chat by active profile:
+    - no active profile -> no world chat UI
+    - active profile -> chat visible and usable
+  - keep sender avatar as profile initial + profile name
+  - reuse current chat visual language where possible
+- **Done Criteria**:
+  - users with an active profile can send and receive global lobby chat in realtime
+  - users without a profile do not see the world chat UI
+  - refresh restores recent world chat history
+  - unread badge works client-locally
+  - `node --check server.js` passes
+  - `npm run build` passes
+- **Out-of-Scope**:
+  - direct messages
+  - moderation tools
+  - images/files
+  - lobby sub-channels by game type
+  - merging room chat and world chat into one thread
+- **Proposed-By**: Codex GPT-5
+- **plan**: multi-board-game-platform-refactor-v1
+- **Cautions / Risks**:
+  - world chat must stay distinct from room chat in store/events/UI
+  - chat should not load or render for anonymous/no-profile users
+  - history must be bounded to avoid heavy bootstrap payloads

@@ -1,6 +1,8 @@
 <script setup>
 import { computed, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import WorldChatFab from "../components/WorldChatFab.vue";
+import WorldChatPanel from "../components/WorldChatPanel.vue";
 import { listGameClients } from "../registry";
 import { useAppStore } from "../store";
 
@@ -201,4 +203,7 @@ onMounted(async () => {
       <p v-else class="muted">No public rooms for the selected game right now.</p>
     </article>
   </section>
+
+  <WorldChatFab />
+  <WorldChatPanel />
 </template>

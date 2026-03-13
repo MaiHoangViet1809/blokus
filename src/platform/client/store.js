@@ -35,6 +35,9 @@ export const useAppStore = defineStore("app", {
     roomChatOpen: false,
     roomChatUnreadCount: 0,
     roomChatRoomCode: "",
+    worldChatMessages: [],
+    worldChatOpen: false,
+    worldChatUnreadCount: 0,
     socket: null,
     connected: false,
     loading: false,
@@ -127,6 +130,11 @@ export const useAppStore = defineStore("app", {
       this.room = data.room || null;
       this.match = data.match || null;
       this.gameView = data.gameView || null;
+      this.worldChatMessages = this.session?.profileId ? (data.worldChatMessages || []) : [];
+      if (!this.session?.profileId) {
+        this.worldChatOpen = false;
+        this.worldChatUnreadCount = 0;
+      }
       this.bindRoomChat(data.room?.code || "");
     },
     bindRoomChat(roomCode) {
@@ -144,6 +152,13 @@ export const useAppStore = defineStore("app", {
     },
     closeRoomChat() {
       this.roomChatOpen = false;
+    },
+    openWorldChat() {
+      this.worldChatOpen = true;
+      this.worldChatUnreadCount = 0;
+    },
+    closeWorldChat() {
+      this.worldChatOpen = false;
     },
     async bootstrap() {
       this.loading = true;
@@ -215,6 +230,18 @@ export const useAppStore = defineStore("app", {
           this.roomChatMessages = [...this.roomChatMessages, payload.message];
           if (!this.roomChatOpen && payload.message.profileId !== this.session?.profileId) {
             this.roomChatUnreadCount += 1;
+          }
+        });
+        this.socket.on("state:world-chat:init", (payload) => {
+          if (!this.session?.profileId) return;
+          this.worldChatMessages = payload?.messages || [];
+          this.worldChatUnreadCount = 0;
+        });
+        this.socket.on("state:world-chat:message", (payload) => {
+          if (!this.session?.profileId || !payload?.message) return;
+          this.worldChatMessages = [...this.worldChatMessages, payload.message];
+          if (!this.worldChatOpen && payload.message.profileId !== this.session?.profileId) {
+            this.worldChatUnreadCount += 1;
           }
         });
         this.socket.on("error", (payload) => {
@@ -400,6 +427,9 @@ export const useAppStore = defineStore("app", {
         roomCode: this.roomChatRoomCode || this.room?.code,
         message
       });
+    },
+    async sendWorldChat(message) {
+      return this.emit("world:chat:send", { message });
     }
   }
 });

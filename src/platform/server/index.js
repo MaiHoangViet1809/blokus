@@ -142,6 +142,14 @@ db.exec(`
     message text not null,
     created_at text not null
   );
+
+  create table if not exists world_messages (
+    id text primary key,
+    profile_id text not null,
+    profile_name text not null,
+    message text not null,
+    created_at text not null
+  );
 `);
 
 function columnExists(tableName, columnName) {
@@ -238,6 +246,8 @@ const BROWSER_COOKIE_NAME = "blokus_browser_token";
 const BROWSER_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
 const ROOM_CHAT_HISTORY_LIMIT = 300;
 const ROOM_CHAT_MESSAGE_MAX_LENGTH = 1000;
+const WORLD_CHAT_HISTORY_LIMIT = 300;
+const WORLD_CHAT_MESSAGE_MAX_LENGTH = 1000;
 db.prepare("update rooms set phase = ? where phase = 'LOBBY'").run(ROOM_PHASES.PREPARE);
 
 function nowIso() {
@@ -576,6 +586,21 @@ function getRoomMessages(roomId, limit = ROOM_CHAT_HISTORY_LIMIT) {
   }));
 }
 
+function getWorldMessages(limit = WORLD_CHAT_HISTORY_LIMIT) {
+  return db.prepare(`
+    select *
+    from world_messages
+    order by created_at desc
+    limit ?
+  `).all(limit).reverse().map((row) => ({
+    id: row.id,
+    profileId: row.profile_id,
+    profileName: row.profile_name,
+    message: row.message,
+    createdAt: row.created_at
+  }));
+}
+
 function insertRoomMessage(room, session, rawMessage) {
   const trimmedMessage = String(rawMessage || "").trim();
   if (!trimmedMessage) {
@@ -606,6 +631,37 @@ function insertRoomMessage(room, session, rawMessage) {
   `).run(
     chatMessage.id,
     room.id,
+    chatMessage.profileId,
+    chatMessage.profileName,
+    chatMessage.message,
+    chatMessage.createdAt
+  );
+  return chatMessage;
+}
+
+function insertWorldMessage(session, rawMessage) {
+  const trimmedMessage = String(rawMessage || "").trim();
+  if (!trimmedMessage) {
+    throw new Error("Message cannot be empty.");
+  }
+  if (trimmedMessage.length > WORLD_CHAT_MESSAGE_MAX_LENGTH) {
+    throw new Error(`Message cannot exceed ${WORLD_CHAT_MESSAGE_MAX_LENGTH} characters.`);
+  }
+  if (!session?.profile_id) {
+    throw new Error("Select a profile before sending chat.");
+  }
+  const chatMessage = {
+    id: makeId("world_message"),
+    profileId: session.profile_id,
+    profileName: session.profile_name,
+    message: trimmedMessage,
+    createdAt: nowIso()
+  };
+  db.prepare(`
+    insert into world_messages (id, profile_id, profile_name, message, created_at)
+    values (?, ?, ?, ?, ?)
+  `).run(
+    chatMessage.id,
     chatMessage.profileId,
     chatMessage.profileName,
     chatMessage.message,
@@ -2062,6 +2118,13 @@ function emitRoomChatInit(roomCode, socket) {
   });
 }
 
+function emitWorldChatInit(socket) {
+  if (!socket.data.session?.profile_id) return;
+  socket.emit("state:world-chat:init", {
+    messages: getWorldMessages()
+  });
+}
+
 async function emitRoomState(roomCode) {
   const room = buildRoomSnapshot(roomCode);
   if (!room) return;
@@ -2127,6 +2190,7 @@ app.get("/api/bootstrap", (req, res) => {
     rooms: listPublicRooms(activeSession?.room_code ? getRoomByCode(activeSession.room_code)?.game_type || null : null),
     leaderboard: buildLeaderboard(),
     recentMatches: buildRecentFinishedMatches(),
+    worldChatMessages: activeSession?.profile_id ? getWorldMessages() : [],
     room: activeSession?.room_code ? buildRoomSnapshot(activeSession.room_code) : null,
     match: activeSession?.room_code ? buildMatchSnapshot(activeSession.room_code) : null,
     gameView: activeSession?.room_code ? buildGameView(activeSession.room_code, activeSession.profile_id) : null
@@ -2235,6 +2299,7 @@ app.post("/api/session/select-profile", (req, res) => {
     session: sessionPayload(session),
     profiles: listProfilesForBrowser(browserContainer.token),
     rooms: listPublicRooms(),
+    worldChatMessages: getWorldMessages(),
     room: session.room_code ? buildRoomSnapshot(session.room_code) : null,
     match: session.room_code ? buildMatchSnapshot(session.room_code) : null,
     gameView: session.room_code ? buildGameView(session.room_code, session.profile_id) : null
@@ -2269,11 +2334,13 @@ io.on("connection", (socket) => {
     emitRoomChatInit(socket.data.session.room_code, socket);
     emitRoomState(socket.data.session.room_code);
   }
+  emitWorldChatInit(socket);
 
   socket.on("session:resume", () => {
     const session = sessionForInstance(socket.data.clientInstance?.id);
-    if (!session?.room_code) return;
     socket.data.session = session;
+    emitWorldChatInit(socket);
+    if (!session?.room_code) return;
     setMemberOnline(session.room_code, session.client_instance_id);
     socket.join(session.room_code);
     emitRoomChatInit(session.room_code, socket);
@@ -2407,6 +2474,15 @@ io.on("connection", (socket) => {
         roomCode: targetRoomCode,
         message: chatMessage
       });
+      return {};
+    });
+  });
+
+  socket.on("world:chat:send", ({ message }, ack) => {
+    ackHandler(ack, () => {
+      const session = requireSession(socket);
+      const chatMessage = insertWorldMessage(session, message);
+      io.emit("state:world-chat:message", { message: chatMessage });
       return {};
     });
   });
