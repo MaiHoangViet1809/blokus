@@ -2449,3 +2449,31 @@ Result:
 - **Cautions / Risks**:
   - the fix should not change other routes that currently rely on the shared grouped selector
   - desktop and narrow responsive breakpoints must keep the same structure, with any two-column rescue limited to short-height medium-width laptops
+
+## Extension: Off-Turn Blokus Piece Transforms, Match-Scoped Rack Memory, and Left-Rail Player Cards
+- **Status**: APPROVED
+- **Approved-By**: Viet
+- **Approved-On**: 2026-03-14
+- **Task**: Let live Blokus players rotate/flip their own remaining pieces outside their turn, persist per-piece transforms for the current match, move player status into left-rail cards, and remove the duplicate footer strip.
+- **Location**:
+  - `/Users/maihoangviet/Projects/blokus/src/games/blokus/LiveView.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/style.css`
+  - `/Users/maihoangviet/Projects/blokus/plan_todo/codex/SOW_0007_multi_board_game_platform_refactor.md`
+- **Why**:
+  - the live rack currently blocks transform controls outside the active turn even though this is harmless local prep work
+  - transform state is only in local component refs, so players lose their preferred piece orientation on refresh/reconnect
+  - live Blokus duplicates player state between the left scoreboard and the bottom footer strip
+  - the chess live view already demonstrates the preferred pattern: player status belongs in the side cards, not in a separate footer block
+- **Deliverables**:
+  - allow rotate/flip whenever the viewer is the interactive player and the selected piece is still in their remaining rack
+  - keep placement turn-gated exactly as before
+  - persist per-piece Blokus transform state in match-scoped localStorage keyed by match id and interactive profile id
+  - render richer left-rail player cards with rank, color, cells, piece count, and player state/end state
+  - remove the live Blokus footer `player-strip` block entirely
+  - keep spectator count visible in the left rail instead of the deleted footer
+- **Done Criteria**:
+  - players can rotate/flip their own pieces before their turn
+  - each piece remembers its last local transform during the same match and resets on a new match id
+  - the left rail becomes the single source of player status in live Blokus
+  - the footer `player-strip` no longer renders
+  - `npm run build` passes

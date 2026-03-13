@@ -1402,28 +1402,73 @@ p {
 
 .mini-scoreboard__list {
   display: grid;
-  gap: 6px;
+  gap: 10px;
   align-content: start;
   overflow: auto;
   padding-right: 2px;
 }
 
-.mini-scoreboard__row {
+.mini-scoreboard__card {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto;
   gap: 10px;
-  align-items: center;
-  padding: 8px 10px;
-  border-radius: 12px;
+  padding: 12px;
+  border-radius: 16px;
   background: rgba(14, 26, 42, 0.88);
   border: 1px solid var(--line);
   box-shadow: inset 4px 0 0 var(--player-color, transparent);
 }
 
-.mini-scoreboard__rank,
-.mini-scoreboard__value {
-  font-weight: 700;
+.mini-scoreboard__card--active {
+  border-color: var(--line-strong);
+}
+
+.mini-scoreboard__card--viewer {
+  background: rgba(18, 34, 56, 0.92);
+}
+
+.mini-scoreboard__card-head,
+.mini-scoreboard__card-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.mini-scoreboard__card-head {
+  justify-content: space-between;
+}
+
+.mini-scoreboard__card-meta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.mini-scoreboard__metric {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.mini-scoreboard__metric--wide {
+  grid-column: 1 / -1;
+}
+
+.mini-scoreboard__rank {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 34px;
+  min-height: 24px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
   color: var(--text);
+  font-weight: 700;
   white-space: nowrap;
 }
 
@@ -2500,8 +2545,8 @@ p {
     width: 76px;
   }
 
-  .viewport-fit-route .mini-scoreboard__row {
-    padding: 7px 9px;
+  .viewport-fit-route .mini-scoreboard__card {
+    padding: 10px;
   }
 }
 
