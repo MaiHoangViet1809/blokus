@@ -997,9 +997,19 @@ p {
 }
 
 .room-chat-message__react-toggle {
-  min-height: auto;
-  padding: 0.26rem 0.62rem;
-  font-size: 0.72rem;
+  min-height: 28px;
+  min-width: 28px;
+  padding: 0;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 999px;
+}
+
+.room-chat-message__react-toggle svg {
+  width: 15px;
+  height: 15px;
+  fill: currentColor;
+  opacity: 0.86;
 }
 
 .room-chat-message__reaction-picker {

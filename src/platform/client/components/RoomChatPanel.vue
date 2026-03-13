@@ -182,9 +182,13 @@ watch(() => messages.value.length, () => {
             <button
               class="secondary room-chat-message__react-toggle"
               type="button"
+              aria-label="React to message"
               @click="toggleReactionPicker(message.id)"
             >
-              React
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 21c-4.971 0-9-3.813-9-8.5S7.029 4 12 4s9 3.813 9 8.5c0 1.944-.692 3.735-1.855 5.145L20 21l-3.55-1.183A9.75 9.75 0 0 1 12 21Zm-4-9a1 1 0 1 0 0 2a1 1 0 0 0 0-2Zm8 0a1 1 0 1 0 0 2a1 1 0 0 0 0-2Zm-5.188 3.188a.75.75 0 1 0-1.06 1.06A3.2 3.2 0 0 0 12 17.2a3.2 3.2 0 0 0 2.248-.952a.75.75 0 0 0-1.06-1.06A1.7 1.7 0 0 1 12 15.7a1.7 1.7 0 0 1-1.188-.512Z" />
+                <path d="M19 2.75a.75.75 0 0 1 .75.75V5.5h2a.75.75 0 0 1 0 1.5h-2v2a.75.75 0 0 1-1.5 0V7h-2a.75.75 0 0 1 0-1.5h2v-2a.75.75 0 0 1 .75-.75Z" />
+              </svg>
             </button>
             <div v-if="activeReactionMessageId === message.id" class="room-chat-message__reaction-picker">
               <button

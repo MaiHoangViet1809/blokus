@@ -106,3 +106,23 @@ Init payload:
   - the UI needs to stay compact inside the existing floating chat panel footprint on short laptop screens
   - unicode emoji rendering depends on system fonts, so the design should rely on native emoji characters rather than custom assets in this first pass
   - message reaction ownership rules must stay simple; this SoW assumes one active reaction per user per message
+
+## Extension: Replace Textual React Trigger with Compact Icon Helper
+- **Status**: APPROVED
+- **Approved-By**: Viet
+- **Approved-On**: 2026-03-13
+- **Task**: Replace the textual `React` trigger in chat messages with a compact icon-only helper affordance.
+- **Location**:
+  - `/Users/maihoangviet/Projects/blokus/src/platform/client/components/RoomChatPanel.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/platform/client/components/WorldChatPanel.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/style.css`
+  - `/Users/maihoangviet/Projects/blokus/plan_todo/codex/SOW_0011_chat_emoji_picker_and_message_reactions.md`
+- **Why**: The textual `React` button reads too heavy inside compact chat bubbles. The action should feel like a lightweight helper icon similar to familiar messaging apps.
+- **Deliverables**:
+  - replace the text label with a small icon-only trigger for the reaction picker
+  - keep the button accessible via `aria-label`
+  - preserve existing picker behavior and message reaction data flow
+- **Done Criteria**:
+  - no visible `React` text remains in room/world chat message actions
+  - the reaction picker still opens from a compact icon helper
+  - `npm run build` passes
