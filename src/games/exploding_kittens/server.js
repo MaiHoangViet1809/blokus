@@ -1147,14 +1147,18 @@ export function createExplodingKittensDriver() {
       }];
 
       return {
-        matchId: makeId("match"),
-        boardJson: JSON.stringify(state),
-        governanceJson: JSON.stringify({ endVotes: [], rematchVotes: [] }),
-        turnIndex: 0,
-        status: MATCH_STARTING,
-        winnerProfileId: null,
-        finishedAt: null,
-        firstCommittedAt: null,
+        match: {
+          id: makeId("match"),
+          roomId: room.id,
+          status: MATCH_STARTING,
+          turnIndex: 0,
+          boardJson: JSON.stringify(state),
+          governanceJson: JSON.stringify({ endVotes: [], rematchVotes: [] }),
+          winnerProfileId: null,
+          createdAt: nowIso(),
+          finishedAt: null,
+          firstCommittedAt: null
+        },
         matchPlayers,
         events
       };

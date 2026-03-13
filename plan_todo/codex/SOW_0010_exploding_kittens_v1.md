@@ -259,3 +259,62 @@ Create EK room
 - **Cautions / Risks**:
   - this is a narrow regression fix; no platform shell changes should be mixed into it
   - existing wrongly-created EK rooms in the local DB will remain wrong unless recreated or repaired separately
+
+---
+
+## Extension: Align Exploding Kittens `createMatch()` with the Platform Driver Contract
+
+- **Status**: APPROVED
+- **Approved-By**: Viet
+- **Approved-On**: 2026-03-13
+- **Task**: Fix the Exploding Kittens server driver so `createMatch()` returns the same contract shape the platform match orchestrator expects.
+- **Location**:
+  - `/Users/maihoangviet/Projects/blokus/src/games/exploding_kittens/server.js`
+  - `/Users/maihoangviet/Projects/blokus/src/platform/client/views/RoomView.vue`
+  - `/Users/maihoangviet/Projects/blokus/plan_todo/codex/SOW_0010_exploding_kittens_v1.md`
+- **Why**: EK room staging works, but starting the match fails because the EK driver returns a flat object instead of the platform's required `match / matchPlayers / events` structure.
+
+### As-Is Diagram (ASCII)
+```text
+room:start
+  -> platform startMatch()
+  -> driver.createMatch()
+  -> EK returns flat fields:
+     matchId, boardJson, status, ...
+  -> platform reads created.match.id
+  -> created.match is undefined
+  -> start fails
+```
+
+### To-Be Diagram (ASCII)
+```text
+room:start
+  -> platform startMatch()
+  -> driver.createMatch()
+  -> EK returns:
+     match: {...}
+     matchPlayers: [...]
+     events: [...]
+  -> platform persists match normally
+  -> route can move into /matches/:matchId
+```
+
+- **Deliverables**:
+  - change EK `createMatch()` to return the platform contract shape
+  - keep current EK initial state/deck logic unchanged
+  - add a small null-safe guard in room start navigation if needed so the UI does not explode on bad ack payloads
+  - append this extension to `/Users/maihoangviet/Projects/blokus/plan_todo/codex/SOW_0010_exploding_kittens_v1.md`
+- **Done Criteria**:
+  - host can start an EK room without hitting `undefined.id`
+  - `/matches/:matchId` route becomes reachable from EK staging
+  - `node --check /Users/maihoangviet/Projects/blokus/src/games/exploding_kittens/server.js` passes
+  - `npm run build` passes
+- **Out-of-Scope**:
+  - broader EK gameplay bug fixes after match start
+  - hidden-info validation across multiple tabs
+  - reaction-window redesign
+- **Proposed-By**: Codex GPT-5
+- **plan**: exploding-kittens-v1-platform-game
+- **Cautions / Risks**:
+  - keep the fix narrow; this is a driver contract bug, not a full gameplay pass
+  - client null-safe guard should not hide real protocol errors, only avoid a brittle crash
