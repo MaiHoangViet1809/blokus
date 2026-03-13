@@ -887,10 +887,9 @@ p {
   padding: 12px 14px;
   gap: 0;
   pointer-events: none;
-  background: color-mix(in srgb, rgba(8, 16, 25, 1) calc(var(--passive-chat-opacity) * 100%), transparent);
-  border-color: rgba(144, 193, 255, 0.08);
-  backdrop-filter: blur(5px);
-  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.2);
+  background: color-mix(in srgb, rgba(8, 16, 25, 0.72) calc(var(--passive-chat-opacity) * 100%), transparent);
+  border-color: color-mix(in srgb, rgba(144, 193, 255, 0.12) calc(var(--passive-chat-opacity) * 100%), transparent);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.14);
   opacity: 1;
 }
 
@@ -1005,9 +1004,9 @@ p {
 }
 
 .room-chat-panel--passive .room-chat-message__bubble {
-  background: color-mix(in srgb, rgba(255, 255, 255, 0.1) calc(var(--passive-chat-opacity) * 100%), transparent);
-  border-color: color-mix(in srgb, rgba(255, 255, 255, 0.18) calc(var(--passive-chat-opacity) * 100%), transparent);
-  color: rgba(236, 244, 255, 0.84);
+  background: color-mix(in srgb, rgba(255, 255, 255, 0.06) calc(var(--passive-chat-opacity) * 100%), transparent);
+  border-color: color-mix(in srgb, rgba(255, 255, 255, 0.12) calc(var(--passive-chat-opacity) * 100%), transparent);
+  color: rgba(236, 244, 255, 0.9);
 }
 
 .room-chat-message__quote-block {
@@ -1042,10 +1041,10 @@ p {
 .room-chat-panel--passive .room-chat-message--mine .room-chat-message__bubble {
   background: linear-gradient(
     135deg,
-    color-mix(in srgb, rgba(88, 178, 255, 0.2) calc(var(--passive-chat-opacity) * 100%), transparent),
-    color-mix(in srgb, rgba(88, 178, 255, 0.08) calc(var(--passive-chat-opacity) * 100%), transparent)
+    color-mix(in srgb, rgba(88, 178, 255, 0.14) calc(var(--passive-chat-opacity) * 100%), transparent),
+    color-mix(in srgb, rgba(88, 178, 255, 0.04) calc(var(--passive-chat-opacity) * 100%), transparent)
   );
-  border-color: color-mix(in srgb, rgba(144, 193, 255, 0.22) calc(var(--passive-chat-opacity) * 100%), transparent);
+  border-color: color-mix(in srgb, rgba(144, 193, 255, 0.16) calc(var(--passive-chat-opacity) * 100%), transparent);
 }
 
 .room-chat-message__trail-actions {

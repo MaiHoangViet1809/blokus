@@ -345,3 +345,27 @@ Init payload:
   - the settings popup remains visible above surrounding page blocks
   - outside click and route change still close it
   - `npm run build` passes
+
+## Extension: Make Passive Chat Truly See-Through Instead of Frosted
+- **Status**: APPROVED
+- **Approved-By**: Viet
+- **Approved-On**: 2026-03-14
+- **Task**: Refine passive chat HUD styling so inactive chat remains visually see-through for gameplay rather than using a frosted-glass blur effect.
+- **Location**:
+  - `/Users/maihoangviet/Projects/blokus/src/style.css`
+  - `/Users/maihoangviet/Projects/blokus/plan_todo/codex/SOW_0011_chat_emoji_picker_and_message_reactions.md`
+- **Why**:
+  - passive chat should let players see gameplay clearly underneath the HUD
+  - the current frosted-glass treatment makes the passive overlay feel like a blurred pane instead of a transparent tint
+  - passive chat opacity setting should describe tint strength only, not backdrop blur intensity
+- **Deliverables**:
+  - remove backdrop blur from `.room-chat-panel--passive`
+  - keep passive panel and message bubbles on a very light transparent tint only
+  - preserve text readability through text color and subtle bubble contrast instead of glass blur
+  - clarify that `Passive chat opacity` controls tint strength only
+- **Done Criteria**:
+  - passive room/world chat no longer blurs gameplay behind them
+  - passive chat remains readable while visually see-through
+  - the passive opacity slider still adjusts tint intensity immediately
+  - full interactive chat appearance remains unchanged
+  - `npm run build` passes
