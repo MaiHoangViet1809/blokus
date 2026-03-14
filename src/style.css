@@ -919,6 +919,19 @@ p {
   justify-content: space-between;
 }
 
+.room-chat-panel__close {
+  min-width: 32px;
+  width: 32px;
+  min-height: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 999px;
+  display: inline-grid;
+  place-items: center;
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
 .room-chat-panel__messages {
   overflow: auto;
   min-height: 0;

@@ -415,3 +415,26 @@ Init payload:
   - inactive room/world chat no longer blur or fog the underlying game board
   - active/open chat still uses the full panel treatment
   - `npm run build` passes
+
+## Extension: Icon-Only Chat Close Button and Outside-Click Collapse
+- **Status**: APPROVED
+- **Approved-By**: Viet
+- **Approved-On**: 2026-03-14
+- **Task**: Replace the text `Close` action in active chat headers with an icon-only `X` button and make outside clicks collapse active chat back to passive HUD mode.
+- **Location**:
+  - `/Users/maihoangviet/Projects/blokus/src/platform/client/components/RoomChatPanel.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/platform/client/components/WorldChatPanel.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/style.css`
+  - `/Users/maihoangviet/Projects/blokus/plan_todo/codex/SOW_0011_chat_emoji_picker_and_message_reactions.md`
+- **Why**:
+  - the text `Close` action is visually heavier than needed for chat chrome
+  - active chat should collapse naturally when users click back into the main app/game area
+- **Deliverables**:
+  - replace the header `Close` text button with an icon-only `X` button
+  - keep accessibility via `aria-label`
+  - close active room/world chat when the pointerdown target lands outside the panel
+  - keep passive HUD behavior unchanged
+- **Done Criteria**:
+  - both active chat headers use an icon-only close control
+  - clicking outside an active room/world chat collapses it to passive HUD
+  - `npm run build` passes

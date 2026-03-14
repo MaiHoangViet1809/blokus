@@ -304,6 +304,10 @@ function handleComposerKeydown(event) {
 
 function handleDocumentPointerDown(event) {
   if (!panelRef.value?.contains(event.target)) {
+    if (isInteractive.value) {
+      store.closeWorldChat();
+      return;
+    }
     closeTransientMenus();
   }
 }
@@ -382,7 +386,14 @@ watch(() => activeReactionMessageId.value, (messageId) => {
         <strong>World chat</strong>
         <p class="muted">Global lobby thread</p>
       </div>
-      <button class="secondary room-chat-panel__close" type="button" @click="store.closeWorldChat()">Close</button>
+      <button
+        class="secondary room-chat-panel__close"
+        type="button"
+        aria-label="Close world chat"
+        @click="store.closeWorldChat()"
+      >
+        ×
+      </button>
     </header>
 
     <div ref="messagesRef" class="room-chat-panel__messages" @scroll="handleMessagesScroll">
