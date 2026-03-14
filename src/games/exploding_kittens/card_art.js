@@ -71,6 +71,8 @@ function createArtEntry({
     tagLine,
     illustrationMode: "illustration_asset",
     promptTitle,
+    promptSubject,
+    promptMood,
     prompt: buildPrompt(promptSubject, promptMood),
     negativePrompt: EK_CARD_PROMPT_SPEC.negativePrompt,
     composition: EK_CARD_PROMPT_SPEC.composition,

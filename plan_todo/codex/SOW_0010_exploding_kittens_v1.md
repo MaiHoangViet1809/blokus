@@ -818,3 +818,68 @@ EK card system
   - keep the manifest canonical so the prompt doc does not drift from runtime metadata
   - do not leak branding or typography instructions into prompts
   - the renderer must stay usable before any image files exist
+
+---
+
+## Extension: Python EK Batch Art Generator with In-File Config
+
+- **Status**: APPROVED
+- **Approved-By**: Viet
+- **Approved-On**: 2026-03-15
+- **Task**: Add a pure Python batch generator inside this repo that reads canonical EK art metadata, builds prompts from structured components, patches the exported ComfyUI API workflow template from `/Users/maihoangviet/Projects/blokus/StandardFlow.json`, calls the local ComfyUI API, and saves exact output files by `cardId`.
+- **Location**:
+  - `/Users/maihoangviet/Projects/blokus/scripts/batch_generate_ek_cards.py`
+  - `/Users/maihoangviet/Projects/blokus/src/games/exploding_kittens/card_art.js`
+  - `/Users/maihoangviet/Projects/blokus/StandardFlow.json`
+  - `/Users/maihoangviet/Projects/blokus/plan_todo/codex/SOW_0010_exploding_kittens_v1.md`
+- **Why**:
+  - EK already has canonical card metadata and a local ComfyUI API template, but batch image generation is still manual and not reproducible.
+  - We need a repo-local script that can regenerate consistent illustration assets by `cardId` after style tuning is locked.
+
+### As-Is Diagram (ASCII)
+```text
+card_art.js
+  -> prompts exist
+  -> ComfyUI API workflow exists
+  -> generation is manual in UI
+  -> filenames / seeds / subsets are not reproducible
+```
+
+### To-Be Diagram (ASCII)
+```text
+CONFIG dict in Python
+  -> load EK metadata from card_art.js
+  -> build prompt per cardId from prompt parts
+  -> load StandardFlow.json
+  -> patch workflow in memory
+  -> POST to local ComfyUI
+  -> wait for completion
+  -> save output/ek_cards/<cardId>.png
+  -> write manifest.json
+```
+
+- **Deliverables**:
+  - add `/Users/maihoangviet/Projects/blokus/scripts/batch_generate_ek_cards.py`
+  - keep all runtime control in top-level Python config dicts/constants, not CLI parsing
+  - export canonical metadata from `card_art.js` into Python through a local Node subprocess
+  - expose structured `promptSubject` and `promptMood` in `card_art.js` so the Python generator can rebuild prompts from components
+  - patch `StandardFlow.json` in memory to inject a save-capable terminal node
+  - write:
+    - `/Users/maihoangviet/Projects/blokus/output/ek_cards/<cardId>.png`
+    - `/Users/maihoangviet/Projects/blokus/output/ek_cards/manifest.json`
+- **Done Criteria**:
+  - the generator script can target one or many cards through in-file config
+  - output filenames are exact `cardId.png`
+  - the script reads canonical metadata from `card_art.js` rather than duplicating the deck in Python
+  - `StandardFlow.json` is used as a read-only template and patched in memory
+  - no runtime generation test is performed by the agent; only code writing and static syntax validation are allowed
+- **Out-of-Scope**:
+  - manual or automated runtime generation testing
+  - prompt-quality tuning for every card
+  - importing generated assets into the live game UI
+- **Proposed-By**: Codex GPT-5
+- **plan**: exploding-kittens-v1-platform-game
+- **Cautions / Risks**:
+  - the current `StandardFlow.json` ends in `PreviewImage`, so the script must convert it to a save-capable workflow in memory
+  - the Python generator depends on local Node being available to export JS metadata
+  - ComfyUI output history shape can vary by workflow, so the script should only assume standard saved image payloads
