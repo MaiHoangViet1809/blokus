@@ -31,11 +31,11 @@ const governance = computed(() => store.match?.governance || {
 const canGovern = computed(() => store.currentMember?.role === "player");
 const isSpectatorViewer = computed(() => store.currentMember?.role === "spectator");
 const hasEndVote = computed(() => governance.value.endVotes.includes(store.session?.profileId));
-const hasRematchVote = computed(() => governance.value.rematchVotes.includes(store.session?.profileId));
 const canVoteEnd = computed(() => ["STARTING", "IN_GAME", "SUSPENDED"].includes(store.room?.phase || ""));
-const canVoteRematch = computed(() => store.room?.phase === "FINISHED");
 const canSurrender = computed(() => ["STARTING", "IN_GAME", "SUSPENDED"].includes(store.room?.phase || ""));
-const canOpenRoom = computed(() => Boolean(store.room?.code));
+const canBackToRoom = computed(() =>
+  Boolean(store.room?.code) && ["PREPARE", "FINISHED", "ABANDONED"].includes(store.room?.phase || "")
+);
 const canOpenReplay = computed(() =>
   isSpectatorViewer.value
   && store.room?.phase === "FINISHED"
@@ -64,9 +64,7 @@ const stateDescription = computed(() => {
   if (!store.room) return "This match could not be restored. You can return to the room or exit to the lobby.";
   if (store.room.phase === "PREPARE") return "The room has reset to staging. You can head back to the room and start again.";
   if (store.room.phase === "FINISHED") {
-    return canGovern.value
-      ? "The match has ended. Wait for rematch votes or return to the room staging screen."
-      : "The match has ended. You are no longer a voting player, but you can still return to the room or exit to the lobby.";
+    return "The match has ended. Return to the room to prepare the next match or exit to the lobby.";
   }
   if (store.currentMember?.role === "spectator") {
     return "You are currently watching this room as a spectator. Match governance controls are limited until you take a seat in staging again.";
@@ -98,10 +96,6 @@ async function surrenderMatch() {
 
 async function voteEndMatch() {
   await store.governMatch("vote_end_match");
-}
-
-async function voteRematch() {
-  await store.governMatch("vote_rematch");
 }
 
 async function backToRoom() {
@@ -137,19 +131,15 @@ onMounted(async () => {
               <strong>Match controls</strong>
               <span class="muted">{{ reconnectStatus }}</span>
               <span class="muted">End votes {{ governance.endVotes.length }}/{{ governance.endVoteEligibleCount }}</span>
-              <span v-if="canVoteRematch" class="muted">Rematch votes {{ governance.rematchVotes.length }}/{{ governance.rematchVoteEligibleCount }}</span>
               <span v-if="!canGovern" class="muted">You are currently viewing this room without governance voting rights.</span>
             </div>
             <div class="action-row">
-              <button v-if="canOpenRoom" class="secondary" @click="backToRoom">Back to room</button>
+              <button v-if="canBackToRoom" class="secondary" @click="backToRoom">Back to room</button>
               <button v-if="canOpenReplay" class="secondary" @click="openReplay">Replay</button>
               <button class="danger" @click="leaveRoom">Exit to lobby</button>
               <button v-if="canGovern && canSurrender" class="secondary" @click="surrenderMatch">Surrender</button>
               <button v-if="canGovern && canVoteEnd" class="secondary" @click="voteEndMatch">
                 {{ hasEndVote ? "Retract End Vote" : "Vote End Match" }}
-              </button>
-              <button v-if="canGovern && canVoteRematch" @click="voteRematch">
-                {{ hasRematchVote ? "Retract Rematch Vote" : "Vote Rematch" }}
               </button>
             </div>
           </section>

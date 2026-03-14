@@ -2572,3 +2572,30 @@ Result:
   - replay topbar center reads with labeled fields
   - the topbar still wraps cleanly on smaller laptop widths
   - `npm run build` passes
+
+## Extension: Make Match-to-Room Navigation Terminal-Only and Move Next-Match Flow Back to Room
+- **Status**: APPROVED
+- **Approved-By**: Viet
+- **Approved-On**: 2026-03-14
+- **Task**: Make `Back to room` a terminal-state-only action on `/matches/:matchId`, remove rematch voting from the match route, and make the room route the canonical place to prepare the next match.
+- **Location**:
+  - `/Users/maihoangviet/Projects/blokus/src/platform/client/views/MatchView.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/platform/client/views/RoomView.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/style.css`
+  - `/Users/maihoangviet/Projects/blokus/plan_todo/codex/SOW_0007_multi_board_game_platform_refactor.md`
+- **Why**:
+  - `Back to room` currently appears during live phases even though the room route immediately redirects back into the active match
+  - next-match UX is currently split between `Back to room`, `Vote Rematch`, and a vague `Rematch lobby` label
+  - room staging should clearly own the next-match preparation flow
+- **Deliverables**:
+  - show `Back to room` only for terminal or non-live phases where returning to room is meaningful
+  - remove `Vote Rematch` from the match controls bar
+  - keep live room-route auto-redirects to the active match unchanged
+  - rename the room-side host action from `Rematch lobby` to clearer next-match wording
+  - add room-finished copy that explains host/non-host next steps without rematch voting language
+- **Done Criteria**:
+  - live match phases no longer show a misleading `Back to room` action
+  - finished or abandoned match states do show `Back to room`
+  - `Vote Rematch` no longer appears on the match route
+  - room `FINISHED` state clearly explains next-match flow and the host CTA reads as next-match preparation
+  - `npm run build` passes

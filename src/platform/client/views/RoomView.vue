@@ -32,8 +32,18 @@ const canLaunch = computed(() =>
 );
 const canToggleReady = computed(() => store.room?.phase === "PREPARE" && currentMember.value?.role === "player");
 const canLeaveSeat = computed(() => store.room?.phase === "PREPARE" && currentMember.value?.role === "player");
+const canPrepareNextMatch = computed(() => isHost.value && store.room?.phase === "FINISHED");
 const currentReadyLabel = computed(() => currentMember.value?.isReady ? "Unready" : "Ready");
 const spectatorSummaryLabel = computed(() => `Spectators: ${spectatorMembers.value.length}`);
+const roomStateTitle = computed(() => store.room?.phase === "FINISHED" ? "Next Match Setup" : "Room State");
+const roomStateDescription = computed(() => {
+  if (store.room?.phase === "FINISHED") {
+    return canPrepareNextMatch.value
+      ? "This match is over. Prepare the room for the next match here, then return to staging to seat players and start again."
+      : "This match is over. Wait for the host to prepare the next match, then the room will return to staging."
+  }
+  return "This route is for staging and room lifecycle only. Live play and replay open on match routes.";
+});
 const spectatorButtonRef = ref(null);
 const spectatorPopupOpen = ref(false);
 const spectatorPopupStyle = ref({});
@@ -175,7 +185,7 @@ onBeforeUnmount(() => {
               <button v-if="isHost && store.room.phase === 'PREPARE'" class="room-control-btn room-control-btn--start" :disabled="!canLaunch" @click="startRoom">Start</button>
               <button v-if="canLeaveSeat" class="room-control-btn room-control-btn--seat secondary" @click="leaveSeat">Leave seat</button>
               <button class="room-control-btn room-control-btn--leave secondary" @click="leaveRoom">Leave room</button>
-              <button v-if="isHost && store.room.phase === 'FINISHED'" class="room-control-btn room-control-btn--rematch" @click="store.rematch">Rematch lobby</button>
+              <button v-if="canPrepareNextMatch" class="room-control-btn room-control-btn--rematch" @click="store.rematch">Prepare next match</button>
             </div>
           </header>
 
@@ -253,10 +263,21 @@ onBeforeUnmount(() => {
               <article v-else class="panel panel-fill">
                 <div class="section-head">
                   <div>
-                    <h2>{{ store.room.phase === "FINISHED" ? "Room Ready For Rematch" : "Room State" }}</h2>
-                    <p class="muted">This route is for staging and room lifecycle only. Live play and replay open on match routes.</p>
+                    <h2>{{ roomStateTitle }}</h2>
+                    <p class="muted">{{ roomStateDescription }}</p>
                   </div>
                   <span class="phase-pill">{{ store.room.phase }}</span>
+                </div>
+
+                <div v-if="store.room.phase === 'FINISHED'" class="room-finished-note">
+                  <strong>{{ canPrepareNextMatch ? "Host action required" : "Waiting for host" }}</strong>
+                  <p class="muted">
+                    {{
+                      canPrepareNextMatch
+                        ? "Use Prepare next match to reset the room back to staging. Once staging is ready, start the next match from this room."
+                        : "Only the host can reset this finished room back to staging. You can still inspect the latest match or watch replays while you wait."
+                    }}
+                  </p>
                 </div>
 
                 <div class="room-state-grid">

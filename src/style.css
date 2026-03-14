@@ -688,6 +688,21 @@ p {
   border-color: rgba(255, 209, 102, 0.32);
 }
 
+.room-finished-note {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 14px;
+  padding: 12px 14px;
+  border-radius: 18px;
+  background: rgba(255, 209, 102, 0.08);
+  border: 1px solid rgba(255, 209, 102, 0.16);
+}
+
+.room-finished-note strong,
+.room-finished-note p {
+  margin: 0;
+}
+
 .room-staging-layout {
   display: grid;
   grid-template-columns: minmax(0, 1.4fr) minmax(280px, 0.6fr);
