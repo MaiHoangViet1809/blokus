@@ -203,3 +203,39 @@ export function formatEkTimestamp(value) {
     minute: "2-digit"
   });
 }
+
+const EK_CARD_SIGILS = {
+  attack: "ATK",
+  skip: "SKP",
+  favor: "FAV",
+  shuffle: "SHF",
+  see_the_future: "STF",
+  nope: "NOP",
+  defuse: "DEF",
+  exploding_kitten: "BOOM",
+  imploding_kitten: "IMPL",
+  streaking_kitten: "STRK",
+  barking_kitten: "BARK",
+  tower_of_power: "TOP",
+  alter_the_future_now: "ATF!",
+  personal_attack: "PATK",
+  share_the_future: "SHR",
+  ill_take_that: "TAKE",
+  super_skip: "SSK",
+  potluck: "POT",
+  reverse: "REV",
+  draw_from_bottom: "BOT",
+  alter_the_future: "ATF",
+  swap_top_bottom: "SWAP",
+  bury: "BURY",
+  tacocat: "TACO",
+  cattermelon: "CATR",
+  beard_cat: "BEARD",
+  rainbow_ralphing_cat: "RBC",
+  hairy_potato_cat: "HPC",
+  feral_cat: "FERAL"
+};
+
+export function cardSigil(cardId) {
+  return EK_CARD_SIGILS[cardId] || cardLabel(cardId).replace(/[^A-Za-z]/g, "").slice(0, 4).toUpperCase();
+}

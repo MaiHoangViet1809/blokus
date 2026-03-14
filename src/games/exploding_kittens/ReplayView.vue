@@ -1,6 +1,9 @@
 <script setup>
 import { computed, ref, watch } from "vue";
-import { cardMeta, formatEkTimestamp, handCountText } from "./shared.js";
+import CardPile from "../../platform/client/components/CardPile.vue";
+import CardTableSurface from "../../platform/client/components/CardTableSurface.vue";
+import PlayingCard from "../../platform/client/components/PlayingCard.vue";
+import { cardMeta, cardSigil, formatEkTimestamp, handCountText } from "./shared.js";
 
 const props = defineProps({
   replay: { type: Object, default: null }
@@ -11,7 +14,7 @@ const selectedStep = ref(0);
 const frames = computed(() => props.replay?.frames || []);
 const selectedFrame = computed(() => frames.value[selectedStep.value] || null);
 const publicState = computed(() => selectedFrame.value?.payload?.publicState || null);
-const discardPreview = computed(() => (publicState.value?.discardPile || []).slice(-8).reverse());
+const discardPreview = computed(() => (publicState.value?.discardPile || []).slice(-4).reverse());
 
 watch(frames, (nextFrames) => {
   selectedStep.value = nextFrames.length ? nextFrames.length - 1 : 0;
@@ -64,50 +67,87 @@ watch(frames, (nextFrames) => {
             <span class="phase-pill">Step {{ selectedFrame.step }}</span>
           </div>
 
-          <div class="ek-public-piles">
-            <article class="ek-pile-card">
-              <span class="eyebrow">Draw pile</span>
-              <strong>{{ publicState.drawPileCount }}</strong>
-              <span class="muted">cards remaining</span>
-            </article>
+          <CardTableSurface
+            eyebrow="shared card table"
+            :title="publicState.prompt?.label || selectedFrame.label"
+            :subtitle="`Draw pile ${publicState.drawPileCount} · turn ${publicState.turnIndex + 1 || 1}`"
+          >
+            <div class="ek-table-layout">
+              <CardPile
+                title="Draw pile"
+                :count="publicState.drawPileCount"
+                accent="warning"
+                sigil="DRAW"
+                hint="Replay snapshot"
+              />
 
-            <article class="ek-pile-card ek-pile-card--discard">
-              <span class="eyebrow">Discard</span>
-              <div v-if="discardPreview.length" class="ek-card-chip-list">
-                <span
-                  v-for="(cardId, index) in discardPreview"
-                  :key="`${cardId}-${index}`"
-                  class="ek-card-chip"
-                  :data-accent="cardMeta(cardId).accent"
+              <section class="ek-table-center">
+                <div class="ek-table-status">
+                  <strong>{{ publicState.prompt?.label || selectedFrame.label }}</strong>
+                  <span class="muted">{{ selectedFrame.actorName || "System" }} · public replay snapshot</span>
+                </div>
+              </section>
+
+              <CardPile
+                title="Discard pile"
+                :count="publicState.discardPile?.length || 0"
+                :top-title="publicState.discardPile?.length ? cardMeta(publicState.discardPile[publicState.discardPile.length - 1]).label : 'Discard pile'"
+                :top-subtitle="publicState.discardPile?.length ? 'Top discard' : 'No discard yet'"
+                :top-eyebrow="publicState.discardPile?.length ? cardMeta(publicState.discardPile[publicState.discardPile.length - 1]).kind : 'Discard'"
+                :sigil="publicState.discardPile?.length ? cardSigil(publicState.discardPile[publicState.discardPile.length - 1]) : 'DISC'"
+                :accent="publicState.discardPile?.length ? cardMeta(publicState.discardPile[publicState.discardPile.length - 1]).accent : 'neutral'"
+                :face-down="false"
+              >
+                <div v-if="discardPreview.length" class="ek-mini-card-row">
+                  <PlayingCard
+                    v-for="(cardId, index) in discardPreview"
+                    :key="`${cardId}-${index}`"
+                    :title="cardMeta(cardId).label"
+                    :subtitle="cardMeta(cardId).kind"
+                    :accent="cardMeta(cardId).accent"
+                    :sigil="cardSigil(cardId)"
+                    size="mini"
+                  />
+                </div>
+              </CardPile>
+            </div>
+          </CardTableSurface>
+
+          <section class="ek-replay-bottom">
+            <section class="panel ek-tray-card ek-feed-tray">
+              <div class="ek-column-head">
+                <strong>Players</strong>
+                <span class="muted">{{ publicState.players?.length || 0 }} active slots</span>
+              </div>
+              <div class="ek-player-list">
+                <article
+                  v-for="player in publicState.players || []"
+                  :key="player.profileId"
+                  class="ek-player-card"
+                  :class="{ 'ek-player-card--turn': player.profileId === (publicState.players?.[publicState.turnIndex || 0]?.profileId || '') }"
                 >
-                  {{ cardMeta(cardId).label }}
-                </span>
+                  <div class="ek-player-card__head">
+                    <strong>{{ player.name }}</strong>
+                    <span class="phase-pill">Seat {{ player.seatIndex + 1 }}</span>
+                  </div>
+                  <div class="ek-player-card__meta">
+                    <span>{{ handCountText(player.handCount) }}</span>
+                    <span>{{ player.endState }}</span>
+                  </div>
+                </article>
               </div>
-              <span v-else class="muted">No discard yet</span>
-            </article>
-          </div>
+            </section>
 
-          <section class="ek-player-list">
-            <article
-              v-for="player in publicState.players || []"
-              :key="player.profileId"
-              class="ek-player-card"
-              :class="{ 'ek-player-card--turn': player.profileId === (publicState.players?.[publicState.turnIndex || 0]?.profileId || '') }"
-            >
-              <div class="ek-player-card__head">
-                <strong>{{ player.name }}</strong>
-                <span class="phase-pill">Seat {{ player.seatIndex + 1 }}</span>
+            <section v-if="publicState.prompt?.label" class="panel ek-tray-card ek-feed-tray">
+              <div class="ek-column-head">
+                <strong>Public Prompt</strong>
+                <span class="muted">Snapshot note</span>
               </div>
-              <div class="ek-player-card__meta">
-                <span>{{ handCountText(player.handCount) }}</span>
-                <span>{{ player.endState }}</span>
+              <div class="ek-table-status">
+                <strong>{{ publicState.prompt.label }}</strong>
               </div>
-            </article>
+            </section>
           </section>
-
-          <div v-if="publicState.prompt?.label" class="ek-status-banner">
-            <strong>{{ publicState.prompt.label }}</strong>
-          </div>
         </div>
         <p v-else class="muted">No frame selected.</p>
       </section>

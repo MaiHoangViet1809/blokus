@@ -656,3 +656,86 @@ Action resolves correctly
 - **Cautions / Risks**:
   - labels must stay public-only
   - better semantics must not reveal private card identities where the public should not know them
+
+---
+
+## Extension: Shared Card Table and Exploding Kittens Table Layout
+
+- **Status**: APPROVED
+- **Approved-By**: Viet
+- **Approved-On**: 2026-03-14
+- **Task**: Rebuild the Exploding Kittens live view around a reusable card-table component system, including visible draw/discard piles and card-draw interactions, without copying unlicensed official card art.
+- **Location**:
+  - `/Users/maihoangviet/Projects/blokus/src/platform/client/components/`
+  - `/Users/maihoangviet/Projects/blokus/src/games/exploding_kittens/LiveView.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/games/exploding_kittens/ReplayView.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/games/exploding_kittens/shared.js`
+  - `/Users/maihoangviet/Projects/blokus/src/style.css`
+  - `/Users/maihoangviet/Projects/blokus/plan_todo/codex/SOW_0010_exploding_kittens_v1.md`
+- **Why**:
+  - EK is a card game, and the current UI still reads like a generic action panel instead of a card table.
+  - A reusable card-table foundation will help future card games.
+  - Official EK art should not be copied into the repo without a clear license.
+
+### As-Is Diagram (ASCII)
+```text
+EK live view
++--------------------------------------------------------------+
+| players rail | piles/status text | hand/actions             |
+| generic panels                                         |
+| draw pile is mostly numeric state                      |
+| discard is chip list                                   |
+| no real card-table feeling                             |
++--------------------------------------------------------------+
+```
+
+### To-Be Diagram (ASCII)
+```text
+EK live view
++--------------------------------------------------------------------------------+
+| opponents / player counts                                                      |
++--------------------------------------------------------------------------------+
+|                         shared card table surface                              |
+|                                                                                |
+|        [draw pile stack]   [effect / public area]   [discard pile stack]       |
+|                                                                                |
+|                 action prompts and public stack sit on the table               |
++--------------------------------------------------------------------------------+
+| my hand fan / card row                                                         |
++--------------------------------------------------------------------------------+
+```
+
+- **Deliverables**:
+  - add reusable platform card-table building blocks:
+    - shared table surface component
+    - shared pile/stack component
+    - shared playing-card component
+  - refactor EK live view to use those building blocks
+  - visualize:
+    - draw pile as a real stack on the table
+    - discard pile as a real visible pile
+    - hand as cards, not only chips/groups
+  - clicking the draw pile on your turn should trigger draw where legal
+  - effect-driven draws should still resolve through the same pile area
+  - keep current EK rules and hidden-info behavior intact
+  - use asset-ready card faces:
+    - no unlicensed official EK images copied into the repo in this SoW
+    - use safe local visuals/placeholders for now
+- **Done Criteria**:
+  - EK live view reads like a card-table layout, not a generic panel layout
+  - draw pile is a visible stack on the table
+  - discard pile is a visible stack on the table
+  - player can draw by clicking the pile when legal
+  - shared card-table components are reusable by future card games
+  - `npm run build` passes
+- **Out-of-Scope**:
+  - importing official EK card artwork from the internet
+  - licensing work for commercial/fan assets
+  - redesigning EK rules
+  - adding a second card game in this SoW
+- **Proposed-By**: Codex GPT-5
+- **plan**: exploding-kittens-v1-platform-game
+- **Cautions / Risks**:
+  - official EK art is likely copyrighted; this SoW should not assume it is free to reuse
+  - the shared card-table components must stay generic enough for future card games, but not become an over-abstracted framework
+  - hidden-information rules must remain server-authoritative

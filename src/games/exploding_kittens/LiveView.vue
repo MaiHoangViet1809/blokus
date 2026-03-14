@@ -1,6 +1,9 @@
 <script setup>
 import { computed, onMounted, ref, watch } from "vue";
-import { actionLabel, cardMeta, formatEkTimestamp, handCountText } from "./shared.js";
+import CardPile from "../../platform/client/components/CardPile.vue";
+import CardTableSurface from "../../platform/client/components/CardTableSurface.vue";
+import PlayingCard from "../../platform/client/components/PlayingCard.vue";
+import { actionLabel, cardMeta, cardSigil, formatEkTimestamp, handCountText } from "./shared.js";
 
 const props = defineProps({
   room: { type: Object, required: true },
@@ -25,24 +28,27 @@ const me = computed(() => props.gameView?.me || null);
 const viewerPlayer = computed(() => players.value.find((player) => player.profileId === props.interactiveProfileId) || null);
 const isSpectator = computed(() => !viewerPlayer.value || viewerPlayer.value.endState !== "active");
 const discardPile = computed(() => props.gameView?.discardPile || []);
-const discardPreview = computed(() => discardPile.value.slice(-8).reverse());
+const discardPreview = computed(() => discardPile.value.slice(-4).reverse());
 const hand = computed(() => me.value?.hand || []);
 const stash = computed(() => me.value?.stash || []);
-const handGroups = computed(() => {
-  const counts = new Map();
-  for (const cardId of hand.value) {
-    counts.set(cardId, (counts.get(cardId) || 0) + 1);
-  }
-  return [...counts.entries()]
-    .map(([cardId, count]) => ({
-      cardId,
-      count,
-      meta: cardMeta(cardId)
-    }))
-    .sort((left, right) => left.meta.label.localeCompare(right.meta.label));
-});
 const availableActions = computed(() => props.gameView?.availableActions || []);
+const drawAction = computed(() => availableActions.value.find((action) => action.type === "draw_card") || null);
+const tableActions = computed(() => availableActions.value.filter((action) => action.type !== "draw_card"));
 const recentEvents = computed(() => replayFrames.value.slice(-16).reverse());
+const handCards = computed(() => [...hand.value]
+  .map((cardId, index) => ({
+    cardId,
+    index,
+    meta: cardMeta(cardId)
+  }))
+  .sort((left, right) => left.meta.label.localeCompare(right.meta.label) || left.index - right.index));
+const stashCards = computed(() => [...stash.value]
+  .map((cardId, index) => ({
+    cardId,
+    index,
+    meta: cardMeta(cardId)
+  }))
+  .sort((left, right) => left.meta.label.localeCompare(right.meta.label) || left.index - right.index));
 const statusPlayers = computed(() => {
   const turnProfileId = activeTurnPlayer.value?.profileId || "";
   return [...players.value]
@@ -145,7 +151,7 @@ onMounted(() => {
         </div>
       </section>
 
-      <section class="panel ek-column ek-table-column">
+      <section class="ek-arena">
         <section v-if="reactionStack.length" class="ek-reaction-stack">
           <div class="ek-column-head">
             <strong>Effect Stack</strong>
@@ -164,114 +170,130 @@ onMounted(() => {
           </div>
         </section>
 
-        <div class="ek-status-banner">
-          <strong>{{ prompt?.label || statusText }}</strong>
-          <span class="muted">
-            Draw pile {{ gameView.drawPileCount }} · {{ activeTurnPlayer?.name || "Waiting" }} to act
-          </span>
-        </div>
+        <CardTableSurface
+          eyebrow="shared card table"
+          :title="prompt?.label || statusText"
+          :subtitle="`Draw pile ${gameView.drawPileCount} · ${activeTurnPlayer?.name || 'Waiting'} to act`"
+        >
+          <template #head-extra>
+            <span class="phase-pill">{{ drawAction ? "Draw live" : room.phase }}</span>
+          </template>
 
-        <div class="ek-public-piles">
-          <article class="ek-pile-card">
-            <span class="eyebrow">Draw pile</span>
-            <strong>{{ gameView.drawPileCount }}</strong>
-            <span class="muted">cards remaining</span>
-          </article>
+          <div class="ek-table-layout">
+            <CardPile
+              title="Draw pile"
+              :count="gameView.drawPileCount"
+              accent="warning"
+              sigil="DRAW"
+              hint="Click to draw when legal"
+              :interactive="Boolean(drawAction)"
+              @activate="emitAction(drawAction)"
+            />
 
-          <article class="ek-pile-card ek-pile-card--discard">
-            <span class="eyebrow">Discard</span>
-            <div v-if="discardPreview.length" class="ek-card-chip-list">
-              <span
-                v-for="(cardId, index) in discardPreview"
-                :key="`${cardId}-${index}`"
-                class="ek-card-chip"
-                :data-accent="cardMeta(cardId).accent"
-              >
-                {{ cardMeta(cardId).label }}
-              </span>
-            </div>
-            <span v-else class="muted">No discard yet</span>
-          </article>
-        </div>
-
-        <section class="ek-timeline panel-scroll">
-          <div class="ek-column-head">
-            <strong>Recent Actions</strong>
-            <span class="muted">{{ timelineLoading ? "Syncing…" : `${replayFrames.length} events` }}</span>
-          </div>
-          <div v-if="recentEvents.length" class="ek-event-list">
-            <article v-for="frame in recentEvents" :key="frame.step" class="ek-event-row">
-              <div class="stack stack-tight">
-                <strong>{{ frame.label }}</strong>
-                <span class="muted">{{ frame.actorName || "System" }}</span>
+            <section class="ek-table-center">
+              <div class="ek-table-status">
+                <strong>{{ prompt?.label || statusText }}</strong>
+                <span class="muted">
+                  {{ activeTurnPlayer?.name || "Waiting" }} · {{ spectatorCount }} spectators · {{ replayFrames.length }} public events
+                </span>
               </div>
-              <span class="muted">{{ formatEkTimestamp(frame.payload?.createdAt || frame.createdAt) || `#${frame.step}` }}</span>
-            </article>
-          </div>
-          <p v-else class="muted">No public events yet.</p>
-        </section>
-      </section>
 
-      <section class="panel ek-column ek-hand-column">
-        <div class="ek-column-head">
-          <strong>{{ isSpectator ? "Public Actions" : "Your Hand" }}</strong>
-          <span class="muted">{{ handCountText(hand.length) }}</span>
-        </div>
+              <div v-if="tableActions.length" class="ek-table-actions">
+                <button
+                  v-for="(action, index) in tableActions"
+                  :key="actionKey(action, index)"
+                  class="ek-action-btn"
+                  type="button"
+                  @click="emitAction(action)"
+                >
+                  {{ actionLabel(action) }}
+                </button>
+              </div>
+              <p v-else class="muted">No table action available right now.</p>
+            </section>
 
-        <div v-if="!isSpectator" class="ek-hand-grid panel-scroll">
-          <article
-            v-if="stash.length"
-            class="ek-hand-card ek-hand-card--stash"
-            data-accent="success"
-          >
-            <div class="stack stack-tight">
-              <strong>Tower Stash</strong>
-              <span class="muted">{{ handCountText(stash.length) }}</span>
-            </div>
-            <div class="ek-card-chip-list">
-              <span
-                v-for="(cardId, index) in stash"
-                :key="`${cardId}-${index}`"
-                class="ek-card-chip"
-                :data-accent="cardMeta(cardId).accent"
-              >
-                {{ cardMeta(cardId).label }}
-              </span>
-            </div>
-          </article>
-          <article
-            v-for="entry in handGroups"
-            :key="entry.cardId"
-            class="ek-hand-card"
-            :data-accent="entry.meta.accent"
-          >
-            <div class="stack stack-tight">
-              <strong>{{ entry.meta.label }}</strong>
-              <span class="muted">{{ entry.meta.kind }}</span>
-            </div>
-            <span class="phase-pill">x{{ entry.count }}</span>
-          </article>
-        </div>
-        <p v-else class="muted">Spectators only see public state and player hand counts.</p>
-
-        <section class="ek-actions">
-          <div class="ek-column-head">
-            <strong>Available Actions</strong>
-            <span class="muted">{{ availableActions.length }}</span>
-          </div>
-          <div v-if="availableActions.length" class="ek-action-list panel-scroll">
-            <button
-              v-for="(action, index) in availableActions"
-              :key="actionKey(action, index)"
-              class="ek-action-btn"
-              type="button"
-              @click="emitAction(action)"
+            <CardPile
+              title="Discard pile"
+              :count="discardPile.length"
+              :top-title="discardPile.length ? cardMeta(discardPile[discardPile.length - 1]).label : 'Discard pile'"
+              :top-subtitle="discardPile.length ? 'Top discard' : 'No discard yet'"
+              :top-eyebrow="discardPile.length ? cardMeta(discardPile[discardPile.length - 1]).kind : 'Discard'"
+              :sigil="discardPile.length ? cardSigil(discardPile[discardPile.length - 1]) : 'DISC'"
+              :accent="discardPile.length ? cardMeta(discardPile[discardPile.length - 1]).accent : 'neutral'"
+              :face-down="false"
             >
-              {{ actionLabel(action) }}
-            </button>
+              <div v-if="discardPreview.length" class="ek-mini-card-row">
+                <PlayingCard
+                  v-for="(cardId, index) in discardPreview"
+                  :key="`${cardId}-${index}`"
+                  :title="cardMeta(cardId).label"
+                  :subtitle="cardMeta(cardId).kind"
+                  :accent="cardMeta(cardId).accent"
+                  :sigil="cardSigil(cardId)"
+                  size="mini"
+                />
+              </div>
+            </CardPile>
           </div>
-          <p v-else class="muted">No action available from this view right now.</p>
-        </section>
+        </CardTableSurface>
+
+        <div class="ek-bottom-tray">
+          <section class="panel ek-tray-card ek-hand-tray">
+            <div class="ek-column-head">
+              <strong>{{ isSpectator ? "Spectator View" : "Your Hand" }}</strong>
+              <span class="muted">{{ handCountText(hand.length) }}</span>
+            </div>
+
+            <div v-if="!isSpectator" class="ek-hand-row panel-scroll">
+              <PlayingCard
+                v-for="entry in handCards"
+                :key="`${entry.cardId}-${entry.index}`"
+                :title="entry.meta.label"
+                :subtitle="entry.meta.kind"
+                :detail="entry.cardId"
+                :accent="entry.meta.accent"
+                :sigil="cardSigil(entry.cardId)"
+                size="hand"
+              />
+            </div>
+            <p v-else class="muted">Spectators only see the public table and player hand counts.</p>
+
+            <div v-if="stashCards.length" class="stack stack-tight">
+              <div class="ek-column-head">
+                <strong>Tower Stash</strong>
+                <span class="muted">{{ handCountText(stash.length) }}</span>
+              </div>
+              <div class="ek-mini-card-row">
+                <PlayingCard
+                  v-for="entry in stashCards"
+                  :key="`${entry.cardId}-${entry.index}`"
+                  :title="entry.meta.label"
+                  :subtitle="entry.meta.kind"
+                  :accent="entry.meta.accent"
+                  :sigil="cardSigil(entry.cardId)"
+                  size="mini"
+                />
+              </div>
+            </div>
+          </section>
+
+          <section class="panel ek-tray-card ek-feed-tray">
+            <div class="ek-column-head">
+              <strong>Recent Actions</strong>
+              <span class="muted">{{ timelineLoading ? "Syncing…" : `${replayFrames.length} events` }}</span>
+            </div>
+            <div v-if="recentEvents.length" class="ek-event-list panel-scroll">
+              <article v-for="frame in recentEvents" :key="frame.step" class="ek-event-row">
+                <div class="stack stack-tight">
+                  <strong>{{ frame.label }}</strong>
+                  <span class="muted">{{ frame.actorName || "System" }}</span>
+                </div>
+                <span class="muted">{{ formatEkTimestamp(frame.payload?.createdAt || frame.createdAt) || `#${frame.step}` }}</span>
+              </article>
+            </div>
+            <p v-else class="muted">No public events yet.</p>
+          </section>
+        </div>
       </section>
     </div>
   </article>
