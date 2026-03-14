@@ -5,6 +5,7 @@ import PlayingCard from "./PlayingCard.vue";
 const props = defineProps({
   title: { type: String, required: true },
   count: { type: Number, default: 0 },
+  art: { type: Object, default: null },
   accent: { type: String, default: "neutral" },
   topTitle: { type: String, default: "" },
   topSubtitle: { type: String, default: "" },
@@ -45,6 +46,7 @@ function activate() {
         :title="displayTitle"
         :subtitle="displaySubtitle"
         :eyebrow="displayEyebrow"
+        :art="art"
         :accent="accent"
         :sigil="sigil"
         :face-down="faceDown"

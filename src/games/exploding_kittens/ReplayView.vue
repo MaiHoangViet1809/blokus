@@ -3,6 +3,7 @@ import { computed, ref, watch } from "vue";
 import CardPile from "../../platform/client/components/CardPile.vue";
 import CardTableSurface from "../../platform/client/components/CardTableSurface.vue";
 import PlayingCard from "../../platform/client/components/PlayingCard.vue";
+import { cardArt } from "./card_art.js";
 import { cardMeta, cardSigil, formatEkTimestamp, handCountText } from "./shared.js";
 
 const props = defineProps({
@@ -90,6 +91,7 @@ watch(frames, (nextFrames) => {
 
               <CardPile
                 title="Discard pile"
+                :art="publicState.discardPile?.length ? cardArt(publicState.discardPile[publicState.discardPile.length - 1]) : null"
                 :count="publicState.discardPile?.length || 0"
                 :top-title="publicState.discardPile?.length ? cardMeta(publicState.discardPile[publicState.discardPile.length - 1]).label : 'Discard pile'"
                 :top-subtitle="publicState.discardPile?.length ? 'Top discard' : 'No discard yet'"
@@ -102,6 +104,7 @@ watch(frames, (nextFrames) => {
                   <PlayingCard
                     v-for="(cardId, index) in discardPreview"
                     :key="`${cardId}-${index}`"
+                    :art="cardArt(cardId)"
                     :title="cardMeta(cardId).label"
                     :subtitle="cardMeta(cardId).kind"
                     :accent="cardMeta(cardId).accent"

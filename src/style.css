@@ -1897,8 +1897,54 @@ p {
   gap: 6px;
 }
 
+.playing-card__main {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 8px;
+  min-height: 0;
+}
+
+.playing-card__illustration {
+  min-height: 0;
+  border-radius: 14px;
+  border: 1px solid rgba(23, 28, 33, 0.08);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(246, 239, 225, 0.92)),
+    radial-gradient(circle at top, var(--card-accent), transparent 56%);
+  overflow: hidden;
+}
+
+.playing-card__image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.playing-card__art-placeholder {
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 8px;
+  min-height: 100%;
+  padding: 14px;
+  text-align: center;
+}
+
+.playing-card__art-placeholder strong {
+  font-size: 0.96rem;
+}
+
+.playing-card__art-family {
+  font-size: 0.68rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(30, 33, 39, 0.58);
+}
+
 .playing-card__body strong {
   font-size: 1.05rem;
+  line-height: 1.15;
 }
 
 .playing-card__foot {

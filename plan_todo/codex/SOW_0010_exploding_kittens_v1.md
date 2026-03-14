@@ -739,3 +739,82 @@ EK live view
   - official EK art is likely copyrighted; this SoW should not assume it is free to reuse
   - the shared card-table components must stay generic enough for future card games, but not become an over-abstracted framework
   - hidden-information rules must remain server-authoritative
+
+---
+
+## Extension: Exploding Kittens Art Metadata and Diffusion Prompt Pack
+
+- **Status**: APPROVED
+- **Approved-By**: Viet
+- **Approved-On**: 2026-03-14
+- **Task**: Make the EK deck art-ready before any image generation by adding a canonical art metadata manifest, upgrading the shared card renderer to consume it, and shipping a prompt pack for local diffusion generation.
+- **Location**:
+  - `/Users/maihoangviet/Projects/blokus/src/games/exploding_kittens/card_art.js`
+  - `/Users/maihoangviet/Projects/blokus/src/games/exploding_kittens/shared.js`
+  - `/Users/maihoangviet/Projects/blokus/src/games/exploding_kittens/LiveView.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/games/exploding_kittens/ReplayView.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/platform/client/components/PlayingCard.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/platform/client/components/CardPile.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/style.css`
+  - `/Users/maihoangviet/Projects/blokus/plan_todo/finding/ek_card_art_prompt_pack.md`
+  - `/Users/maihoangviet/Projects/blokus/plan_todo/codex/SOW_0010_exploding_kittens_v1.md`
+- **Why**:
+  - The reusable EK card table now exists, but the deck still lacks a stable art metadata layer and prompt pack for local diffusion generation.
+  - We need a canonical `cardId -> art` mapping before generating or dropping any actual illustrations into the repo.
+
+### As-Is Diagram (ASCII)
+```text
+EK card system
+  -> runtime card labels/kinds exist
+  -> placeholder visual shell exists
+  -> no canonical art manifest
+  -> no stable prompt pack per cardId
+  -> no image-ready art slot in the card renderer
+```
+
+### To-Be Diagram (ASCII)
+```text
+EK card system
+  -> gameplay metadata in shared.js
+  -> art metadata in card_art.js
+  -> PlayingCard consumes optional art manifest entry
+  -> fallback placeholder remains if no image exists
+  -> prompt pack doc maps every cardId to a diffusion-ready illustration prompt
+```
+
+- **Deliverables**:
+  - add `card_art.js` with canonical metadata for all 29 EK card types
+  - include per-card:
+    - `cardId`
+    - `artCode`
+    - `family`
+    - `frameVariant`
+    - `titleLine`
+    - `tagLine`
+    - `illustrationMode`
+    - `promptTitle`
+    - `prompt`
+    - `negativePrompt`
+    - `composition`
+    - `rulesetPresence`
+    - `supplySummary`
+    - optional `characterGroup`
+  - upgrade `PlayingCard` to accept an `art` prop and render a fixed illustration window with placeholder fallback
+  - pass art metadata through EK live/replay/card-pile rendering
+  - add a human-readable prompt pack doc for local diffusion usage
+- **Done Criteria**:
+  - all 29 current card ids have canonical art metadata
+  - live and replay still render correctly with zero generated assets present
+  - draw/discard/hand all go through the same art metadata path
+  - prompt pack covers every EK card type and stays free of branding/text instructions
+  - `npm run build` passes
+- **Out-of-Scope**:
+  - generating diffusion images
+  - importing any official EK artwork
+  - server contract or rule changes
+- **Proposed-By**: Codex GPT-5
+- **plan**: exploding-kittens-v1-platform-game
+- **Cautions / Risks**:
+  - keep the manifest canonical so the prompt doc does not drift from runtime metadata
+  - do not leak branding or typography instructions into prompts
+  - the renderer must stay usable before any image files exist

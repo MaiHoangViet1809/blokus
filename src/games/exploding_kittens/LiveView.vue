@@ -3,6 +3,7 @@ import { computed, onMounted, ref, watch } from "vue";
 import CardPile from "../../platform/client/components/CardPile.vue";
 import CardTableSurface from "../../platform/client/components/CardTableSurface.vue";
 import PlayingCard from "../../platform/client/components/PlayingCard.vue";
+import { cardArt } from "./card_art.js";
 import { actionLabel, cardMeta, cardSigil, formatEkTimestamp, handCountText } from "./shared.js";
 
 const props = defineProps({
@@ -214,6 +215,7 @@ onMounted(() => {
 
             <CardPile
               title="Discard pile"
+              :art="discardPile.length ? cardArt(discardPile[discardPile.length - 1]) : null"
               :count="discardPile.length"
               :top-title="discardPile.length ? cardMeta(discardPile[discardPile.length - 1]).label : 'Discard pile'"
               :top-subtitle="discardPile.length ? 'Top discard' : 'No discard yet'"
@@ -226,6 +228,7 @@ onMounted(() => {
                 <PlayingCard
                   v-for="(cardId, index) in discardPreview"
                   :key="`${cardId}-${index}`"
+                  :art="cardArt(cardId)"
                   :title="cardMeta(cardId).label"
                   :subtitle="cardMeta(cardId).kind"
                   :accent="cardMeta(cardId).accent"
@@ -248,6 +251,7 @@ onMounted(() => {
               <PlayingCard
                 v-for="entry in handCards"
                 :key="`${entry.cardId}-${entry.index}`"
+                :art="cardArt(entry.cardId)"
                 :title="entry.meta.label"
                 :subtitle="entry.meta.kind"
                 :detail="entry.cardId"
@@ -267,6 +271,7 @@ onMounted(() => {
                 <PlayingCard
                   v-for="entry in stashCards"
                   :key="`${entry.cardId}-${entry.index}`"
+                  :art="cardArt(entry.cardId)"
                   :title="entry.meta.label"
                   :subtitle="entry.meta.kind"
                   :accent="entry.meta.accent"
