@@ -17,8 +17,12 @@ const shellStyle = computed(() => ({
 const profileName = computed(() => store.activeProfile?.name || "No profile");
 const connectionStatus = computed(() => (store.connected ? "Connected" : "Offline"));
 const passiveChatOpacityPercent = computed(() => Math.round((store.uiSettings?.passiveChatOpacity ?? 0.1) * 100));
+const isHomeRoute = computed(() => route.path === "/");
 const isRoomRoute = computed(() => route.path.startsWith("/rooms/") && !!store.room);
 const isMatchRoute = computed(() => route.path.startsWith("/matches/") && (!!store.match || !!store.replay));
+const homePresenceLabel = computed(() =>
+  `Online: ${store.presence.profiledOnlineCount} profiled / ${store.presence.totalOnlineCount} total`
+);
 const roomRole = computed(() => {
   if (!isRoomRoute.value) return "";
   return store.currentMember?.role || "spectator";
@@ -176,6 +180,7 @@ watch(() => settingsMenuOpen.value, (open) => {
         <span v-else class="muted">Profile-driven rooms, match routes, and replay under one platform shell.</span>
       </div>
       <div class="status-strip">
+        <span v-if="isHomeRoute" class="status-pill status-pill--presence">{{ homePresenceLabel }}</span>
         <span class="status-pill">User: {{ profileName }}</span>
         <span class="status-pill">Status: {{ connectionStatus }}</span>
         <span v-if="isRoomRoute" class="status-pill">{{ formattedRoomRole }}</span>

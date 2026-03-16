@@ -2362,6 +2362,26 @@ function emitWorldChatInit(socket) {
   });
 }
 
+function buildPresenceSummary() {
+  const instances = new Map();
+  for (const socket of io.of("/").sockets.values()) {
+    const clientInstanceId = String(socket.data.clientInstance?.id || "").trim();
+    if (!clientInstanceId || instances.has(clientInstanceId)) continue;
+    instances.set(clientInstanceId, {
+      profiled: !!sessionForInstance(clientInstanceId)?.profile_id
+    });
+  }
+  const profiledOnlineCount = Array.from(instances.values()).filter((entry) => entry.profiled).length;
+  return {
+    profiledOnlineCount,
+    totalOnlineCount: instances.size
+  };
+}
+
+function emitPresence() {
+  io.emit("state:presence", buildPresenceSummary());
+}
+
 async function emitRoomChatReactionUpdate(roomCode, messageId) {
   const room = getRoomByCode(roomCode);
   if (!room) return;
@@ -2449,6 +2469,7 @@ app.get("/api/bootstrap", (req, res) => {
     clientInstanceId: clientInstance.token,
     session: sessionPayload(activeSession),
     profiles: listProfilesForBrowser(browserContainer.token),
+    presence: buildPresenceSummary(),
     rooms: listPublicRooms(activeSession?.room_code ? getRoomByCode(activeSession.room_code)?.game_type || null : null),
     leaderboard: buildLeaderboard(),
     recentMatches: buildRecentFinishedMatches(),
@@ -2556,10 +2577,12 @@ app.post("/api/session/select-profile", (req, res) => {
     return;
   }
   const session = createOrReuseSession(profileId, clientInstance);
+  emitPresence();
   res.json({
     clientInstanceId: clientInstance.token,
     session: sessionPayload(session),
     profiles: listProfilesForBrowser(browserContainer.token),
+    presence: buildPresenceSummary(),
     rooms: listPublicRooms(),
     worldChatMessages: getWorldMessages(session.profile_id),
     room: session.room_code ? buildRoomSnapshot(session.room_code) : null,
@@ -2590,6 +2613,7 @@ io.use((socket, next) => {
 });
 
 io.on("connection", (socket) => {
+  emitPresence();
   if (socket.data.session?.room_code) {
     socket.join(socket.data.session.room_code);
     setMemberOnline(socket.data.session.room_code, socket.data.session.client_instance_id);
@@ -2601,6 +2625,7 @@ io.on("connection", (socket) => {
   socket.on("session:resume", () => {
     const session = sessionForInstance(socket.data.clientInstance?.id);
     socket.data.session = session;
+    emitPresence();
     emitWorldChatInit(socket);
     if (!session?.room_code) return;
     setMemberOnline(session.room_code, session.client_instance_id);
@@ -2775,6 +2800,9 @@ io.on("connection", (socket) => {
   });
 
   socket.on("disconnect", () => {
+    queueMicrotask(() => {
+      emitPresence();
+    });
     const session = socket.data.session;
     if (!session?.room_code) return;
     const room = getRoomByCode(session.room_code);

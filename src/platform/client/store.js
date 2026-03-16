@@ -13,6 +13,13 @@ const UI_SETTINGS_STORAGE_KEY = "board-platform-ui-settings";
 const CHAT_REACTION_EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "😡"];
 const DEFAULT_PASSIVE_CHAT_OPACITY = 0.1;
 
+function normalizePresence(presence) {
+  return {
+    profiledOnlineCount: Math.max(0, Number(presence?.profiledOnlineCount || 0)),
+    totalOnlineCount: Math.max(0, Number(presence?.totalOnlineCount || 0))
+  };
+}
+
 function readUiSettings() {
   try {
     const raw = localStorage.getItem(UI_SETTINGS_STORAGE_KEY);
@@ -107,6 +114,7 @@ export const useAppStore = defineStore("app", {
     rooms: [],
     leaderboard: [],
     recentMatches: [],
+    presence: normalizePresence(),
     room: null,
     match: null,
     gameView: null,
@@ -218,6 +226,7 @@ export const useAppStore = defineStore("app", {
       this.rooms = data.rooms || [];
       this.leaderboard = data.leaderboard || [];
       this.recentMatches = data.recentMatches || [];
+      this.presence = normalizePresence(data.presence);
       this.room = data.room || null;
       this.match = data.match || null;
       this.gameView = data.gameView || null;
@@ -284,6 +293,9 @@ export const useAppStore = defineStore("app", {
         this.socket.on("connect_error", (error) => {
           this.connected = false;
           this.error = error.message || "Realtime connection failed";
+        });
+        this.socket.on("state:presence", (payload) => {
+          this.presence = normalizePresence(payload);
         });
         this.socket.on("state:room", (room) => {
           if (this.room?.code === room.code) {

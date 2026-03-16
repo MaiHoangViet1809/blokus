@@ -265,6 +265,13 @@ p {
   white-space: nowrap;
 }
 
+.status-pill--presence {
+  padding-inline: 0.7rem;
+  font-size: 0.86rem;
+  color: color-mix(in srgb, var(--text) 72%, var(--muted));
+  background: rgba(255, 255, 255, 0.03);
+}
+
 .page {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);

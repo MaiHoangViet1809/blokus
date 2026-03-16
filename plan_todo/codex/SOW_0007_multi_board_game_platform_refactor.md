@@ -2599,3 +2599,27 @@ Result:
   - `Vote Rematch` no longer appears on the match route
   - room `FINISHED` state clearly explains next-match flow and the host CTA reads as next-match preparation
   - `npm run build` passes
+
+## Extension: Show Live Online User Counts in the Home App Bar
+- **Status**: APPROVED
+- **Approved-By**: Viet
+- **Approved-On**: 2026-03-16
+- **Task**: Add a compact home-route app-bar indicator showing online profiled users and total connected users including guests.
+- **Location**:
+  - `/Users/maihoangviet/Projects/blokus/src/platform/server/index.js`
+  - `/Users/maihoangviet/Projects/blokus/src/platform/client/store.js`
+  - `/Users/maihoangviet/Projects/blokus/src/App.vue`
+  - `/Users/maihoangviet/Projects/blokus/src/style.css`
+  - `/Users/maihoangviet/Projects/blokus/plan_todo/codex/SOW_0007_multi_board_game_platform_refactor.md`
+- **Why**:
+  - the main lobby app bar currently has no lightweight presence signal
+  - users want to see at a glance how many people are online, split between profiled users and total connected guests
+- **Deliverables**:
+  - expose a presence summary with `profiledOnlineCount` and `totalOnlineCount`
+  - hydrate that summary through bootstrap and realtime socket updates
+  - render a compact `Online: X profiled / Y total` pill only on route `/`
+- **Done Criteria**:
+  - `/` shows a small online-count pill in the app bar
+  - counts update live as users connect, disconnect, and activate profiles
+  - profiled count excludes guests while total count includes them
+  - `npm run build` passes
